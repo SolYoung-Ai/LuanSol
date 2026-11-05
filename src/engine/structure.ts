@@ -1,0 +1,267 @@
+/* 包装结构引擎：由成品尺寸计算真实展开刀模（裁切线 / 压痕线 / 出血 / 安全区）
+ * 所有几何为毫米坐标。裁切线 = 面片并集的边界；压痕线 = 相邻面片的公共边。
+ * 该计算完全由几何规则完成，不经 AI 判断结构是否可生产。 */
+import type { Dieline, FaceId, PanelRect, Segment, Sheet, StructureId, StructureInfo } from '../types';
+import { round } from './utils';
+
+const EPS = 0.001;
+
+export const STRUCTURES: StructureInfo[] = [
+  { id: 'tuck', name: '常规插舌盒', group: '盒类', desc: '一体成型、上下插舌，最常见的折叠纸盒。', use: '茶叶、零食、轻食、小型礼品', difficulty: 1, first: true },
+  { id: 'topBottom', name: '天地盖盒', group: '盒类', desc: '上下两片套合，开合有仪式感，硬挺度高。', use: '高端茶礼、礼盒、文创、美妆套盒', difficulty: 2, first: true },
+  { id: 'drawer', name: '抽屉盒', group: '盒类', desc: '外套 + 内盒抽拉结构，层次丰富。', use: '茶礼、首饰、香氛、限定礼盒', difficulty: 3, first: true },
+  { id: 'pouch', name: '自立袋', group: '袋类', desc: '正面 + 背面 + 底部折角，带顶部封口边。', use: '咖啡豆、零食、茶叶、谷物', difficulty: 2, first: true },
+  { id: 'labelRect', name: '矩形标签', group: '标签类', desc: '直角或圆角矩形贴标，适配瓶身与袋体。', use: '瓶贴、食品标签、护肤品标签', difficulty: 1, first: true },
+  { id: 'labelRound', name: '圆形标签', group: '标签类', desc: '圆形模切贴标，适合封口贴与瓶盖贴。', use: '封口贴、罐贴、手作品牌', difficulty: 1, first: true },
+];
+
+export const structureById = (id: StructureId) => STRUCTURES.find((s) => s.id === id) || STRUCTURES[0];
+
+interface Edge { v: boolean; at: number; a: number; b: number; owner: number }
+
+function edgesOf(r: PanelRect, owner: number): Edge[] {
+  return [
+    { v: true, at: r.x, a: r.y, b: r.y + r.h, owner },
+    { v: true, at: r.x + r.w, a: r.y, b: r.y + r.h, owner },
+    { v: false, at: r.y, a: r.x, b: r.x + r.w, owner },
+    { v: false, at: r.y + r.h, a: r.x, b: r.x + r.w, owner },
+  ];
+}
+
+function segmentOf(e: Edge, a: number, b: number, kind: Segment['kind']): Segment {
+  return e.v
+    ? { x1: e.at, y1: a, x2: e.at, y2: b, kind }
+    : { x1: a, y1: e.at, x2: b, y2: e.at, kind };
+}
+
+function segKey(s: Segment) {
+  const [x1, y1, x2, y2] = s.x1 > s.x2 || (s.x1 === s.x2 && s.y1 > s.y2)
+    ? [s.x2, s.y2, s.x1, s.y1] : [s.x1, s.y1, s.x2, s.y2];
+  return `${kindChar(s.kind)}${round(x1, 3)},${round(y1, 3)},${round(x2, 3)},${round(y2, 3)}`;
+}
+const kindChar = (k: Segment['kind']) => ({ cut: 'C', crease: 'F', bleed: 'B', safe: 'S' }[k]);
+
+function mergeIntervals(list: [number, number][]): [number, number][] {
+  if (!list.length) return [];
+  const s = [...list].sort((a, b) => a[0] - b[0]);
+  const out: [number, number][] = [[...s[0]] as [number, number]];
+  for (const [a, b] of s.slice(1)) {
+    const last = out[out.length - 1];
+    if (a <= last[1] + EPS) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+function subtractIntervals(a: number, b: number, cuts: [number, number][]): [number, number][] {
+  const merged = mergeIntervals(cuts.filter(([x, y]) => y > x + EPS));
+  const out: [number, number][] = [];
+  let cur = a;
+  for (const [x, y] of merged) {
+    const lo = Math.max(a, x), hi = Math.min(b, y);
+    if (hi <= lo + EPS) continue;
+    if (lo > cur + EPS) out.push([cur, lo]);
+    cur = Math.max(cur, hi);
+  }
+  if (b > cur + EPS) out.push([cur, b]);
+  return out;
+}
+
+/** 面片并集边界：外露边=裁切线，公共边=压痕线 */
+function boundary(rects: PanelRect[], withCrease: boolean) {
+  const edges = rects.flatMap((r, i) => edgesOf(r, i));
+  const cut: Segment[] = [], crease: Segment[] = [];
+  const seenC = new Set<string>(), seenF = new Set<string>();
+  for (const e of edges) {
+    const overlaps: [number, number][] = [];
+    for (const e2 of edges) {
+      if (e2.owner === e.owner || e2.v !== e.v || Math.abs(e2.at - e.at) > EPS) continue;
+      const a = Math.max(e.a, e2.a), b = Math.min(e.b, e2.b);
+      if (b - a > EPS) overlaps.push([a, b]);
+    }
+    const merged = mergeIntervals(overlaps);
+    for (const [a, b] of subtractIntervals(e.a, e.b, merged)) {
+      const s = segmentOf(e, a, b, 'cut');
+      const k = segKey(s);
+      if (!seenC.has(k)) { seenC.add(k); cut.push(s); }
+    }
+    if (withCrease) for (const [a, b] of merged) {
+      const s = segmentOf(e, a, b, 'crease');
+      const k = segKey(s);
+      if (!seenF.has(k)) { seenF.add(k); crease.push(s); }
+    }
+  }
+  return { cut, crease };
+}
+
+function assemble(
+  id: string, name: string, raw: PanelRect[], bleed: number, safe: number,
+  circles: Sheet['circles'] = [],
+): Sheet {
+  const { cut, crease } = boundary(raw, circles.length === 0);
+  const expanded = raw.map((r) => ({ ...r, x: r.x - bleed, y: r.y - bleed, w: r.w + bleed * 2, h: r.h + bleed * 2 }));
+  const bleedLines = circles.length ? [] : boundary(expanded, false).cut.map((s) => ({ ...s, kind: 'bleed' as const }));
+  const safeRects = raw.filter((r) => r.artwork && r.face).map((r) => ({
+    x: r.x + safe, y: r.y + safe, w: Math.max(0, r.w - safe * 2), h: Math.max(0, r.h - safe * 2),
+  }));
+  const safeLines: Segment[] = safeRects.flatMap((r) => [
+    { x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y, kind: 'safe' },
+    { x1: r.x + r.w, y1: r.y, x2: r.x + r.w, y2: r.y + r.h, kind: 'safe' },
+    { x1: r.x + r.w, y1: r.y + r.h, x2: r.x, y2: r.y + r.h, kind: 'safe' },
+    { x1: r.x, y1: r.y + r.h, x2: r.x, y2: r.y, kind: 'safe' },
+  ]);
+  const right = Math.max(...raw.map((r) => r.x + r.w));
+  const bottom = Math.max(...raw.map((r) => r.y + r.h));
+  const shift = (s: Segment): Segment => ({ ...s, x1: s.x1 + bleed, y1: s.y1 + bleed, x2: s.x2 + bleed, y2: s.y2 + bleed });
+  return {
+    id, name,
+    width: round(right + bleed * 2, 2),
+    height: round(bottom + bleed * 2, 2),
+    rects: raw.map((r) => ({ ...r, x: r.x + bleed, y: r.y + bleed })),
+    segments: [...cut, ...crease, ...bleedLines, ...safeLines].map(shift),
+    circles: circles.map((c) => ({ ...c, cx: c.cx + bleed, cy: c.cy + bleed })),
+    safeRects: safeRects.map((r) => ({ ...r, x: r.x + bleed, y: r.y + bleed })),
+  };
+}
+
+function tuckNet(l: number, w: number, h: number): PanelRect[] {
+  const glue = round(Math.min(16, Math.max(9, w * 0.18)), 2);
+  const tuck = round(Math.min(20, Math.max(11, w * 0.32)), 2);
+  const dust = round(w * 0.55, 2);
+  const y = tuck + w;
+  const xF = 0, xR = l, xB = l + w, xL = l * 2 + w;
+  const r: PanelRect[] = [
+    { x: xF, y, w: l, h, face: 'front', label: '正面', artwork: true },
+    { x: xR, y, w, h, face: 'right', label: '右侧', artwork: true },
+    { x: xB, y, w: l, h, face: 'back', label: '背面', artwork: true },
+    { x: xL, y, w, h, face: 'left', label: '左侧', artwork: true },
+    { x: xL + w, y, w: glue, h, label: '粘合位' },
+    { x: xF, y: tuck, w: l, h: w, face: 'top', label: '顶盖', artwork: true },
+    { x: xB, y: tuck, w: l, h: w, label: '内插舌' },
+    { x: xR, y: y - dust, w, h: dust, label: '防尘翼' },
+    { x: xL, y: y - dust, w, h: dust, label: '防尘翼' },
+    { x: xF, y: 0, w: l, h: tuck, label: '插舌' },
+    { x: xF, y: y + h, w: l, h: w, label: '底盖' },
+    { x: xB, y: y + h, w: l, h: w, label: '底盖' },
+    { x: xR, y: y + h, w, h: dust, label: '防尘翼' },
+    { x: xL, y: y + h, w, h: dust, label: '防尘翼' },
+  ];
+  return r;
+}
+
+function trayNet(l: number, w: number, wall: number, prefix: string, topFace?: FaceId): PanelRect[] {
+  const g = round(Math.min(12, Math.max(7, wall * 0.4)), 2);
+  const r: PanelRect[] = [
+    { x: wall, y: wall, w: l, h: w, face: topFace, label: `${prefix}·主面`, artwork: !!topFace },
+    { x: wall, y: 0, w: l, h: wall, face: topFace ? undefined : 'front', label: `${prefix}·前墙`, artwork: !topFace },
+    { x: wall, y: wall + w, w: l, h: wall, face: topFace ? undefined : 'back', label: `${prefix}·后墙`, artwork: !topFace },
+    { x: 0, y: wall, w: wall, h: w, face: topFace ? undefined : 'left', label: `${prefix}·左墙`, artwork: !topFace },
+    { x: wall + l, y: wall, w: wall, h: w, face: topFace ? undefined : 'right', label: `${prefix}·右墙`, artwork: !topFace },
+    { x: -g, y: wall, w: g, h: w, label: `${prefix}·粘合位` },
+    { x: wall + l + wall, y: wall, w: g, h: w, label: `${prefix}·粘合位` },
+  ];
+  // 归一化到 0 起点
+  const minX = Math.min(...r.map((p) => p.x));
+  return r.map((p) => ({ ...p, x: p.x - minX }));
+}
+
+function sleeveNet(l: number, w: number, h: number): PanelRect[] {
+  const g = 10;
+  return [
+    { x: 0, y: 0, w: l, h: w, face: 'top', label: '外套·顶面', artwork: true },
+    { x: l, y: 0, w: h, h: w, face: 'front', label: '外套·抽拉面', artwork: true },
+    { x: l + h, y: 0, w: l, h: w, label: '外套·底面' },
+    { x: 2 * l + h, y: 0, w: h, h: w, face: 'back', label: '外套·背面', artwork: true },
+    { x: 2 * l + 2 * h, y: 0, w: g, h: w, label: '外套·粘合位' },
+  ];
+}
+
+export function buildDieline(
+  structure: StructureId,
+  size: { l: number; w: number; h: number },
+  bleed = 3,
+  safe = 5,
+): Dieline {
+  const l = Math.max(20, size.l), w = Math.max(15, size.w), h = Math.max(8, size.h);
+  const warnings: string[] = [];
+  let sheets: Sheet[] = [];
+
+  if (structure === 'tuck') {
+    sheets = [assemble('tuck-main', '插舌盒展开图', tuckNet(l, w, h), bleed, safe)];
+  } else if (structure === 'topBottom') {
+    sheets = [
+      assemble('tb-base', '底盒展开图', trayNet(l, w, Math.max(14, h * 0.72), '底盒'), bleed, safe),
+      assemble('tb-lid', '盖盒展开图', trayNet(l + 2.4, w + 2.4, Math.max(12, h * 0.3), '盖盒', 'top'), bleed, safe),
+    ];
+  } else if (structure === 'drawer') {
+    sheets = [
+      assemble('dw-tray', '内盒展开图', trayNet(l - 3, w - 3, Math.max(14, h * 0.85), '内盒'), bleed, safe),
+      assemble('dw-sleeve', '外套展开图', sleeveNet(l, w, h), bleed, safe),
+    ];
+  } else if (structure === 'pouch') {
+    const gusset = round(Math.min(60, Math.max(20, w * 0.5)), 2);
+    const seal = 12;
+    sheets = [assemble('pouch', '自立袋展开图', [
+      { x: 0, y: 0, w: l, h: seal, label: '顶部封口边' },
+      { x: 0, y: seal, w: l, h, label: '正面', face: 'front', artwork: true },
+      { x: l, y: seal, w: l, h, label: '背面', face: 'back', artwork: true },
+      { x: 0, y: seal + h, w: l, h: gusset, label: '底部折角' },
+      { x: l, y: seal + h, w: l, h: gusset, label: '底部折角' },
+    ], bleed, safe)];
+  } else if (structure === 'labelRect') {
+    sheets = [assemble('label-rect', '矩形标签', [
+      { x: 0, y: 0, w: l, h: w, face: 'front', label: '标签', artwork: true },
+    ], bleed, safe)];
+  } else {
+    const r = Math.min(l, w) / 2;
+    const cx = l / 2, cy = w / 2;
+    const raw: PanelRect[] = [{ x: 0, y: 0, w: l, h: w, face: 'front', label: '圆形标签', artwork: true }];
+    const sheet = assemble('label-round', '圆形标签', raw, bleed, safe, [
+      { cx, cy, r, kind: 'cut' }, { cx, cy, r: r + bleed, kind: 'bleed' },
+    ]);
+    // 圆标签只有圆形裁切，移除矩形裁切线；保留安全区提示
+    sheet.segments = sheet.segments.filter((s) => s.kind !== 'cut' && s.kind !== 'crease' && s.kind !== 'bleed');
+    sheet.safeRects = [{ x: cx - r + safe, y: cy - r + safe, w: (r - safe) * 2, h: (r - safe) * 2 }];
+    sheets = [sheet];
+  }
+
+  if (l / w > 6 || w / l > 6) warnings.push('长宽比例较极端，建议与印厂确认纸张与模切可行性。');
+  if (h > l * 2) warnings.push('盒高明显大于盒长，折叠纸盒成型难度较高。');
+  if (bleed < 2 || bleed > 5) warnings.push('出血值超出常见 3mm 范围，请确认印厂要求。');
+
+  return { structure, sheets, bleed, safe, finished: { l, w, h }, warnings };
+}
+
+/** 每个可印刷面的成品尺寸（mm）—— 排版引擎与 3D 贴图共用 */
+export function faceSizes(structure: StructureId, size: { l: number; w: number; h: number }) {
+  const l = Math.max(20, size.l), w = Math.max(15, size.w), h = Math.max(8, size.h);
+  if (structure === 'labelRect' || structure === 'labelRound') {
+    return { front: { w: l, h: w }, back: { w: l, h: w } };
+  }
+  if (structure === 'pouch') {
+    return { front: { w: l, h }, back: { w: l, h } };
+  }
+  return {
+    front: { w: l, h }, back: { w: l, h },
+    left: { w, h }, right: { w, h }, top: { w: l, h: w },
+  };
+}
+
+export function recommendStructures(product: string, packType: string, size: { l: number; w: number; h: number }) {
+  const gift = /礼|茶|香|首饰|文创|高端/.test(product);
+  if (packType === 'label' || /标签|贴|瓶/.test(product)) return ['labelRect', 'labelRound', 'tuck'] as StructureId[];
+  if (packType === 'pouch' || /袋|咖啡豆|自立/.test(product)) return ['pouch', 'labelRect', 'tuck'] as StructureId[];
+  if (gift && size.h >= 50) return ['topBottom', 'drawer', 'tuck'] as StructureId[];
+  return ['tuck', 'topBottom', 'drawer'] as StructureId[];
+}
+
+export function dielineStats(d: Dieline) {
+  const all = d.sheets.flatMap((s) => s.segments);
+  return {
+    sheets: d.sheets.length,
+    cut: all.filter((s) => s.kind === 'cut').length,
+    crease: all.filter((s) => s.kind === 'crease').length,
+    bleedLines: all.filter((s) => s.kind === 'bleed').length,
+    area: d.sheets.reduce((a, s) => a + s.width * s.height, 0),
+  };
+}

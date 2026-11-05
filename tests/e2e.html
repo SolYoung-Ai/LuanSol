@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>LunaSol 端到端流程测试</title>
+<style>body{font:13px monospace}iframe{width:1200px;height:860px;border:1px solid #ccc}</style></head>
+<body><pre id="out">RUNNING</pre><iframe id="app" src="../dist/index.html#/create"></iframe>
+<script>
+const out = document.getElementById('out');
+const results = [];
+const frame = document.getElementById('app');
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+async function waitFor(fn, ms = 12000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { try { if (fn()) return true; } catch (e) {} await sleep(60); }
+  throw new Error('等待超时: ' + fn.toString().slice(0, 90));
+}
+function D() { return frame.contentDocument; }
+function W() { return frame.contentWindow; }
+function btn(text, root) {
+  const d = root || D();
+  const list = [...d.querySelectorAll('button')].filter(b => b.textContent.replace(/\s+/g, ' ').includes(text));
+  if (!list.length) throw new Error('找不到按钮: ' + text);
+  return list[0];
+}
+function click(text) { const b = btn(text); if (b.disabled) throw new Error('按钮被禁用: ' + text); b.click(); }
+function type(text) {
+  const el = D().querySelector('.chat-input textarea');
+  if (!el) throw new Error('找不到对话输入框');
+  const setter = Object.getOwnPropertyDescriptor(W().HTMLTextAreaElement.prototype, 'value').set;
+  setter.call(el, text);
+  el.dispatchEvent(new (W().Event)('input', { bubbles: true }));
+}
+function step(name, ok, detail) { results.push({ name, ok: !!ok, detail: String(detail || '') }); }
+
+(async () => {
+  try {
+    await waitFor(() => D() && D().querySelector('.chat-scroll'));
+    step('创作中心加载', true, '对话面板与需求面板已挂载');
+
+    type('我想做一个茶叶包装盒，尺寸是 20cm × 15cm × 8cm，整体采用米白色和深绿色，风格简约高级，加入中国传统山水元素，品牌名称叫山隐茶集。');
+    await sleep(120);
+    click('发送');
+    await waitFor(() => D().querySelectorAll('.chat-msg.user').length > 0);
+    await sleep(250);
+    const reqText = D().querySelector('.req-panel').textContent;
+    step('一句话输入 → AI 结构化需求', /山隐茶集/.test(reqText) && /200 × 150 × 80/.test(reqText) && !btn('查看需求分析').disabled,
+      '品牌 / 尺寸 / 风格 / 配色已识别，需求收集完成');
+
+    click('查看需求分析');
+    await waitFor(() => W().location.hash === '#/brief' && D().querySelector('.brief-card'));
+    const sizeInputs = [...D().querySelectorAll('.size-inputs input')].map(i => i.value);
+    step('需求确认页 · 尺寸可核对', sizeInputs[0] === '200' && sizeInputs[1] === '150' && sizeInputs[2] === '80', 'mm 输入值: ' + sizeInputs.join(' / '));
+
+    click('就按这个方向设计');
+    await waitFor(() => W().location.hash === '#/schemes' && D().querySelectorAll('.scheme-card').length === 3);
+    step('AI 生成三套方案', D().querySelectorAll('.scheme-card').length === 3, '高级极简 / 创意插画 / 品牌商业');
+
+    click('选择这个方向');
+    await waitFor(() => W().location.hash === '#/editor' && D().querySelector('.editor-grid'));
+    const layers = D().querySelectorAll('.layer-item').length;
+    step('进入工作台 · 可编辑图层', layers >= 3 && !!D().querySelector('.design-view'), layers + ' 个图层');
+
+    click('背景换成米白色');
+    await waitFor(() => D().querySelectorAll('.mini-msg.ai').length > 0);
+    step('对话局部修改', D().querySelectorAll('.version-list button').length > 0, 'AI 回复 + 历史版本已生成');
+
+    click('3D 预览');
+    await waitFor(() => W().location.hash === '#/preview' && D().querySelector('.viewer-shell'));
+    await sleep(300);
+    step('3D 预览挂载', !!D().querySelector('.viewer3d canvas, .webgl-fallback'), 'WebGL 或 2D 降级预览均可用');
+
+    click('下一步 · 印前检查');
+    await waitFor(() => W().location.hash === '#/prepress' && [...D().querySelectorAll('button')].some(b => b.textContent.includes('检查我的包装')));
+    click('检查我的包装');
+    await waitFor(() => D().querySelector('.report-summary'));
+    const items = D().querySelectorAll('.check-item').length;
+    step('印前检查报告', items >= 10, items + ' 项通俗检查提示');
+
+    click('前往文件导出');
+    await waitFor(() => W().location.hash === '#/export' && D().querySelector('.format-grid') && [...D().querySelectorAll('button')].some(b => b.textContent.includes('生成并下载 PDF')));
+    const formats = D().querySelectorAll('.format-card').length;
+    const cb = D().querySelector('.confirm-row input');
+    if (!cb.checked) cb.click();
+    await sleep(180);
+    step('导出中心 · 格式与人工确认', formats >= 6 && !btn('生成并下载 PDF').disabled,
+      formats + ' 种格式卡片，人工确认后 PDF 可导出');
+  } catch (e) {
+    results.push({ name: '流程中断', ok: false, detail: (e && e.stack || e).toString().slice(0, 400) });
+  }
+  out.textContent = 'E2E_JSON:' + JSON.stringify(results);
+  document.title = 'LUNASOL_E2E_DONE';
+})();
+</script></body></html>

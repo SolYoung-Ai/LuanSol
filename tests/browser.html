@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>LunaSol 浏览器测试</title></head>
+<body><pre id="results">RUNNING</pre>
+<script src="./suite.browser.js"></script>
+<script>
+  LunaTest.runTests().then(function (r) {
+    document.getElementById('results').textContent = 'TEST_JSON:' + JSON.stringify(r);
+    document.title = 'LUNASOL_TEST_DONE';
+  }).catch(function (e) {
+    document.getElementById('results').textContent = 'TEST_ERROR:' + (e && e.stack || e);
+    document.title = 'LUNASOL_TEST_ERROR';
+  });
+</script></body></html>
