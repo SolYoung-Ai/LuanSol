@@ -3,7 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import type { AISettings, ChatMessage, DesignBrief, DesignDoc, Dieline, PrepressReport, Project, UserSettings, Version } from './types';
 import { createEmptyBrief } from './engine/brief';
 import { buildDieline } from './engine/structure';
-import { DEFAULT_AI } from './engine/llm';
+import { DEFAULT_AI, migrateAI } from './engine/llm';
 import { cloneDesign } from './engine/design';
 import { uid } from './engine/utils';
 import { createEmptyDraft, normalizeDraft, type ProjectDraft } from './v3/draft';
@@ -108,7 +108,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (v && typeof v === 'object') setS((prev) => ({
         ...prev, ...(v as Partial<Persisted>),
         settings: { ...DEFAULT_SETTINGS, ...(v as Persisted).settings },
-        ai: { ...DEFAULT_AI, ...(v as Persisted).ai },
+        ai: migrateAI({ ...DEFAULT_AI, ...(v as Persisted).ai }),
         draft: normalizeDraft((v as Persisted).draft),
       }));
       setReady(true);

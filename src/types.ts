@@ -194,6 +194,8 @@ export interface AISettings {
   temperature: number;
   retries: number;
   lastTest: { ok: boolean; at: number; message: string } | null;
+  /** 配置版本：用于把旧版本「未接入」的默认值升级到已部署的后台代理 */
+  rev?: number;
 }
 
 export interface UserSettings {

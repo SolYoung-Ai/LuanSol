@@ -61,8 +61,10 @@ export function LoginDialog({ open, onClose, onDone }: {
   return <Modal open={open} title={a.user ? '账号' : '登录 LunaSol'} onClose={onClose}>
     {!a.configured && <Notice tone="warn">当前构建没有配置 CloudBase 环境变量，登录不可用。项目会继续保存在本机浏览器，全站功能照常使用。</Notice>}
     {a.configured && !a.originOk && <Notice tone="warn">
-      当前域名不在 CloudBase 安全域名白名单内，浏览器会被跨域策略拦截。
-      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">在正式站点登录 →</a>
+      当前是 GitHub Pages 镜像域名，不在 CloudBase 安全域名白名单内（当前套餐无法追加），登录请求会被浏览器拦截。
+      设计、AI 与本机保存都能正常用；要登录并同步云端，请到正式站点
+      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">打开正式站点 →</a>
+      （首次访问需点一次「确定访问」）。
     </Notice>}
 
     {a.user ? <div className="acct-box">

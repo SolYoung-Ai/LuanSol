@@ -56,8 +56,9 @@ export default function Account() {
         : <Button onClick={() => setLoginOpen(true)}>登录 / 注册</Button>} />
 
     {!cloudOriginSupported() && <Notice tone="warn">
-      当前域名不在 CloudBase 安全域名白名单内（体验版套餐无法通过 API 追加），浏览器会拦截登录请求。
-      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">打开正式站点 →</a>
+      当前是 GitHub Pages 镜像域名，CloudBase 认证接口只对白名单来源放行（体验版无法通过 API 追加安全域名），
+      所以这里不能登录。设计与 AI 照常可用，项目保存在本机浏览器。
+      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">去正式站点登录 →</a>
     </Notice>}
 
     {!a.user ? <Empty title="还没有登录"

@@ -40,6 +40,20 @@ export function applyDeepSeekProxy(s: AISettings): AISettings {
 export const isDeepSeekProxy = (s: AISettings) =>
   deepSeekReady && aiMode(s) === 'proxy' && s.baseUrl.trim().replace(/\/+$/, '') === CLOUD.aiBaseUrl;
 
+/** 配置版本：V3.2 起默认接入已部署的 DeepSeek 后台代理。
+ *  老用户浏览器里存着 V3.1 的 mode:'off'，需要一次性升级，
+ *  但用户之后主动关掉 AI 时（rev 已是新值）必须被尊重。 */
+export const AI_REV = 2;
+
+export function migrateAI(s: AISettings): AISettings {
+  const rev = s.rev ?? 1;
+  if (rev >= AI_REV) return s;
+  const neverConfigured = !s.apiKey.trim() && (!s.mode || s.mode === 'off');
+  const next: AISettings = { ...s, rev: AI_REV };
+  if (neverConfigured && deepSeekReady) return { ...applyDeepSeekProxy(next), rev: AI_REV };
+  return next;
+}
+
 const KEY = 'lunasol.ai.v1';
 
 export function loadAI(): AISettings {
@@ -50,7 +64,7 @@ export function loadAI(): AISettings {
     const merged = { ...DEFAULT_AI, ...parsed };
     // 兼容旧版本配置：以前没有 mode 字段，按是否填过 Key 推断
     if (!parsed.mode) merged.mode = merged.apiKey.trim() ? 'browser' : 'off';
-    return merged;
+    return migrateAI(merged);
   } catch { return { ...DEFAULT_AI }; }
 }
 export function saveAI(s: AISettings) { localStorage.setItem(KEY, JSON.stringify(s)); }
