@@ -17,6 +17,17 @@ import { accountKey, otpTarget } from './keys';
 export { accountKey, otpTarget };
 
 export interface AuthUser { id: string; label: string; account: string }
+
+/** 登录不可用时的真实原因。
+ *  SDK 未就绪有两种完全不同的情况，不能都报「未配置环境」——那会把
+ *  「域名不在白名单」说成「没配环境」，属于错误信息误导。 */
+function unavailable(action: string): string {
+  if (!cloudConfigured) return `尚未配置 CloudBase 环境，无法${action}`;
+  if (!cloudOriginSupported()) {
+    return `当前域名不在 CloudBase 安全域名白名单内，${action}请求会被浏览器拦截；请到正式站点${action}`;
+  }
+  return `登录服务未就绪，无法${action}，请刷新页面重试`;
+}
 export type CodeKind = 'signup' | 'login';
 export type ActionResult = { ok: boolean; message: string };
 
@@ -106,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithPassword = useCallback(async (account: string, password: string): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth) return { ok: false, message: '尚未配置 CloudBase 环境，无法登录' };
+    if (!auth) return { ok: false, message: unavailable('登录') };
     if (!account.trim() || !password) return { ok: false, message: '请填写账号与密码' };
     setBusy(true); setError(null);
     try {
@@ -122,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startSignup = useCallback(async (target: string, password: string): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth) return { ok: false, message: '尚未配置 CloudBase 环境，无法注册' };
+    if (!auth) return { ok: false, message: unavailable('注册') };
     const t = otpTarget(target);
     if (!t) return { ok: false, message: '注册需要手机号或邮箱，用户名不能直接注册' };
     if (password.length < 8) return { ok: false, message: '密码至少 8 位' };
@@ -141,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startCodeLogin = useCallback(async (target: string): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth) return { ok: false, message: '尚未配置 CloudBase 环境' };
+    if (!auth) return { ok: false, message: unavailable('使用验证码') };
     const t = otpTarget(target);
     if (!t) return { ok: false, message: '请输入手机号或邮箱' };
     setBusy(true); setError(null);
@@ -179,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async (): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth) return { ok: false, message: '尚未配置 CloudBase 环境' };
+    if (!auth) return { ok: false, message: unavailable('退出登录') };
     setBusy(true);
     try {
       const r = await auth.signOut();
