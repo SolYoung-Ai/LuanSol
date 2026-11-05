@@ -35,7 +35,10 @@ VITE_LUNASOL_AI_BASE_URL / VITE_LUNASOL_AI_TOKEN
 接口：
 
 - `GET /health` → `{ok, provider, model, keyConfigured, tokenRequired, imageGeneration}`
+  - 这里的 `model` 是**配置值**（`DEEPSEEK_MODEL`），不是本次实际被服务的模型。
 - `POST /chat/completions` → 透传 OpenAI 兼容请求，返回厂商原始响应
+  - 响应里的 `model` 才是**上游实际服务版本**（例：配置 `deepseek-chat`，实测返回 `deepseek-flash`）。
+  - 两者不一致属正常：厂商按内部路由分配后端并回报真实服务名。排查时以响应体为准。
 
 行为约定：
 
@@ -72,6 +75,13 @@ CREATE TABLE public.lunasol_projects (
 | `src/cloud/useCloudSync.tsx` | 登录合并、防抖自动上传、手动同步、项目归属 |
 | `src/cloud/LoginDialog.tsx` | 登录 / 注册 / 验证码三种入口 |
 | `src/pages/account.tsx` | 账号信息、同步状态、云端项目列表 |
+
+## 幂等与降级约定（V3.2.3）
+
+- **登录失败不降级**：拿不到 `session` 就返回失败并展示服务端原文，绝不标记为已登录。
+- **失败原因分类**：登录不可用有三种完全不同的原因，提示语必须区分，不能都报「未配置环境」——
+  ① 没配环境变量（`!cloudConfigured`）；② 域名不在安全域名白名单（`!cloudOriginSupported()`）；
+  ③ SDK 未就绪（刷新重试）。②在 GitHub Pages 镜像域名上必然发生，属平台限制而非配置缺失。
 
 ## 已知限制
 
