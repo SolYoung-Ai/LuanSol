@@ -1,20 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { makeRnd, hLine, hPoly, hEllipse, hArc, hDot, hSmooth, drawPerson, type Pose, type Rnd } from './hand';
 
 /* ============================================================
- * LunaSol 原创手绘视觉系统 —— 黑白线稿（HEYTEA 式手绘语言）
- * 所有描边统一 currentColor，圆角线帽，pathLength 描边动画，
- * 滚动进入视口时自然"画"出来；尊重 prefers-reduced-motion。
+ * LunaSol 手绘视觉系统 —— 黑色马克笔线稿
+ * ------------------------------------------------------------
+ * 所有图形由 hand.ts 的笔触引擎程序化生成：
+ *  · 线条有弓形、粗细变化、端点出头，不是几何描边
+ *  · 同一角色「Luna」贯穿全站，骨架与五官完全一致
+ *  · 遮罩扫描做"画出来"的效果
+ *    （默认态永远可见，动画只是锦上添花，绝不会只剩几个点）
  * ============================================================ */
 
-type DProps = { className?: string; style?: React.CSSProperties; title?: string };
+export type DProps = { className?: string; style?: React.CSSProperties; title?: string };
 
-// 所有描边元素共用：描边动画基础属性
-const DD = { className: 'dd', pathLength: 1 } as const;
-// 实心小点 / 填充元素（淡入）
-const DF = { className: 'ddf' } as const;
+/** 笔画：可以直接是 path 字符串，也可以带宽度等参数的完整对象 */
+export type Stroke = string | { d: string; w?: number; o?: number; fill?: string; noDash?: boolean };
 
-// 用 React state 承载 "是否已进入视口"，让 draw 类由 React 渲染，
-// 避免命令式 classList.add 被后续 re-render 覆盖而导致描边动画被中途打断（只画出几个点）。
+/* ---------- 滚动进入视口时"画出来" ---------- */
 function useDrawReveal<T extends SVGElement>() {
   const ref = useRef<T | null>(null);
   const [shown, setShown] = useState(false);
@@ -24,276 +26,485 @@ function useDrawReveal<T extends SVGElement>() {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (reduce || typeof IntersectionObserver === 'undefined') { setShown(true); return; }
     const io = new IntersectionObserver((entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) { setShown(true); io.disconnect(); break; }
-      }
-    }, { threshold: 0.18 });
+      for (const e of entries) if (e.isIntersecting) { setShown(true); io.disconnect(); break; }
+    }, { threshold: 0.12 });
     io.observe(el);
     return () => io.disconnect();
   }, []);
   return { ref, shown };
 }
 
-function Svg({ vb, className, style, title, children }: DProps & { vb: string; children: React.ReactNode }) {
+/* ---------- 通用墨线画布 ---------- */
+export function Ink({ vb, strokes, className, style, title, animate = true }:
+{ vb: string; strokes: Stroke[] } & DProps & { animate?: boolean }) {
   const { ref, shown } = useDrawReveal<SVGSVGElement>();
+  const uid = useId().replace(/[:]/g, '');
+  // viewBox 尺寸，用于 mask 扫描
+  const [, , vw, vh] = vb.split(/\s+/).map(Number);
+  const W = vw || 400, H = vh || 400;
+  // 遮罩区域比画布大一圈，保证超出 viewBox 的出头笔画不被裁掉
+  const mx = -W * 0.5, my = -H * 0.5, mw = W * 2, mh = H * 2;
+  const masked = shown && animate;
   return (
-    <svg ref={ref} viewBox={vb} className={`doodle${shown ? ' draw' : ''}${className ? ` ${className}` : ''}`} style={style}
-      role="img" aria-label={title} fill="none" stroke="currentColor"
-      strokeWidth={3.1} strokeLinecap="round" strokeLinejoin="round" preserveAspectRatio="xMidYMid meet">
+    <svg ref={ref} viewBox={vb}
+      className={`doodle${masked ? ' draw' : ''}${className ? ` ${className}` : ''}`}
+      style={style} role="img" aria-label={title} fill="none" stroke="currentColor"
+      strokeLinecap="round" strokeLinejoin="round" preserveAspectRatio="xMidYMid meet">
       {title ? <title>{title}</title> : null}
-      {children}
+      <defs>
+        {/* 扫描遮罩：一条白色矩形从左向右扫出，
+            图形像被笔从左到右"画"出来。
+            底色是黑（= 隐藏），未播放动画时白条为满宽 = 全部可见。 */}
+        <mask id={`m${uid}`} maskUnits="userSpaceOnUse" x={mx} y={my} width={mw} height={mh}>
+          <rect x={mx} y={my} width={mw} height={mh} fill="#000" />
+          {/* 白条从画面左侧偏外扫到右侧偏外：出头的笔画也会被扫到 */}
+          <rect className="dd-sweep" x={-W * 0.12} y={my} width={W * 1.24} height={mh} fill="#fff" />
+        </mask>
+      </defs>
+      <g mask={masked ? `url(#m${uid})` : undefined}>
+        {strokes.map((raw, i) => {
+          const s = (typeof raw === 'string' ? { d: raw } : raw) as
+            { d: string; w?: number; o?: number; fill?: string; noDash?: boolean };
+          const w = s.w ?? 3.1;
+          return <React.Fragment key={i}>
+            {/* 马克笔复笔：偏移的浅色第二道，制造笔触不均 */}
+            {s.o !== 0 && i % 3 === 1 && (
+              <path d={s.d} strokeWidth={w * 0.6} opacity={0.3} transform="translate(1.2 -0.9)" className="dd" />
+            )}
+            <path d={s.d} strokeWidth={w} opacity={s.o ?? 1}
+              className={s.noDash ? 'ddf' : 'dd'}
+              fill={s.fill ?? 'none'}
+              style={{ ['--i' as string]: Math.min(i, 26) } as React.CSSProperties} />
+          </React.Fragment>;
+        })}
+      </g>
     </svg>
   );
 }
 
-/* ---------- 品牌吉祥物：手捧小盒的人物（Luna） ---------- */
-export function DoodlePersonHoldingBox(p: DProps) {
-  return <Svg vb="0 0 130 156" title={p.title || '手捧包装盒的人物'} {...p}>
-    <circle cx="72" cy="30" r="15" {...DD} />
-    <path d="M64 35 Q72 41 80 35" {...DD} />
-    <path d="M72 45 C70 64 67 84 71 104" {...DD} />
-    <path d="M71 104 C67 122 65 138 62 150" {...DD} />
-    <path d="M71 104 C77 122 81 138 86 150" {...DD} />
-    <path d="M71 62 C84 66 93 76 95 92" {...DD} />
-    <path d="M69 60 C53 56 42 47 39 33" {...DD} />
-    {/* 手中立方体小盒 */}
-    <path d="M16 30 L42 30 L42 48 L16 48 Z" {...DD} />
-    <path d="M16 30 L23 19 L49 19 L42 30" {...DD} />
-    <path d="M42 30 L49 19 L49 37 L42 48" {...DD} />
-  </Svg>;
+/* ---------- 缓存：同一图形只生成一次 ---------- */
+const cache = new Map<string, Stroke[]>();
+function build(key: string, fn: (r: Rnd) => Stroke[]): Stroke[] {
+  let v = cache.get(key);
+  if (!v) { v = fn(makeRnd(hash(key))); cache.set(key, v); }
+  return v;
+}
+function hash(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
 }
 
-/* ---------- 思考中的人物 ---------- */
-export function DoodlePersonThinking(p: DProps) {
-  return <Svg vb="0 0 130 156" title={p.title || '思考中的人物'} {...p}>
-    <circle cx="70" cy="30" r="15" {...DD} />
-    <path d="M64 34 Q70 40 76 34" {...DD} />
-    <path d="M70 45 C68 64 66 84 70 104" {...DD} />
-    <path d="M70 104 C66 122 64 138 61 150" {...DD} />
-    <path d="M70 104 C76 122 80 138 85 150" {...DD} />
-    <path d="M70 62 C56 66 48 78 47 92" {...DD} />
-    <path d="M72 60 C82 56 90 50 92 42" {...DD} />
-    {/* 思考气泡 + 星 */}
-    <path d="M98 24 C92 10 108 4 116 12 C124 4 138 12 132 26 C140 36 126 48 114 40 C104 50 92 40 98 24 Z" {...DD} />
-    <path d="M104 26 l3 6 l6 1 l-4 5 l1 6 l-6 -3 l-6 3 l1 -6 l-4 -5 l6 -1 z" {...DD} />
-  </Svg>;
-}
+/* ============================================================
+ * 小道具（作为批注、标注、点缀用，不是主视觉）
+ * ============================================================ */
 
-/* ---------- 正在绘制包装的人物（画板前） ---------- */
-export function DoodlePersonDrawing(p: DProps) {
-  return <Svg vb="0 0 150 156" title={p.title || '正在绘制包装的人物'} {...p}>
-    {/* 画板 / 桌面 */}
-    <path d="M82 92 L138 92 L138 138 L82 138 Z" {...DD} />
-    <path d="M92 104 L128 104 L128 122 L92 122 Z" {...DD} />
-    <path d="M100 113 l8 0 l-4 6 z" {...DD} />
-    {/* 人物 */}
-    <circle cx="44" cy="30" r="15" {...DD} />
-    <path d="M37 35 Q44 41 51 35" {...DD} />
-    <path d="M44 45 C42 64 40 82 44 100" {...DD} />
-    <path d="M44 100 C40 118 38 134 36 150" {...DD} />
-    <path d="M44 100 C50 118 54 134 58 150" {...DD} />
-    <path d="M44 62 C58 66 70 82 78 92" {...DD} />
-    <path d="M44 60 C30 62 22 72 20 86" {...DD} />
-    {/* 画笔 */}
-    <path d="M70 90 L86 104" {...DD} />
-    <path d="M84 102 l5 3 l-2 5 z" {...DF} />
-  </Svg>;
-}
-
-/* ---------- 正在打包 / 摆放包装的人物 ---------- */
-export function DoodlePersonPackaging(p: DProps) {
-  return <Svg vb="0 0 140 156" title={p.title || '正在整理包装的人物'} {...p}>
-    <circle cx="48" cy="30" r="15" {...DD} />
-    <path d="M41 35 Q48 41 55 35" {...DD} />
-    <path d="M48 45 C46 64 44 82 48 100" {...DD} />
-    <path d="M48 100 C44 118 42 134 40 150" {...DD} />
-    <path d="M48 100 C54 118 58 134 62 150" {...DD} />
-    <path d="M48 62 C62 66 74 80 82 92" {...DD} />
-    <path d="M48 60 C34 62 26 72 24 84" {...DD} />
-    {/* 地上的包装盒堆 */}
-    <path d="M86 132 L120 132 L120 150 L86 150 Z" {...DD} />
-    <path d="M86 132 L94 121 L128 121 L120 132" {...DD} />
-    <path d="M120 132 L128 121 L128 139 L120 150" {...DD} />
-    <path d="M70 112 L94 112 L94 130 L70 130 Z" {...DD} />
-    <path d="M70 112 L76 103 L100 103 L94 112" {...DD} />
-  </Svg>;
-}
-
-/* ---------- 拿着尺子测量的人物 ---------- */
-export function DoodlePersonMeasuring(p: DProps) {
-  return <Svg vb="0 0 140 156" title={p.title || '拿着尺子测量的人物'} {...p}>
-    <circle cx="48" cy="30" r="15" {...DD} />
-    <path d="M41 35 Q48 41 55 35" {...DD} />
-    <path d="M48 45 C46 64 44 82 48 100" {...DD} />
-    <path d="M48 100 C44 118 42 134 40 150" {...DD} />
-    <path d="M48 100 C54 118 58 134 62 150" {...DD} />
-    <path d="M48 62 C60 64 70 74 74 86" {...DD} />
-    <path d="M48 60 C36 62 28 70 24 80" {...DD} />
-    {/* 尺子 */}
-    <path d="M22 96 L96 84" {...DD} />
-    <path d="M30 95 L31 89 M40 93 L41 87 M50 92 L51 86 M60 90 L61 84 M70 88 L71 82 M80 87 L81 81 M90 85 L91 79" {...DD} />
-  </Svg>;
-}
-
-/* ---------- 包装盒（立方体） ---------- */
+/** 手绘立方包装盒（带盖缝） */
 export function DoodleBox(p: DProps) {
-  return <Svg vb="0 0 120 120" title={p.title || '包装盒'} {...p}>
-    <path d="M18 44 L60 24 L102 44 L60 64 Z" {...DD} />
-    <path d="M18 44 L18 96 L60 116 L60 64" {...DD} />
-    <path d="M102 44 L102 96 L60 116" {...DD} />
-    <path d="M18 44 L60 64 L102 44" {...DD} />
-    <path d="M60 64 L60 116" {...DD} />
-  </Svg>;
+  const s = build('box', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[22, 46], [60, 26], [98, 46]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[22, 46], [22, 96], [60, 116]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[98, 46], [98, 96], [60, 116]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[22, 46], [60, 66], [98, 46]], false, { bow: 0.05 }));
+    out.push(...hPoly(r, [[60, 66], [60, 116]], false, { bow: 0.02, over: 0.008 }));
+    out.push({ d: hArc(r, 60, 66, 14, Math.PI * 0.15, Math.PI * 0.85, { n: 4, wob: 0.08 }), w: 2.2 });
+    return out;
+  });
+  return <Ink vb="0 0 120 130" strokes={s} {...p} />;
 }
 
-/* ---------- 打开的包装盒（翻盖） ---------- */
+/** 手绘开口包装盒（掀盖） */
 export function DoodleOpenBox(p: DProps) {
-  return <Svg vb="0 0 130 120" title={p.title || '打开的包装盒'} {...p}>
-    <path d="M16 50 L62 30 L108 50 L62 70 Z" {...DD} />
-    <path d="M16 50 L16 96 L62 116 L62 70" {...DD} />
-    <path d="M108 50 L108 96 L62 116" {...DD} />
-    <path d="M16 50 L8 36 L54 16 L62 30" {...DD} />
-    <path d="M108 50 L116 36 L70 16 L62 30" {...DD} />
-    <path d="M62 70 L62 116" {...DD} />
-  </Svg>;
+  const s = build('openbox', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[20, 52], [62, 32], [104, 52]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[20, 52], [20, 96], [62, 116]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[104, 52], [104, 96], [62, 116]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[20, 52], [8, 36], [52, 14], [62, 32]], false, { bow: 0.06 }));
+    out.push(...hPoly(r, [[104, 52], [116, 34], [72, 12], [62, 32]], false, { bow: 0.06 }));
+    out.push(...hPoly(r, [[62, 70], [62, 116]], false, { bow: 0.02, over: 0.008 }));
+    return out;
+  });
+  return <Ink vb="0 0 126 128" strokes={s} {...p} />;
 }
 
-/* ---------- 纸袋 ---------- */
-export function DoodlePaperBag(p: DProps) {
-  return <Svg vb="0 0 120 130" title={p.title || '纸袋'} {...p}>
-    <path d="M28 40 L92 40 L100 118 L20 118 Z" {...DD} />
-    <path d="M28 40 C28 22 92 22 92 40" {...DD} />
-    <path d="M44 34 C44 18 76 18 76 34" {...DD} />
-    <path d="M62 50 L62 110" {...DD} strokeDasharray="4 5" />
-  </Svg>;
+/** 手绘自立袋 */
+export function DoodlePouch(p: DProps) {
+  const s = build('pouch', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[32, 44], [88, 44], [96, 118], [24, 118]], true, { bow: 0.035 }));
+    out.push(...hPoly(r, [[32, 44], [36, 26], [84, 26], [88, 44]], false, { bow: 0.05 }));
+    out.push(...hPoly(r, [[44, 30], [46, 16], [74, 16], [76, 30]], false, { bow: 0.06 }));
+    out.push({ d: hArc(r, 60, 62, 15, Math.PI * 0.12, Math.PI * 0.88, { n: 4, wob: 0.09 }), w: 2.2 });
+    out.push({ d: hLine(r, 40, 92, 80, 92, { bow: 0.06 }), w: 2.2 });
+    return out;
+  });
+  return <Ink vb="0 0 120 130" strokes={s} {...p} />;
 }
 
-/* ---------- 瓶子 ---------- */
+/** 手绘瓶罐 */
 export function DoodleBottle(p: DProps) {
-  return <Svg vb="0 0 90 150" title={p.title || '瓶子'} {...p}>
-    <path d="M36 18 L54 18 L54 34 C66 42 66 52 64 60 L64 132 L26 132 L26 60 C24 52 24 42 36 34 Z" {...DD} />
-    <path d="M26 86 L64 86" {...DD} />
-    <path d="M33 100 L57 100" {...DD} />
-  </Svg>;
+  const s = build('bottle', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[38, 26], [54, 26], [54, 40]], false, { bow: 0.03 }));
+    out.push(...hPoly(r, [[38, 26], [38, 40]], false, { bow: 0.03 }));
+    out.push(...hPoly(r, [[34, 40], [58, 40]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[34, 40], [26, 58], [26, 128], [66, 128], [66, 58], [58, 40]], false, { bow: 0.03 }));
+    out.push({ d: hLine(r, 26, 84, 66, 84, { bow: 0.04 }), w: 2.3 });
+    out.push({ d: hLine(r, 34, 100, 58, 100, { bow: 0.06 }), w: 2 });
+    return out;
+  });
+  return <Ink vb="0 0 92 140" strokes={s} {...p} />;
 }
 
-/* ---------- 标签 / 贴纸 ---------- */
+/** 手绘标签贴纸（带撕角） */
 export function DoodleLabel(p: DProps) {
-  return <Svg vb="0 0 110 130" title={p.title || '标签'} {...p}>
-    <path d="M24 36 L86 36 L86 110 L24 110 Z" {...DD} />
-    <path d="M24 36 L40 18 L92 18 L92 36" {...DD} />
-    <path d="M24 36 L24 110" {...DD} />
-    <circle cx="55" cy="64" r="14" {...DD} />
-    <path d="M40 90 L70 90" {...DD} />
-  </Svg>;
+  const s = build('label', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[26, 34], [86, 34], [86, 108], [26, 108]], false, { bow: 0.03 }));
+    out.push(...hPoly(r, [[26, 34], [42, 16], [92, 16], [86, 34]], false, { bow: 0.05 }));
+    out.push({ d: hEllipse(r, 56, 62, 15, 15, { n: 9, wob: 0.08 }), w: 2.4 });
+    out.push({ d: hLine(r, 40, 92, 72, 92, { bow: 0.06 }), w: 2.2 });
+    return out;
+  });
+  return <Ink vb="0 0 112 126" strokes={s} {...p} />;
 }
 
-/* ---------- 小花 ---------- */
-export function DoodleFlower(p: DProps) {
-  return <Svg vb="0 0 90 90" title={p.title || '小花'} {...p}>
-    <circle cx="45" cy="45" r="9" {...DF} />
-    <path d="M45 18 C40 30 40 36 45 45 C50 36 50 30 45 18 Z" {...DD} />
-    <path d="M45 72 C40 60 40 54 45 45 C50 54 50 60 45 72 Z" {...DD} />
-    <path d="M18 45 C30 40 36 40 45 45 C36 50 30 50 18 45 Z" {...DD} />
-    <path d="M72 45 C60 40 54 40 45 45 C54 50 60 50 72 45 Z" {...DD} />
-  </Svg>;
+/** 手绘礼品盒（带十字丝带） */
+export function DoodleGift(p: DProps) {
+  const s = build('gift', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[24, 52], [60, 34], [96, 52], [60, 70]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[24, 52], [24, 100], [60, 118], [60, 70]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[96, 52], [96, 100], [60, 118]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[24, 52], [60, 34], [96, 52]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[44, 43], [60, 34], [76, 43], [60, 52]], false, { bow: 0.06 }));
+    out.push({ d: hLine(r, 42, 59, 42, 109, { bow: 0.03 }), w: 2.2 });
+    out.push({ d: hLine(r, 78, 59, 78, 109, { bow: 0.03 }), w: 2.2 });
+    return out;
+  });
+  return <Ink vb="0 0 120 130" strokes={s} {...p} />;
 }
 
-/* ---------- 树（创意生长） ---------- */
-export function DoodleTree(p: DProps) {
-  return <Svg vb="0 0 140 160" title={p.title || '长出创意的树'} {...p}>
-    <path d="M64 158 L70 158 L68 96 L66 96 Z" {...DD} />
-    <path d="M67 110 C58 108 52 100 52 90 M67 120 C76 118 84 110 84 98" {...DD} />
-    <path d="M30 70 C30 44 50 30 70 34 C94 28 116 44 112 70 C124 84 116 106 92 104 C78 116 50 114 42 100 C22 100 20 82 30 70 Z" {...DD} />
-    <path d="M44 70 q8 -10 18 -4" {...DD} />
-    <path d="M84 78 q8 -8 16 -2" {...DD} />
-    {/* 树上长出小盒 */}
-    <path d="M92 34 L104 28 L118 34 L104 40 Z" {...DD} />
-    <path d="M92 34 L92 46 L104 52 L104 40" {...DD} />
-    <path d="M118 34 L118 46 L104 52" {...DD} />
-  </Svg>;
+/** 手绘剪刀 */
+export function DoodleScissors(p: DProps) {
+  const s = build('scissors', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[18, 82], [62, 42], [82, 26]], false, { bow: 0.04 }));
+    out.push(...hPoly(r, [[30, 92], [64, 52], [92, 34]], false, { bow: 0.04 }));
+    out.push({ d: hEllipse(r, 20, 92, 13, 11, { n: 8, wob: 0.09 }), w: 2.6 });
+    out.push({ d: hEllipse(r, 34, 104, 13, 11, { n: 8, wob: 0.09 }), w: 2.6 });
+    out.push({ d: hDot(r, 62, 42, 3.4), w: 2.4, fill: 'currentColor' });
+    return out;
+  });
+  return <Ink vb="0 0 110 120" strokes={s} {...p} />;
 }
 
-/* ---------- 星星 ---------- */
+/** 手绘铅笔 */
+export function DoodlePencil(p: DProps) {
+  const s = build('pencil', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[14, 96], [86, 30]], false, { bow: 0.02, over: 0.01 }));
+    out.push(...hPoly(r, [[20, 104], [92, 38]], false, { bow: 0.02, over: 0.01 }));
+    out.push(...hPoly(r, [[86, 30], [92, 38], [78, 40]], false, { bow: 0.05 }));
+    out.push({ d: hLine(r, 14, 96, 6, 104, { bow: 0.05 }), w: 2.4 });
+    out.push({ d: hLine(r, 34, 78, 40, 84, { bow: 0.04 }), w: 2 });
+    return out;
+  });
+  return <Ink vb="0 0 104 116" strokes={s} {...p} />;
+}
+
+/** 手绘直尺 */
+export function DoodleRuler(p: DProps) {
+  const s = build('ruler', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[14, 40], [112, 22], [112, 46], [14, 64]], true, { bow: 0.03 }));
+    const ticks: number[][][] = [];
+    for (let i = 0; i < 6; i++) {
+      const x = 24 + i * 16;
+      const y = 40 + (x - 24) * (18 / 88) * -1 + 0;
+      ticks.push([[x, y], [x, y + 11]]);
+    }
+    out.push(...ticks.map(t => ({ d: hLine(r, t[0][0], t[0][1], t[1][0], t[1][1], { bow: 0.02, over: 0 }), w: 1.9 })));
+    return out;
+  });
+  return <Ink vb="0 0 124 76" strokes={s} {...p} />;
+}
+
+/** 手绘胶带圈 */
+export function DoodleTape(p: DProps) {
+  const s = build('tape', r => {
+    const out: Stroke[] = [];
+    out.push({ d: hEllipse(r, 50, 42, 34, 15, { n: 9, wob: 0.07 }), w: 3 });
+    out.push({ d: hEllipse(r, 50, 42, 16, 7, { n: 8, wob: 0.1 }), w: 2.4 });
+    out.push({ d: hLine(r, 16, 42, 16, 66, { bow: 0.05 }), w: 2.4 });
+    out.push({ d: hLine(r, 84, 42, 84, 66, { bow: 0.05 }), w: 2.4 });
+    return out;
+  });
+  return <Ink vb="0 0 100 80" strokes={s} {...p} />;
+}
+
+/** 手绘星星 */
 export function DoodleStar(p: DProps) {
-  return <Svg vb="0 0 90 90" title={p.title || '星星'} {...p}>
-    <path d="M45 14 L53 36 L76 38 L58 53 L64 76 L45 62 L26 76 L32 53 L14 38 L37 36 Z" {...DD} />
-  </Svg>;
+  const s = build('star', r => {
+    const pts: number[][] = [];
+    const R = 36, r0 = 15;
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const rad = i % 2 === 0 ? R : r0;
+      pts.push([45 + Math.cos(a) * rad * (1 + (r() - 0.5) * 0.1), 45 + Math.sin(a) * rad * (1 + (r() - 0.5) * 0.1)]);
+    }
+    return [{ d: hPoly(r, pts, true, { bow: 0.03, jit: 0.9 }).join(' '), w: 3 }];
+  });
+  return <Ink vb="0 0 90 90" strokes={s} {...p} />;
 }
 
-/* ---------- 手绘箭头 ---------- */
-export function DoodleArrow(p: DProps & { flip?: boolean }) {
-  const vb = p.flip ? '0 0 130 60' : '0 0 130 60';
-  const d = p.flip
-    ? 'M120 30 C92 22 60 22 30 32 M30 32 L46 22 M30 32 L46 42'
-    : 'M10 30 C38 22 70 22 100 32 M100 32 L84 22 M100 32 L84 42';
-  return <Svg vb={vb} title={p.title || '手绘箭头'} {...p}><path d={d} {...DD} /></Svg>;
-}
-
-/* ---------- 手绘勾选 ---------- */
-export function DoodleCheck(p: DProps) {
-  return <Svg vb="0 0 90 90" title={p.title || '勾选'} {...p}>
-    <circle cx="45" cy="45" r="30" {...DD} />
-    <path d="M30 47 L41 60 L62 32" {...DD} />
-  </Svg>;
-}
-
-/* ---------- 闪光 / 火花 ---------- */
+/** 手绘闪光 */
 export function DoodleSpark(p: DProps) {
-  return <Svg vb="0 0 90 90" title={p.title || '闪光'} {...p}>
-    <path d="M45 10 C47 34 53 41 78 45 C53 49 47 56 45 80 C43 56 37 49 12 45 C37 41 43 34 45 10 Z" {...DD} />
-  </Svg>;
+  const s = build('spark', r => {
+    const out: Stroke[] = [];
+    out.push(...hPoly(r, [[45, 8], [40, 32], [50, 40], [40, 48], [45, 82], [50, 52], [42, 44], [52, 36]], true, { bow: 0.05, jit: 1.1 }));
+    return out;
+  });
+  return <Ink vb="0 0 90 90" strokes={s} {...p} />;
 }
 
-/* ---------- 波浪手绘线（分隔 / 装饰） ---------- */
+/** 手绘勾选 */
+export function DoodleCheck(p: DProps) {
+  const s = build('check', r => {
+    const out: Stroke[] = [];
+    out.push({ d: hEllipse(r, 45, 45, 32, 31, { n: 10, wob: 0.07 }), w: 2.8 });
+    out.push({ d: hPoly(r, [[28, 47], [40, 61], [63, 30]], false, { bow: 0.05, jit: 0.8 }).join(' '), w: 3.4 });
+    return out;
+  });
+  return <Ink vb="0 0 90 90" strokes={s} {...p} />;
+}
+
+/** 手绘箭头（可翻转） */
+export function DoodleArrow(p: DProps & { flip?: boolean }) {
+  const s = build(`arrow-${p.flip ? 'f' : 'n'}`, r => {
+    const out: Stroke[] = [];
+    if (p.flip) {
+      out.push({ d: hPoly(r, [[122, 26], [70, 18], [24, 30]], false, { bow: 0.05, jit: 1.2 }).join(' '), w: 3 });
+      out.push({ d: hPoly(r, [[24, 30], [44, 18]], false, { bow: 0.06 }).join(' '), w: 2.8 });
+      out.push({ d: hPoly(r, [[24, 30], [44, 42]], false, { bow: 0.06 }).join(' '), w: 2.8 });
+    } else {
+      out.push({ d: hPoly(r, [[8, 26], [60, 18], [108, 30]], false, { bow: 0.05, jit: 1.2 }).join(' '), w: 3 });
+      out.push({ d: hPoly(r, [[108, 30], [88, 18]], false, { bow: 0.06 }).join(' '), w: 2.8 });
+      out.push({ d: hPoly(r, [[108, 30], [88, 42]], false, { bow: 0.06 }).join(' '), w: 2.8 });
+    }
+    return out;
+  });
+  return <Ink vb="0 0 130 56" strokes={s} {...p} />;
+}
+
+/** 手绘波浪线（分隔用） */
 export function DoodleWave(p: DProps) {
-  return <Svg vb="0 0 200 30" title={p.title || '波浪线'} {...p}>
-    <path d="M4 16 q14 -12 28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0" {...DD} strokeWidth={2.4} />
-  </Svg>;
+  const s = build('wave', r => {
+    const pts: number[][] = [];
+    for (let i = 0; i <= 12; i++) pts.push([6 + i * 16, 16 + Math.sin(i * 1.5) * 5]);
+    return [{ d: hPoly(r, pts, false, { bow: 0.04, jit: 1 }).join(' '), w: 2.4 }];
+  });
+  return <Ink vb="0 0 200 32" strokes={s} {...p} />;
 }
 
-/* ---------- 品牌吉祥物别名 ---------- */
+/** 手绘小花 */
+export function DoodleFlower(p: DProps) {
+  const s = build('flower', r => {
+    const out: Stroke[] = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (i * Math.PI * 2) / 5 - Math.PI / 2;
+      const cx = 45 + Math.cos(a) * 21, cy = 45 + Math.sin(a) * 21;
+      out.push({ d: hEllipse(r, cx, cy, 11, 9, { n: 8, wob: 0.13, jit: 0.8 }), w: 2.5 });
+    }
+    out.push({ d: hDot(r, 45, 45, 8), w: 2.4, fill: 'currentColor' });
+    return out;
+  });
+  return <Ink vb="0 0 90 90" strokes={s} {...p} />;
+}
+
+/** 手绘叶子 */
+export function DoodleLeaf(p: DProps) {
+  const s = build('leaf', r => {
+    const out: Stroke[] = [];
+    out.push({ d: hSmooth(r, [[22, 70], [40, 30], [76, 16], [70, 54], [22, 70]], true, 1.2), w: 2.7 });
+    out.push({ d: hLine(r, 22, 70, 72, 22, { bow: 0.04 }), w: 2 });
+    return out;
+  });
+  return <Ink vb="0 0 92 86" strokes={s} {...p} />;
+}
+
+/** 手绘思考气泡 */
+export function DoodleThought(p: DProps) {
+  const s = build('thought', r => {
+    const out: Stroke[] = [];
+    out.push({ d: hEllipse(r, 48, 44, 38, 30, { n: 10, wob: 0.08 }), w: 2.7 });
+    out.push({ d: hEllipse(r, 26, 86, 8, 6.5, { n: 8, wob: 0.12 }), w: 2.4 });
+    out.push({ d: hEllipse(r, 14, 102, 4.5, 3.6, { n: 7, wob: 0.14 }), w: 2.2 });
+    return out;
+  });
+  return <Ink vb="0 0 100 116" strokes={s} {...p} />;
+}
+
+/* ============================================================
+ * 品牌角色「Luna」—— 全站统一的原创手绘人物
+ * 瘦长比例、微驼肩线、翘起的一撮短发。
+ * ============================================================ */
+
+const MASCOT_POSE: Pose = {
+  head: [100, 54], hr: 27,
+  neck: [100, 84], chest: [100, 104], waist: [102, 150], hip: [103, 186],
+  armL: [[80, 108], [62, 138], [70, 168]],
+  armR: [[120, 108], [138, 138], [130, 168]],
+  legL: [[94, 186], [88, 222], [82, 248]],
+  legR: [[112, 186], [116, 222], [120, 248]],
+  face: 'smile', hair: 'messy',
+};
+
+function withBox(strokes: Stroke[], r: Rnd, cx: number, cy: number, w: number, h: number): Stroke[] {
+  const x = cx - w / 2, y = cy - h / 2;
+  return [
+    ...strokes,
+    ...hPoly(r, [[x, y + h * 0.22], [x + w / 2, y], [x + w, y + h * 0.22]], false, { bow: 0.04 }).map(d => ({ d, w: 3 })),
+    ...hPoly(r, [[x, y + h * 0.22], [x, y + h], [x + w / 2, y + h * 1.18]], false, { bow: 0.04 }).map(d => ({ d, w: 3 })),
+    ...hPoly(r, [[x + w, y + h * 0.22], [x + w, y + h], [x + w / 2, y + h * 1.18]], false, { bow: 0.04 }).map(d => ({ d, w: 3 })),
+    ...hPoly(r, [[x, y + h * 0.22], [x + w / 2, y + h * 0.44], [x + w, y + h * 0.22]], false, { bow: 0.05 }).map(d => ({ d, w: 3 })),
+    { d: hLine(r, x + w / 2, y + h * 0.44, x + w / 2, y + h * 1.18, { bow: 0.02, over: 0.008 }), w: 2.4 },
+  ];
+}
+
+/** 吉祥物：双手捧着包装盒 */
+export function DoodlePersonHoldingBox(p: DProps) {
+  const s = build('mascot', r => withBox(drawPerson(r, MASCOT_POSE, { w: 3 }), r, 100, 172, 78, 58));
+  return <Ink vb="0 0 200 264" strokes={s} {...p} />;
+}
+
+/** 手绘下划线：给标题用的马克笔笔触 */
+export function DoodleUnderline(p: DProps) {
+  const s = build('underline', r => {
+    const out: Stroke[] = [];
+    out.push({ d: hPoly(r, [[6, 22], [54, 15], [104, 20], [150, 14], [196, 18]], false, { bow: 0.03, jit: 1 }).join(' '), w: 3.4 });
+    out.push({ d: hPoly(r, [[14, 30], [70, 26], [128, 29]], false, { bow: 0.04, jit: 1.2 }).join(' '), w: 2.2, o: 0.55 });
+    return out;
+  });
+  return <Ink vb="0 0 202 36" strokes={s} {...p} />;
+}
+
+/** 角色：思考中（手托下巴） */
+export function DoodlePersonThinking(p: DProps) {
+  const s = build('think', r => {
+    const pose: Pose = {
+      head: [104, 56], hr: 27,
+      neck: [104, 86], chest: [104, 106], waist: [102, 152], hip: [102, 188],
+      armL: [[84, 110], [60, 128], [88, 86]],
+      armR: [[124, 110], [142, 140], [138, 174]],
+      legL: [[94, 188], [88, 222], [82, 248]],
+      legR: [[112, 188], [116, 222], [120, 248]],
+      face: 'think', hair: 'short',
+    };
+    const st: Stroke[] = drawPerson(r, pose, { w: 3 });
+    st.push({ d: hArc(r, 152, 44, 34, Math.PI * 1.08, Math.PI * 1.95, { n: 6, wob: 0.09 }), w: 2.7 });
+    st.push({ d: hDot(r, 168, 36, 4.5), w: 2.6, fill: 'currentColor' });
+    st.push({ d: hDot(r, 186, 26, 3), w: 2.4, fill: 'currentColor' });
+    return st;
+  });
+  return <Ink vb="0 0 210 264" strokes={s} {...p} />;
+}
+
+/** 角色：正在图纸上绘制 */
+export function DoodlePersonDrawing(p: DProps) {
+  const s = build('drawing', r => {
+    const pose: Pose = {
+      head: [92, 58], hr: 27,
+      neck: [92, 88], chest: [92, 108], waist: [90, 152], hip: [90, 186],
+      armL: [[72, 112], [50, 138], [62, 166]],
+      armR: [[112, 110], [134, 134], [146, 162]],
+      legL: [[82, 186], [78, 222], [74, 248]],
+      legR: [[100, 186], [104, 222], [108, 248]],
+      face: 'focus', hair: 'short',
+    };
+    const st: Stroke[] = drawPerson(r, pose, { w: 3 });
+    // 画板
+    st.push(...hPoly(r, [[132, 148], [212, 140], [216, 226], [136, 234]], true, { bow: 0.035 }).map(d => ({ d, w: 2.8 })));
+    st.push(...hPoly(r, [[148, 166], [190, 161], [192, 192], [150, 197]], true, { bow: 0.05 }).map(d => ({ d, w: 2.2 })));
+    // 笔
+    st.push({ d: hLine(r, 134, 166, 158, 186, { bow: 0.03 }), w: 2.6 });
+    st.push({ d: hDot(r, 158, 187, 3.2), w: 2.4, fill: 'currentColor' });
+    return st;
+  });
+  return <Ink vb="0 0 230 262" strokes={s} {...p} />;
+}
+
+/** 角色：拿着尺子测量 */
+export function DoodlePersonMeasuring(p: DProps) {
+  const s = build('measuring', r => {
+    const pose: Pose = {
+      head: [88, 56], hr: 26,
+      neck: [88, 86], chest: [88, 106], waist: [90, 150], hip: [90, 186],
+      armL: [[70, 110], [48, 136], [60, 162]],
+      armR: [[108, 108], [130, 130], [142, 158]],
+      legL: [[82, 186], [78, 222], [74, 248]],
+      legR: [[100, 186], [104, 222], [108, 248]],
+      face: 'focus', hair: 'short',
+    };
+    const st: Stroke[] = drawPerson(r, pose, { w: 3 });
+    // 尺子
+    st.push(...hPoly(r, [[20, 122], [150, 96], [152, 112], [22, 138]], true, { bow: 0.03 }).map(d => ({ d, w: 2.6 })));
+    const ticks: number[][][] = [];
+    for (let i = 0; i < 6; i++) {
+      const x = 32 + i * 20, y = 120 - i * 4;
+      ticks.push([[x, y], [x, y + 9]]);
+    }
+    st.push(...ticks.map(t => ({ d: hLine(r, t[0][0], t[0][1], t[1][0], t[1][1], { bow: 0.02, over: 0 }), w: 1.8 })));
+    return st;
+  });
+  return <Ink vb="0 0 170 262" strokes={s} {...p} />;
+}
+
+/** 角色：正在整理/封装包装 */
+export function DoodlePersonPackaging(p: DProps) {
+  const s = build('packaging', r => {
+    const pose: Pose = {
+      head: [80, 56], hr: 26,
+      neck: [80, 86], chest: [80, 106], waist: [82, 150], hip: [82, 186],
+      armL: [[62, 110], [42, 134], [54, 160]],
+      armR: [[100, 108], [122, 128], [134, 150]],
+      legL: [[74, 186], [70, 222], [66, 248]],
+      legR: [[92, 186], [96, 222], [100, 248]],
+      face: 'smile', hair: 'bun',
+    };
+    const st: Stroke[] = drawPerson(r, pose, { w: 3 });
+    // 地面盒堆
+    st.push(...hPoly(r, [[112, 178], [148, 164], [184, 178]], false, { bow: 0.04 }).map(d => ({ d, w: 2.8 })));
+    st.push(...hPoly(r, [[112, 178], [112, 212], [148, 226], [148, 164]], false, { bow: 0.04 }).map(d => ({ d, w: 2.8 })));
+    st.push(...hPoly(r, [[184, 178], [184, 212], [148, 226]], false, { bow: 0.04 }).map(d => ({ d, w: 2.8 })));
+    st.push(...hPoly(r, [[124, 146], [160, 132], [196, 146]], false, { bow: 0.04 }).map(d => ({ d, w: 2.8 })));
+    st.push(...hPoly(r, [[124, 146], [124, 172], [160, 186], [160, 132]], false, { bow: 0.04 }).map(d => ({ d, w: 2.8 })));
+    st.push(...hPoly(r, [[196, 146], [196, 172], [160, 186]], false, { bow: 0.04 }).map(d => ({ d, w: 2.8 })));
+    return st;
+  });
+  return <Ink vb="0 0 212 262" strokes={s} {...p} />;
+}
+
+/** 角色：奔跑（抱着盒子） */
+export function DoodlePersonRunning(p: DProps) {
+  const s = build('running', r => {
+    const pose: Pose = {
+      head: [96, 52], hr: 25,
+      neck: [100, 80], chest: [104, 100], waist: [112, 142], hip: [118, 176],
+      armL: [[86, 104], [62, 142], [86, 172]],
+      armR: [[122, 100], [148, 136], [126, 168]],
+      legL: [[110, 178], [86, 214], [48, 214]],
+      legR: [[124, 176], [146, 210], [178, 244]],
+      face: 'joy', hair: 'messy',
+    };
+    const st: Stroke[] = drawPerson(r, pose, { w: 3 });
+    st.push(...withBox([], r, 108, 124, 76, 56));
+    return st;
+  });
+  return <Ink vb="0 0 210 240" strokes={s} {...p} />;
+}
+
+/** 品牌吉祥物别名 */
 export const Mascot = DoodlePersonHoldingBox;
-
-/* ---------- 首页创意场景：人物 + 树 + 盒 + 星 + 花 ---------- */
-export function HeroScene(p: DProps) {
-  return <Svg vb="0 0 520 420" title={p.title || 'LunaSol 创意工作室场景'} {...p}>
-    {/* 地面手绘线 */}
-    <path d="M40 372 C160 360 360 360 484 372" {...DD} />
-    {/* 左：手捧盒的人物（吉祥物） */}
-    <g transform="translate(36 150) scale(1)">
-      <circle cx="72" cy="30" r="15" {...DD} />
-      <path d="M64 35 Q72 41 80 35" {...DD} />
-      <path d="M72 45 C70 64 67 84 71 104" {...DD} />
-      <path d="M71 104 C67 122 65 138 62 150" {...DD} />
-      <path d="M71 104 C77 122 81 138 86 150" {...DD} />
-      <path d="M71 62 C84 66 93 76 95 92" {...DD} />
-      <path d="M69 60 C53 56 42 47 39 33" {...DD} />
-      <path d="M16 30 L42 30 L42 48 L16 48 Z" {...DD} />
-      <path d="M16 30 L23 19 L49 19 L42 30" {...DD} />
-      <path d="M42 30 L49 19 L49 37 L42 48" {...DD} />
-    </g>
-    {/* 中：长出创意的树 */}
-    <g transform="translate(190 150) scale(1.05)">
-      <path d="M64 158 L70 158 L68 96 L66 96 Z" {...DD} />
-      <path d="M30 70 C30 44 50 30 70 34 C94 28 116 44 112 70 C124 84 116 106 92 104 C78 116 50 114 42 100 C22 100 20 82 30 70 Z" {...DD} />
-      <path d="M92 34 L104 28 L118 34 L104 40 Z" {...DD} />
-      <path d="M92 34 L92 46 L104 52 L104 40" {...DD} />
-      <path d="M118 34 L118 46 L104 52" {...DD} />
-    </g>
-    {/* 右：打开的盒 + 星 + 花 */}
-    <g transform="translate(372 196)">
-      <path d="M16 50 L62 30 L108 50 L62 70 Z" {...DD} />
-      <path d="M16 50 L16 96 L62 116 L62 70" {...DD} />
-      <path d="M108 50 L108 96 L62 116" {...DD} />
-      <path d="M16 50 L8 36 L54 16 L62 30" {...DD} />
-      <path d="M108 50 L116 36 L70 16 L62 30" {...DD} />
-      <path d="M62 70 L62 116" {...DD} />
-    </g>
-    <g transform="translate(470 150) scale(0.7)"><path d="M45 14 L53 36 L76 38 L58 53 L64 76 L45 62 L26 76 L32 53 L14 38 L37 36 Z" {...DD} /></g>
-    <g transform="translate(330 120) scale(0.6)"><circle cx="45" cy="45" r="9" {...DF} /><path d="M45 18 C40 30 40 36 45 45 C50 36 50 30 45 18 Z" {...DD} /><path d="M45 72 C40 60 40 54 45 45 C50 54 50 60 45 72 Z" {...DD} /><path d="M18 45 C30 40 36 40 45 45 C36 50 30 50 18 45 Z" {...DD} /><path d="M72 45 C60 40 54 40 45 45 C54 50 60 50 72 45 Z" {...DD} /></g>
-    {/* 飘散的小元素 */}
-    <g transform="translate(150 120) scale(0.5)"><path d="M45 10 C47 34 53 41 78 45 C53 49 47 56 45 80 C43 56 37 49 12 45 C37 41 43 34 45 10 Z" {...DD} /></g>
-    <g transform="translate(300 250) scale(0.5)"><path d="M45 14 L53 36 L76 38 L58 53 L64 76 L45 62 L26 76 L32 53 L14 38 L37 36 Z" {...DD} /></g>
-  </Svg>;
-}

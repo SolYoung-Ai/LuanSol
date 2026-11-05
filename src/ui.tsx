@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { DoodleOpenBox, DoodlePersonHoldingBox } from './components/doodle';
-
 export function useHash() {
   const [hash, setHash] = useState(() => window.location.hash.replace(/^#/, '') || '/');
   useEffect(() => { const h = () => setHash(window.location.hash.replace(/^#/, '') || '/'); window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h); }, []);
@@ -10,7 +9,7 @@ export const go = (path: string) => { window.location.hash = path.startsWith('/'
 
 export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?: () => void }) {
   return <button className="logo" onClick={onClick || (() => go('/'))} aria-label="LunaSol 首页">
-    <span className="logo-mark" aria-hidden><DoodleOpenBox style={{ width: 30, height: 28 }} /></span>
+    <span className="logo-mark" aria-hidden><DoodleOpenBox style={{ width: 32, height: 32 }} /></span>
     <span className="logo-text"><span className="logo-word">LunaSol</span>{!compact && <span className="logo-sub">AI PACKAGING STUDIO</span>}</span>
   </button>;
 }
@@ -92,5 +91,9 @@ export function Spinner({ label = 'AI 正在工作' }: { label?: string }) {
 }
 
 export function PageHead({ kicker, title, desc, right, doodle }: { kicker?: string; title: string; desc?: string; right?: React.ReactNode; doodle?: React.ReactNode }) {
-  return <div className="page-head"><div>{kicker && <div className="kicker">{kicker}</div>}<h1>{title}</h1>{desc && <p>{desc}</p>}{doodle && <div className="page-doodle-inline">{doodle}</div>}</div>{right && <div className="page-head-right">{right}</div>}</div>;
+  return <div className="page-head"><div>
+    {kicker && <div className="kicker">{kicker}</div>}
+    <div className="page-head-title-row"><h1>{title}</h1>{doodle}</div>
+    {desc && <p>{desc}</p>}
+  </div>{right && <div className="page-head-right">{right}</div>}</div>;
 }
