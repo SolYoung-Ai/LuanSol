@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { DoodleOpenBox, DoodlePersonHoldingBox } from './components/doodle';
 
 export function useHash() {
   const [hash, setHash] = useState(() => window.location.hash.replace(/^#/, '') || '/');
@@ -9,8 +10,8 @@ export const go = (path: string) => { window.location.hash = path.startsWith('/'
 
 export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?: () => void }) {
   return <button className="logo" onClick={onClick || (() => go('/'))} aria-label="LunaSol 首页">
-    <span className="logo-word">LunaSol</span>
-    {!compact && <span className="logo-sub">AI PACKAGING STUDIO</span>}
+    <span className="logo-mark" aria-hidden><DoodleOpenBox style={{ width: 30, height: 28 }} /></span>
+    <span className="logo-text"><span className="logo-word">LunaSol</span>{!compact && <span className="logo-sub">AI PACKAGING STUDIO</span>}</span>
   </button>;
 }
 
@@ -65,7 +66,7 @@ export function StepBar({ steps, current }: { steps: string[]; current: number }
 }
 
 export function Empty({ title, desc, action }: { title: string; desc: string; action?: React.ReactNode }) {
-  return <div className="empty"><div className="empty-mark">◇</div><h3>{title}</h3><p>{desc}</p>{action}</div>;
+  return <div className="empty"><div className="empty-mark"><DoodlePersonHoldingBox className="empty-doodle" /></div><h3>{title}</h3><p>{desc}</p>{action}</div>;
 }
 
 export function Modal({ open, title, onClose, children, wide = false }: { open: boolean; title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
@@ -90,6 +91,6 @@ export function Spinner({ label = 'AI 正在工作' }: { label?: string }) {
   return <span className="spinner-wrap"><span className="spinner" />{label}</span>;
 }
 
-export function PageHead({ kicker, title, desc, right }: { kicker?: string; title: string; desc?: string; right?: React.ReactNode }) {
-  return <div className="page-head"><div>{kicker && <div className="kicker">{kicker}</div>}<h1>{title}</h1>{desc && <p>{desc}</p>}</div>{right && <div className="page-head-right">{right}</div>}</div>;
+export function PageHead({ kicker, title, desc, right, doodle }: { kicker?: string; title: string; desc?: string; right?: React.ReactNode; doodle?: React.ReactNode }) {
+  return <div className="page-head"><div>{kicker && <div className="kicker">{kicker}</div>}<h1>{title}</h1>{desc && <p>{desc}</p>}{doodle && <div className="page-doodle-inline">{doodle}</div>}</div>{right && <div className="page-head-right">{right}</div>}</div>;
 }

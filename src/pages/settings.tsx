@@ -5,6 +5,7 @@ import { DEFAULT_AI, aiConfigured, saveAI, testConnection } from '../engine/llm'
 import { STRUCTURES } from '../engine/structure';
 import { downloadBlob, formatDate } from '../engine/utils';
 import type { AISettings, Project } from '../types';
+import { DoodleFlower, DoodleSpark } from '../components/doodle';
 
 /* ============================ 13. 个人设置 ============================ */
 export function Settings() {
@@ -30,7 +31,8 @@ export function Settings() {
     fr.readAsText(f);
   };
   return <div className="page page-narrow">
-    <PageHead kicker="SETTINGS / 13" title="个人设置" desc="LunaSol 默认面向完全不懂设计的用户。高级功能需要你主动开启。" />
+    <PageHead kicker="SETTINGS / 13" title="个人设置" desc="LunaSol 默认面向完全不懂设计的用户。高级功能需要你主动开启。"
+      doodle={<DoodleFlower className="page-doodle-inline" />} />
     <div className="settings-grid">
       <Card className="pad-card"><SectionLabel en="BASIC">基础</SectionLabel>
         <Field label="称呼"><input value={s.settings.name} onChange={(e) => set({ name: e.target.value })} /></Field>
@@ -80,7 +82,8 @@ export function ModelConfig() {
     setTesting(false); setToast(r.ok ? '连接测试通过' : `连接失败：${r.message.slice(0, 60)}`);
   };
   return <div className="page page-narrow">
-    <PageHead kicker="AI MODELS / 14" title="AI 模型配置中心" desc="接入你自己的 OpenAI 兼容接口。未配置时，网站仍可手动创作、编辑、保存与基础导出。" />
+    <PageHead kicker="AI MODELS / 14" title="AI 模型配置中心" desc="接入你自己的 OpenAI 兼容接口。未配置时，网站仍可手动创作、编辑、保存与基础导出。"
+      doodle={<DoodleSpark className="page-doodle-inline" />} />
     <div className="model-status">
       <div><span className={`status-dot ${aiConfigured(draft) ? draft.lastTest?.ok ? 'on' : 'pending' : 'off'}`} />
         <strong>{aiConfigured(draft) ? draft.lastTest?.ok ? '已连接' : '已配置，未验证连接' : '未配置 AI 模型'}</strong>

@@ -8,6 +8,7 @@ import { FLOW_STEPS } from '../data';
 import { downloadBlob, formatDate, round } from '../engine/utils';
 import { dielineStats, structureById } from '../engine/structure';
 import type { CheckItem } from '../types';
+import { DoodleBox, DoodleCheck, DoodlePersonHoldingBox } from '../components/doodle';
 
 /* ============================ 6. 3D 智能包装预览 ============================ */
 export function Preview3D() {
@@ -31,7 +32,8 @@ export function Preview3D() {
   return <div className="page page-wide">
     <StepBar steps={FLOW_STEPS} current={4} />
     <PageHead kicker="3D PREVIEW / 05" title="看看它做成实物是什么样" desc="平面稿会自动映射到真实结构模型的每个面；拖拽旋转，滚轮缩放。"
-      right={<Button onClick={() => go('/prepress')}>下一步 · 印前检查 <span aria-hidden>→</span></Button>} />
+      right={<Button onClick={() => go('/prepress')}>下一步 · 印前检查 <span aria-hidden>→</span></Button>}
+      doodle={<DoodleBox className="page-doodle-inline" />} />
     <div className="preview3d-grid">
       <div className={`viewer-shell bg-${background}`}><Viewer3D ref={ref} design={s.design} structure={s.brief.structure} size={s.brief.size.l ? s.brief.size : { l: 200, w: 150, h: 80 }} open={open} material={material} background={background} light={light} autoRotate={autoRotate} />
         <div className="viewer-hint">拖拽旋转 · 滚轮缩放</div></div>
@@ -81,7 +83,8 @@ export function Prepress() {
   return <div className="page page-narrow">
     <StepBar steps={FLOW_STEPS} current={5} />
     <PageHead kicker="PREPRESS CHECK / 06" title="检查我的包装" desc="点一下，系统自动完成尺寸、出血、清晰度、颜色、字体和刀模检查，并把术语翻译成人话。"
-      right={<Button onClick={check} disabled={busy}>{busy ? '检查中…' : '检查我的包装'}</Button>} />
+      right={<Button onClick={check} disabled={busy}>{busy ? '检查中…' : '检查我的包装'}</Button>}
+      doodle={<DoodleCheck className="page-doodle-inline" />} />
     {!report ? <Card className="prepress-cta"><div className="big-mark">◎</div><h2>还没有检查报告</h2>
       <p>导出印刷文件之前，LunaSol 会逐项检查并把能自动修复的问题处理好。</p><Button size="lg" onClick={check}>开始检查 <span aria-hidden>→</span></Button></Card> : <>
       <Card className={`report-summary ${report.status}`}>
@@ -144,7 +147,8 @@ export function ExportCenter() {
 
   return <div className="page">
     <StepBar steps={FLOW_STEPS} current={6} />
-    <PageHead kicker="EXPORT CENTER / 07" title="文件导出中心" desc="真正的毫米级印刷文件：逐图层绘制的 PDF、保留可编辑文字的 SVG、几何刀模 DXF 与高清图。" />
+    <PageHead kicker="EXPORT CENTER / 07" title="文件导出中心" desc="真正的毫米级印刷文件：逐图层绘制的 PDF、保留可编辑文字的 SVG、几何刀模 DXF 与高清图。"
+      doodle={<DoodlePersonHoldingBox className="page-doodle-inline" />} />
     <div className="export-top">
       <Card className="pad-card"><SectionLabel en="EXPORT FLOW">导出前六步</SectionLabel>
         <div className="export-flow">

@@ -10,6 +10,7 @@ import { aiModify, applyPatch, localIntent, versionLabel } from '../engine/modif
 import { spreadSvg } from '../engine/export';
 import type { DesignDoc, FaceId, ImageLayer, Layer, ShapeKind, StructureId, TextLayer } from '../types';
 import { FLOW_STEPS } from '../data';
+import { DoodlePersonThinking, DoodlePersonMeasuring, DoodlePersonDrawing } from '../components/doodle';
 import { clamp, downloadBlob, formatDate, hexToRgb, uid } from '../engine/utils';
 
 const FACE_LABEL: Record<FaceId, string> = { front: '正面', back: '背面', left: '左侧', right: '右侧', top: '顶面' };
@@ -99,7 +100,7 @@ export function Create() {
 
   return <div className="page page-narrow">
     <StepBar steps={FLOW_STEPS} current={0} />
-    <PageHead kicker="AI CREATION CENTER / 01" title="告诉我，你想做什么包装？" desc="简单描述你的想法，剩下的交给 LunaSol。一次只问一个问题。" />
+    <PageHead kicker="AI CREATION CENTER / 01" title="告诉我，你想做什么包装？" desc="简单描述你的想法，剩下的交给 LunaSol。一次只问一个问题。" doodle={<DoodlePersonThinking className="page-doodle-inline" />} />
     <div className="create-grid">
       <div className="chat-panel">
         <div className="chat-scroll">
@@ -175,7 +176,8 @@ export function BriefPage() {
   return <div className="page page-narrow">
     <StepBar steps={FLOW_STEPS} current={1} />
     <PageHead kicker="DESIGN BRIEF / 02" title="确认一下，就按这个方向设计？" desc="AI 已把你的描述整理成结构化需求。所有建议都不会覆盖你明确指定的内容。"
-      right={<Button variant="outline" onClick={() => go('/create')}>我想修改一下</Button>} />
+      right={<Button variant="outline" onClick={() => go('/create')}>我想修改一下</Button>}
+      doodle={<DoodlePersonMeasuring className="page-doodle-inline" />} />
     <div className="brief-grid">
       <Card className="brief-card">
         <div className="brief-card-head"><span>DESIGN DIRECTION</span><Tag tone="green">{b.style || 'AI 推荐风格'}</Tag></div>
@@ -265,7 +267,8 @@ export function Schemes() {
   return <div className="page">
     <StepBar steps={FLOW_STEPS} current={2} />
     <PageHead kicker="THREE DIRECTIONS / 03" title="三套明显不同的设计方向" desc="每套都包含正 / 背 / 侧 / 顶的完整分层设计稿。文字独立可编辑，不是一张图片。"
-      right={<Button variant="outline" onClick={regenerate}>重新生成</Button>} />
+      right={<Button variant="outline" onClick={regenerate}>重新生成</Button>}
+      doodle={<DoodlePersonDrawing className="page-doodle-inline" />} />
     <div className="scheme-grid">
       {s.schemes.map((d, i) => <Card key={d.id} className="scheme-card">
         <div className="scheme-top"><span>{SCHEME_META[d.scheme].en}</span><span>0{i + 1}</span></div>
