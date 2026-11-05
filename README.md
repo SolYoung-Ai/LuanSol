@@ -72,7 +72,8 @@ src/
   App.tsx      hash 路由（无需服务端 rewrite）
 tests/         suite.ts（Node + 浏览器共用断言）/ browser.html / e2e.html
 docs/          AI_SETUP.md / DEPLOY.md / TEST_REPORT.md
-.github/       GitHub Pages 自动构建部署工作流
+docs/deploy-workflow.yml   GitHub Pages 自动部署工作流模板
+.github/workflows/         本地同内容副本（需具备 workflow 权限的令牌才能推送）
 ```
 
 ## 明确的边界（重要）

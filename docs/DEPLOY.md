@@ -12,7 +12,12 @@
 
 ## 自动部署（推荐）
 
-仓库已内置 `.github/workflows/deploy.yml`：
+工作流文件位于仓库 `docs/deploy-workflow.yml`，本地源码也保留了一份 `.github/workflows/deploy.yml`。
+**当前创建仓库所用的令牌只有 `repo` 权限、没有 `workflow` 权限，因此无法由脚本把 `.github/workflows/*.yml` 推上 GitHub**（GitHub 会拒绝）。启用自动部署只需在 GitHub 网页端打开仓库 → Add file → Create new file → 路径填 `.github/workflows/deploy.yml` → 粘贴 `docs/deploy-workflow.yml` 的内容并提交；之后每次 push 到 main 都会自动构建部署。
+
+本次上线已采用下方的「手动部署」方式把 `dist/` 推到 `gh-pages` 分支并开启 Pages，网站现在即可访问。
+
+工作流内容：
 
 1. 推送到 `main` 触发工作流；
 2. `npm ci` → `npm run build`（含 `tsc --noEmit`）→ `npm test`；
