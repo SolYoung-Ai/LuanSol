@@ -11,11 +11,13 @@ import {
   STYLES, STYLE_GROUPS, recommendStyles, styleById, buildStylePrompt, TRADITION_COUNT,
 } from './styles';
 import { generatePalettes, extractLogoColors, isHex, hexToRgb, rgbToHex, recommendPrimary, withColor, nameOfColor } from './colors';
-import { generateLogoOptions, aiLogoAdvice, adjustLogoSvg, readLogoFile, fileToDataUrl, svgDataUrl, LOGO_STYLES, LOGO_INDUSTRIES, LOGO_POSITIONS, TRADEMARK_NOTE } from './logo';
+import { generateLogoOptions, adjustLogoSvg, readLogoFile, fileToDataUrl, svgDataUrl, LOGO_STYLES, LOGO_INDUSTRIES, LOGO_POSITIONS, TRADEMARK_NOTE } from './logo';
 import { validateBarcode, encodeBarcode, verifyBarcode, barcodeSvg, PREVIEW_CODE, RETAIL_WARNING } from './barcode';
 import type { AISettings } from '../types';
-import { suggestTagline } from '../engine/design';
-import { createEmptyBrief } from '../engine/brief';
+import { aiEnabled } from '../engine/llm';
+import { runAITask } from '../ai/provider';
+import { buildAIContext } from '../ai/context';
+import type { PaletteDraft } from './draft';
 
 export interface StepProps {
   d: ProjectDraft;
@@ -142,7 +144,13 @@ export function StepSize(p: StepProps) {
       </div>
     </StepSection>
 
-    <StepSection title="确认包装结构" aside={<button className="v3-link" onClick={() => { const rec = meta.structures[0]; setStruct(p, rec); p.toast(`已推荐「${structureById(rec).name}」，仍需确认下方结构参数`); }}>让 AI 帮我推荐</button>}>
+    <StepSection title="确认包装结构" aside={<button className="v3-link" onClick={async () => {
+      const r = await runAITask('size.structure', buildAIContext(p.d), p.ai);
+      const id = (r.suggestions[0]?.value as { structureId?: string } | undefined)?.structureId;
+      if (!id || !meta.structures.includes(id as never)) return;
+      setStruct(p, id);
+      p.toast(`已推荐「${structureById(id as never).name}」，仍需确认下方结构参数`);
+    }}>让 AI 帮我推荐</button>}>
       <div className="v3-grid v3-grid-3">
         {structs.map((st) => <OptionCard key={st.id} active={dm.structureId === st.id} title={st.name} desc={st.use} onClick={() => setStruct(p, st.id)} />)}
       </div>
@@ -184,11 +192,13 @@ export function StepLogo(p: StepProps) {
   const gen = async () => {
     if (!spec.brandName.trim()) { p.toast('请先填写品牌名称'); return; }
     setBusy(true);
-    const a = await aiLogoAdvice(spec, p.ai);
-    setAdvice(a.suggestions); setAiUsed(a.usedAI);
+    // Logo 方向也走统一任务层：后台接入 GPT 后，这里会直接使用模型给出的方向
+    const r = await runAITask('logo.directions', buildAIContext(p.d), p.ai);
+    const suggestions = r.suggestions.slice(0, 3).map((s) => ({ title: s.title, reason: s.detail }));
+    setAdvice(suggestions); setAiUsed(r.source === 'ai');
     const opts = generateLogoOptions(spec);
     p.set({ logo_options: opts, logo_creation_mode: 'ai', brand_logo: null, logo_selected: '', logo_svg: '' });
-    p.toast(a.note);
+    p.toast(r.source === 'ai' ? 'AI 已给出三个 Logo 方向，矢量草图由本地引擎绘制' : '内置矢量模板生成三个方向（未调用 AI）');
     setBusy(false);
   };
 
@@ -277,17 +287,14 @@ export function StepLogo(p: StepProps) {
 export function StepAudience(p: StepProps) {
   const a = p.d.target_audience;
   const setA = (k: 'ages' | 'groups' | 'tiers', v: string[]) => p.set({ target_audience: { ...a, [k]: v } });
-  const recommend = () => {
-    const c = `${a.groups.join('')}${a.tiers.join('')}${a.ages.join('')}`;
-    const high = /高端|商务|礼品/.test(c);
-    const young = /年轻|儿童|潮流/.test(c);
-    const advice = high
-      ? '建议：低饱和深色主色、衬线或细宋体标题、金属色仅作细线；信息密度低、留白大，突出品牌名与系列名。'
-      : young
-        ? '建议：高饱和撞色、粗黑体主标题、单一强视觉中心；图案可以活泼，但正面文字层级必须清楚。'
-        : '建议：中等明度主色、现代无衬线字体、清晰的三段式信息层级；配色控制在 3 色以内，适合货架与电商缩略图。';
-    p.set({ target_audience: { ...a, aiRecommend: true, advice } });
-    p.toast('已按目标人群给出包装风格、配色与视觉表达建议');
+  const recommend = async () => {
+    const r = await runAITask('audience.profile', buildAIContext(p.d), p.ai);
+    const first = r.suggestions[0];
+    if (!first) return;
+    const v = (first.value || {}) as { advice?: string };
+    const advice = v.advice || first.detail;
+    p.set((d) => ({ target_audience: { ...d.target_audience, aiRecommend: true, advice } }));
+    p.toast(r.source === 'ai' ? 'AI 已按产品与风格给出视觉表达建议' : '已按当前人群与品类给出视觉表达建议（本地引擎）');
   };
   return <>
     <StepSection title="年龄群体"><MultiChips options={AGE_OPTIONS} value={a.ages} onChange={(v) => setA('ages', v)} /></StepSection>
@@ -412,7 +419,12 @@ export function StepColor(p: StepProps) {
     <StepSection title="常用颜色"><div className="v3-swatches">{COMMON_COLORS.map((c) => <button key={c} className={p.d.primary_color === c ? 'on' : ''} onClick={() => choose(c)} title={c}><i style={{ background: c }} /><span>{nameOfColor(c)}</span></button>)}</div></StepSection>
     <StepSection title="快速获取主色"><div className="v3-btnrow">
       <button className="btn btn-outline btn-md" onClick={fromLogo}>从已上传 Logo 提取品牌色</button>
-      <button className="btn btn-outline btn-md" onClick={() => { const c = recommendPrimary(st); choose(c); p.toast(st ? `已按「${st.style_name}」推荐 ${c}` : `已推荐 ${c}`); }}>AI 根据风格推荐主色</button>
+      <button className="btn btn-outline btn-md" onClick={async () => {
+        const r = await runAITask('color.primary', buildAIContext(p.d), p.ai);
+        const c = (r.suggestions[0]?.value as { color?: string } | undefined)?.color || recommendPrimary(st);
+        choose(c);
+        p.toast(r.source === 'ai' ? `AI 已按风格推荐主色 ${c}` : `已按「${st?.style_name || '当前配置'}」推荐 ${c}（本地引擎）`);
+      }}>AI 根据风格推荐主色</button>
     </div></StepSection>
     <Why text="主色是整套配色的锚点，下一步的方案都会以它为基础展开，改主色后可重新生成配色。" />
   </>;
@@ -421,15 +433,26 @@ export function StepColor(p: StepProps) {
 /* ============================ STEP 07 配色 ============================ */
 export function StepPalette(p: StepProps) {
   const st = styleById(p.d.style_id);
-  const gen = () => {
-    const list = generatePalettes({
+  const gen = async () => {
+    const base = generatePalettes({
       primary: p.d.primary_color, style: st,
       category: p.d.product_category.type || p.d.product_category.custom,
       audience: [...p.d.target_audience.groups, ...p.d.target_audience.tiers, ...p.d.target_audience.ages].join('、'),
       logoColors: p.d.brand_logo ? [p.d.primary_color] : [],
     });
-    p.set({ color_palettes: list, color_palette: null, color_palette_id: '' });
-    p.toast(st ? `已按「${st.style_name}」的配色逻辑生成 ${list.length} 套方案` : `已生成 ${list.length} 套配色方案`);
+    // 接入模型后，AI 配色排在前面，内置方案仍保留作为备选；未接入时行为完全不变
+    if (aiEnabled(p.ai)) {
+      const r = await runAITask('palette.schemes', buildAIContext(p.d), p.ai);
+      const aiPalettes = r.suggestions.flatMap((s) => (s.value as { palettes?: PaletteDraft[] } | undefined)?.palettes || []);
+      if (r.source === 'ai' && aiPalettes.length) {
+        const list = [...aiPalettes, ...base].slice(0, 6);
+        p.set({ color_palettes: list, color_palette: null, color_palette_id: '' });
+        p.toast(`AI 给出 ${aiPalettes.length} 套配色，并与内置方案一起供你选择`);
+        return;
+      }
+    }
+    p.set({ color_palettes: base, color_palette: null, color_palette_id: '' });
+    p.toast(st ? `已按「${st.style_name}」的配色逻辑生成 ${base.length} 套方案` : `已生成 ${base.length} 套配色方案`);
   };
   const list = p.d.color_palettes;
   return <>
@@ -497,12 +520,19 @@ export function StepIllustration(p: StepProps) {
 export function StepCopy(p: StepProps) {
   const c = p.d.copy_content;
   const setC = (k: keyof typeof c, v: string | boolean) => p.set({ copy_content: { ...c, [k]: v } as typeof c });
-  const aiOrganize = () => {
+  const aiOrganize = async () => {
     if (!c.productName.trim()) { p.toast('请先填写产品名称，再让 AI 整理文案'); return; }
-    const b = createEmptyBrief(); b.product = c.productName; b.category = p.d.product_category.group; b.style = styleById(p.d.style_id)?.style_name || '';
-    const s = `「${c.productName}」\n建议副标题：${c.productName} · ${p.d.product_category.type || '精选系列'}\n建议宣传语：${suggestTagline(b)}\n建议产品介绍：以${p.d.product_category.type || '本产品'}为核心，用一句话说清特点与使用场景，避免未经核实的功效描述。`;
-    setC('aiSuggestion', s); setC('confirmed', false);
-    p.toast('AI 已给出文案建议，确认后才会写入设计');
+    const r = await runAITask('copy.suggestion', buildAIContext(p.d), p.ai);
+    const lines = r.suggestions.map((s) => {
+      const v = (s.value || {}) as { tagline?: string; subtitle?: string; description?: string };
+      if (v.tagline) return `建议宣传语：${v.tagline}`;
+      if (v.subtitle) return `建议副标题：${v.subtitle}`;
+      if (v.description) return `建议产品介绍：${v.description}`;
+      return '';
+    }).filter(Boolean);
+    // 一次写入：连续两次基于旧快照的 setC 会互相覆盖
+    p.set({ copy_content: { ...c, aiSuggestion: `「${c.productName}」\n${lines.join('\n')}`, confirmed: false } });
+    p.toast(r.source === 'ai' ? 'AI 已给出文案建议，确认后才会写入设计' : '已生成文案建议，确认后才会写入设计（本地引擎）');
   };
   const apply = () => {
     const lines = c.aiSuggestion.split('\n');

@@ -11,6 +11,10 @@ import { STYLES, TRADITION_COUNT, styleById, buildStylePrompt } from '../src/v3/
 import { createEmptyDraft, draftToBrief } from '../src/v3/draft';
 import { generatePalettes } from '../src/v3/colors';
 import { validateBarcode, encodeBarcode, decodeEan, verifyBarcode } from '../src/v3/barcode';
+import { DEFAULT_AI, aiEnabled, aiMode, aiStatusLabel } from '../src/engine/llm';
+import { AI_TASKS, TASK_FOR_STEP } from '../src/ai/tasks';
+import { buildAIContext, contextText } from '../src/ai/context';
+import { runAITask, registerAITransport, resetAITransport, aiCapabilitySummary } from '../src/ai/provider';
 
 export interface Result { name: string; ok: boolean; detail: string }
 const A = (cond: unknown, msg: string) => { if (!cond) throw new Error(msg); };
@@ -258,6 +262,86 @@ export async function runTests(): Promise<Result[]> {
     A(dec.ok && dec.value === '6901234567892', `反向解码不一致：${dec.value} / ${dec.message}`);
     A(e.quietMm > 0 && e.widthMm >= e.minWidthMm && Math.abs(e.widthMm - 37.29) < 0.01, '静区或 EAN-13 标准宽度异常');
     return `${e.modules.length} 模块 / ${e.widthMm.toFixed(1)} mm / 静区 ${e.quietMm.toFixed(1)} mm`;
+  });
+
+  /* ---------------- 统一 AI 能力层 / 后台接入契约 ---------------- */
+  const aiDraft = createEmptyDraft();
+  aiDraft.package_type = 'box';
+  aiDraft.product_category = { ...aiDraft.product_category, group: '食品', type: '茶叶' };
+  aiDraft.copy_content = { ...aiDraft.copy_content, brandName: '山隐茶集', productName: '高山乌龙茶' };
+  aiDraft.style_id = 'yuan-blue';
+  aiDraft.primary_color = '#2b4c7e';
+  aiDraft.target_audience = { ...aiDraft.target_audience, groups: ['高端消费群体'] };
+  const aiCtx = buildAIContext(aiDraft, '想做得更清淡');
+  const proxyAI = { ...DEFAULT_AI, mode: 'proxy' as const, apiKey: '', textModel: '', baseUrl: 'https://backend.example.com/v1' };
+
+  await t('AI 接入模式 · 后台代理无需前端 Key 即可全站启用', () => {
+    A(!aiEnabled({ ...DEFAULT_AI, mode: 'off', apiKey: 'sk-x' }), 'off 模式不应启用');
+    A(!aiEnabled({ ...DEFAULT_AI, mode: 'browser', apiKey: '' }), '浏览器直连缺 Key 不应启用');
+    A(aiEnabled({ ...DEFAULT_AI, mode: 'browser', apiKey: 'sk-x' }), '浏览器直连应启用');
+    A(aiEnabled(proxyAI), '后台代理模式被前端 Key 判定挡住了');
+    A(aiMode(proxyAI) === 'proxy' && aiStatusLabel(proxyAI).includes('后台代理'), '代理状态标注不正确');
+    A(aiCapabilitySummary().total === 12 && aiCapabilitySummary().steps === 10, '能力点数量异常');
+    return `total=${aiCapabilitySummary().total} / steps=${aiCapabilitySummary().steps}`;
+  });
+
+  await t('AI 上下文 · 十步数据与完整风格配置统一传入', () => {
+    const text = contextText(aiCtx);
+    A(text.includes('高山乌龙茶') && text.includes('茶叶') && text.includes('#2b4c7e'), '十步数据未进入统一上下文');
+    A(text.includes('高端消费群体') && text.includes('包装盒'), '人群 / 形态缺失');
+    A(aiCtx.styleName.length > 0 && aiCtx.stylePrompt.length > 400, '完整风格配置未展开为提示词');
+    A(aiCtx.userNote === '想做得更清淡', '用户补充想法丢失');
+    return `context=${text.split('\n').length} 行 / stylePrompt=${aiCtx.stylePrompt.length} 字`;
+  });
+
+  await t('AI 任务层 · 十步每步都有可用本地建议与合规约束', () => {
+    for (let i = 0; i < 10; i++) {
+      const def = AI_TASKS[TASK_FOR_STEP(i)];
+      A(def && def.local(aiCtx).length >= 1, `STEP ${i + 1} 没有本地建议`);
+      A(def.system.includes('禁止') && def.constraints.length > 0, `STEP ${i + 1} 缺少合规约束`);
+      A(typeof def.adopt === 'function' && typeof def.validate === 'function', `STEP ${i + 1} 缺少采纳或校验`);
+    }
+    const styles = AI_TASKS['style.recommend'].local(aiCtx);
+    A(styles.every((s) => STYLES.some((x) => x.style_id === (s.value as { style_id: string }).style_id)), '本地风格推荐编造了不存在的风格');
+    return `10/10 步有建议 · 风格推荐 ${styles.length} 条均来自真实风格库`;
+  });
+
+  await t('AI 合规校验 · 违规文案 / 假条码 / 假风格 / 擅自加图案全部拦截', () => {
+    const okShape = { suggestions: [{ title: '建议', detail: '理由', value: {} }] };
+    const mk = (v: unknown) => ({ suggestions: [{ ...okShape.suggestions[0], value: v }] });
+    A(!AI_TASKS['copy.suggestion'].validate(mk({ tagline: '通过有机认证，功效显著' }), aiCtx), '违规文案未被拦截');
+    A(!AI_TASKS['barcode.advice'].validate(mk({ type: 'EAN-13', value: '6901234567892' }), aiCtx), '编造零售条码未被拦截');
+    A(!AI_TASKS['style.recommend'].validate(mk({ style_id: 'not-a-real-style' }), aiCtx), '不存在的风格未被拦截');
+    A(!AI_TASKS['size.structure'].validate(mk({ structureId: 'pouch' }), aiCtx), '与包装形态不符的结构未被拦截');
+    const noArt = { ...aiCtx, illustrationType: 'none' };
+    A(!AI_TASKS['illustration.motif'].validate(mk({ description: '莲瓣纹' }), noArt), '「不需要插画」时 AI 图案未被拦截');
+    A(AI_TASKS['color.primary'].validate(mk({ color: '#20463a' }), aiCtx), '合法 HEX 主色被误拒');
+    A(AI_TASKS['copy.suggestion'].validate(mk({ tagline: '一盏山野，慢享自然' }), aiCtx), '合规文案被误拒');
+    return '6 类拦截 + 2 类合法放行全部正确';
+  });
+
+  await t('AI 执行层 · 未接入标注本地 / 代理接入生效 / 失败与违规如实回退', async () => {
+    const local = await runAITask('style.recommend', aiCtx, { ...DEFAULT_AI, mode: 'off' });
+    A(local.source === 'local' && local.note.includes('未调用 AI'), '未接入时未如实标注');
+    A(local.suggestions.every((s) => STYLES.some((x) => x.style_id === (s.value as { style_id: string }).style_id)), '本地建议不是真实风格');
+
+    registerAITransport(async (req) => {
+      A(req.user.includes('高山乌龙茶'), '十步上下文没有传给后台');
+      A(req.system.includes('禁止'), '合规约束没有传给后台');
+      return { suggestions: [{ title: 'AI 推荐 · 元青花', detail: '符合高端茶叶定位', value: { style_id: 'yuan-blue' } }] };
+    });
+    const real = await runAITask('style.recommend', aiCtx, proxyAI);
+    A(real.source === 'ai' && real.suggestions[0].title.includes('AI'), '代理接入后 AI 结果未生效');
+
+    registerAITransport(async () => { throw new Error('backend down'); });
+    const failed = await runAITask('color.primary', aiCtx, proxyAI);
+    A(failed.source === 'fallback' && failed.note.includes('回退') && failed.suggestions.length > 0, '调用失败未如实回退');
+
+    registerAITransport(async () => ({ suggestions: [{ title: 'x', detail: 'y', value: { tagline: '通过 ISO 认证' } }] }));
+    const blocked = await runAITask('copy.suggestion', aiCtx, proxyAI);
+    A(blocked.source === 'fallback' && blocked.suggestions.every((s) => !/认证|ISO/.test(JSON.stringify(s.value))), '违规 AI 输出被当成了正常结果');
+    resetAITransport();
+    return 'local / ai / fallback / 合规拦截 四条路径均正确';
   });
 
   if (inBrowser) {

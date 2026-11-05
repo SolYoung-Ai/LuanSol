@@ -82,7 +82,7 @@ export default function Home() {
         <div className="flow-left">
           <SectionLabel en="HOW IT WORKS">十步完成一个包装</SectionLabel>
           <h2>从尺寸到印刷文件，<br />一条清晰的路径。</h2>
-          <p>每一步只处理一个决定。可以随时返回修改，所有已填内容自动保存；不确定的地方，系统会给出推荐。</p>
+          <p>每一步只处理一个决定，并配有 AI 助手：可以补充一句想法获取建议、逐条采纳，也可以完全手动填写。所有内容自动保存、随时返回修改；后台接入模型后，同一套流程会自动切换为真实 AI。</p>
           <Button variant="outline" onClick={() => startWizard()}>进入创作流程 <span aria-hidden>→</span></Button>
         </div>
         <div className="flow-steps">{WIZARD_STEPS.map((s, i) => <div className="flow-step" key={s.id}>

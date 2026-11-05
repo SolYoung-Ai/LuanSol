@@ -276,3 +276,60 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans
   .hero-v3-frame { width: 70%; }
   .flow-grid { grid-template-columns: 1fr; gap: 30px; padding: 50px 22px; }
 }
+
+/* ---------- AI 助手：融入十步流程的统一卡片 ---------- */
+.ai-assist { margin: 26px 0 22px; border: 1px solid var(--line-2); background: #fff; }
+.ai-assist-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--soft); }
+.ai-assist-badge { font-size: 10px; letter-spacing: .16em; color: var(--ink); display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+.ai-assist-badge i { width: 6px; height: 6px; border-radius: 50%; background: #b4b0a8; display: inline-block; }
+.ai-assist-on .ai-assist-badge i { background: #2f6b4f; }
+.ai-assist-state { font-size: 10.5px; color: var(--muted); text-align: right; }
+.ai-assist-state.on { color: #2f6b4f; }
+.ai-assist-body { padding: 18px 16px 16px; }
+.ai-assist-intro h4 { font-size: 15px; font-weight: 500; margin: 0 0 6px; }
+.ai-assist-intro p { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 0 0 14px; }
+.ai-assist-ask { display: flex; gap: 10px; }
+.ai-assist-ask input { flex: 1; min-width: 0; border: 1px solid var(--line-2); background: #fff; padding: 9px 11px; font-size: 12px; font-family: inherit; color: var(--ink); }
+.ai-assist-ask input:focus { outline: none; border-color: var(--ink); }
+.ai-assist-note { margin-top: 14px; padding: 9px 11px; font-size: 11.5px; line-height: 1.7; background: var(--soft); border-left: 2px solid var(--line-2); color: var(--ink-2); }
+.ai-assist-note-ai { border-left-color: #2f6b4f; }
+.ai-assist-note-fallback { border-left-color: var(--red); }
+.ai-suggestions { margin-top: 12px; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.ai-sug { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; background: #fff; padding: 13px 14px; }
+.ai-sug.adopted { background: #f6f8f5; }
+.ai-sug-text strong { font-size: 12.5px; font-weight: 500; }
+.ai-sug-text p { font-size: 11.5px; color: var(--muted); line-height: 1.65; margin: 5px 0 0; }
+.ai-sug-btn { flex: none; border: 1px solid var(--line-2); background: #fff; padding: 6px 12px; font-size: 11px; cursor: pointer; font-family: inherit; color: var(--ink); }
+.ai-sug-btn:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+.ai-assist-foot { font-size: 11px; color: var(--muted); line-height: 1.7; margin: 12px 0 0; }
+
+/* 向导 / 汇总页的 AI 状态 */
+.v3-ai-pill { display: inline-flex; align-items: center; padding: 3px 8px; border: 1px solid var(--line-2); font-size: 10px; color: var(--muted); letter-spacing: .02em; white-space: nowrap; }
+.v3-ai-pill.on { color: #2f6b4f; border-color: #9db8a6; }
+.v3-wizard-kicker-right { display: inline-flex; align-items: center; gap: 14px; }
+.v3-review-ai { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--line); background: var(--soft); font-size: 11.5px; color: var(--muted); margin-bottom: 22px; line-height: 1.6; }
+
+/* 配置中心：能力清单与调用记录 */
+.ai-caps-intro { font-size: 12px; color: var(--muted); line-height: 1.8; margin: 0 0 16px; }
+.ai-cap-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 16px; }
+.ai-cap { background: #fff; padding: 12px 13px; display: flex; flex-direction: column; gap: 5px; }
+.ai-cap span { font-size: 9.5px; letter-spacing: .12em; color: var(--gold); }
+.ai-cap strong { font-size: 12.5px; font-weight: 500; }
+.ai-cap em { font-size: 10px; color: var(--muted); font-style: normal; }
+.ai-runlog { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 14px; max-height: 320px; overflow: auto; }
+.ai-run { background: #fff; padding: 10px 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; }
+.ai-run-src { font-size: 9.5px; padding: 2px 6px; border: 1px solid var(--line-2); color: var(--muted); }
+.ai-run-ai { color: #2f6b4f; border-color: #9db8a6; }
+.ai-run-fallback { color: var(--red); border-color: #d9b0aa; }
+.ai-run strong { font-size: 11.5px; font-weight: 500; font-family: ui-monospace, Menlo, monospace; }
+.ai-run em { font-size: 10px; color: var(--muted); font-style: normal; }
+.ai-run p { grid-column: 1 / -1; font-size: 11px; color: var(--muted); line-height: 1.6; margin: 2px 0 0; }
+.ai-runlog-empty { background: #fff; padding: 14px; font-size: 11.5px; color: var(--muted); margin: 0; }
+
+@media (max-width: 760px) {
+  .ai-cap-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ai-assist-ask { flex-direction: column; }
+  .v3-review-ai { flex-direction: column; align-items: flex-start; }
+  .v3-wizard-kicker-right { gap: 8px; }
+  .ai-sug { flex-direction: column; }
+}

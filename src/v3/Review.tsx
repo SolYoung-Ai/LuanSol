@@ -8,7 +8,9 @@ import { WIZARD_STEPS, stepDone } from './steps';
 import { effectiveSize, draftToBrief, FORM_META, dimensionComplete, type ProjectDraft } from './draft';
 import { buildStylePrompt, styleById } from './styles';
 import { buildSchemes, makeShape, addImageLayer, cloneDesign } from '../engine/design';
-import { aiConfigured, llmJson } from '../engine/llm';
+import { aiEnabled, aiStatusLabel } from '../engine/llm';
+import { runAITask } from '../ai/provider';
+import { buildAIContext } from '../ai/context';
 import { PackagePreview } from './Preview';
 import { Note, Swatch } from './controls';
 import { verifyBarcode, encodeBarcode } from './barcode';
@@ -16,24 +18,20 @@ import type { AISettings, DesignDoc } from '../types';
 
 interface Plan { title: string; focus: string }
 
-function localPlan(d: ProjectDraft, styleName: string): Plan[] {
-  return [
-    { title: '方案 A · 品牌与留白', focus: `突出品牌名与${styleName}的克制表达，留白为主，图案降到最低。` },
-    { title: '方案 B · 图案与插画', focus: d.illustration_type === 'none' ? '用户选择不需要插画：本方案改用色彩分区与排版节奏制造变化，不添加装饰。' : `以「${d.illustration_description || styleName + '纹样'}」为主视觉，文字压在留白处。` },
-    { title: '方案 C · 结构与商业表达', focus: `强调信息层级与货架识别，采用${styleName}的配色与构图规则，适合系列化 SKU。` },
-  ];
-}
-
-async function designPlan(d: ProjectDraft, styleName: string, ai: AISettings, prompt: string): Promise<{ plans: Plan[]; note: string }> {
-  if (!aiConfigured(ai)) return { plans: localPlan(d, styleName), note: '未配置 AI 模型：由内置设计引擎按风格配置生成三套矢量方案（未调用 AI）。' };
-  try {
-    const r = await llmJson<{ plans?: Plan[] }>([
-      { role: 'system', content: '你是包装设计总监。只输出 JSON：{"plans":[{"title":"","focus":""}]}，三个明显不同但都遵守同一需求的方向；focus 用中文一句话，不超过 60 字。' },
-      { role: 'user', content: prompt + `\n产品：${d.product_category.type || d.product_category.custom}；品牌：${d.copy_content.brandName}；目标人群：${d.target_audience.groups.join('、')}；主色：${d.primary_color}；图案：${d.illustration_type}。` },
-    ], ai);
-    if (r?.plans?.length === 3) return { plans: r.plans, note: 'AI 已参与需求分析与方向规划；图形与文字仍由程序化矢量引擎输出为可编辑图层。' };
-  } catch { /* 失败如实回退 */ }
-  return { plans: localPlan(d, styleName), note: 'AI 调用失败，已回退到内置设计引擎生成（未伪装为 AI 结果）。' };
+/** 三方向规划统一走 AI 任务层：未接入用本地引擎，接入后由模型规划，
+ *  失败或违规一律如实回退，不把模拟结果冒充 AI。 */
+async function designPlan(d: ProjectDraft, ai: AISettings): Promise<{ plans: Plan[]; note: string; source: string }> {
+  const r = await runAITask('review.directions', buildAIContext(d), ai);
+  const plans: Plan[] = r.suggestions.slice(0, 3).map((s) => {
+    const v = (s.value || {}) as { title?: string; focus?: string };
+    return { title: v.title || s.title, focus: v.focus || s.detail };
+  });
+  while (plans.length < 3) plans.push({ title: `方案 ${String.fromCharCode(65 + plans.length)}`, focus: '按当前需求生成的可编辑矢量方案。' });
+  const extra = r.source === 'ai'
+    ? 'AI 已整合十步数据参与方向规划；图形与文字仍由矢量引擎输出为独立可编辑图层。'
+    : r.source === 'fallback' ? 'AI 未通过校验或调用失败，已回退内置设计引擎（未伪装为 AI 结果）。'
+      : '未配置 AI：由内置设计引擎整合十步数据并生成三套矢量方案（未调用 AI）。';
+  return { plans, note: `${r.note} ${extra}`, source: r.source };
 }
 
 export default function Review() {
@@ -46,7 +44,7 @@ export default function Review() {
   const styleName = cfg?.style_name || '现代极简';
   const size = effectiveSize(d);
   const dc = dimensionComplete(d);
-  const configured = aiConfigured(s.ai);
+  const configured = aiEnabled(s.ai);
 
   const rows: { label: string; value: React.ReactNode; step: number }[] = [
     { label: '包装尺寸', step: 0, value: `${FORM_META[d.package_type].label} · ${size.l} × ${size.w}${size.h ? ` × ${size.h}` : ''} mm · ${d.package_dimensions.structureId ? (FORM_META[d.package_type].structures.includes(d.package_dimensions.structureId as never) ? d.package_dimensions.structureId : '—') : '未选结构'}` },
@@ -65,13 +63,7 @@ export default function Review() {
     if (!dc.ok) { setToast(`第 01 步还不完整：${dc.missing.join('、')}`); return; }
     if (!d.style_id) { setToast('请先选择设计风格'); return; }
     setBusy(true);
-    const prompt = cfg ? buildStylePrompt(cfg, {
-      product: d.product_category.type || d.product_category.custom,
-      brand: d.copy_content.brandName, audience: [...d.target_audience.groups, ...d.target_audience.tiers].join('、'),
-      form: FORM_META[d.package_type].label, primary: d.primary_color,
-      motif: d.illustration_type === 'none' ? '' : d.illustration_description,
-    }) : '';
-    const plan = await designPlan(d, styleName, s.ai, prompt);
+    const plan = await designPlan(d, s.ai);
     setPlans(plan.plans); setPlanNote(plan.note);
 
     // 十步数据 → 统一 DesignBrief（下游结构 / 3D / 印前 / 导出全部复用）
@@ -130,6 +122,10 @@ export default function Review() {
     </div>
     <header className="v3-step-head"><h1>你的包装设计需求已经准备好了。</h1>
       <p>下面每一项都可以返回修改。确认后，系统会把十步数据一起交给设计引擎，生成三个明显不同的方向。</p></header>
+    <div className="v3-review-ai">
+      <span className={`v3-ai-pill ${configured ? 'on' : ''}`}>{aiStatusLabel(s.ai)}</span>
+      <span>十步数据作为同一份上下文交给设计智能体；接入模型后由 AI 规划方向，未接入时由内置引擎整合，图形与文字始终是可编辑图层。</span>
+    </div>
 
     <div className="v3-review-grid">
       <div>

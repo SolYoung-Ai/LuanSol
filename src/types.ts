@@ -176,9 +176,18 @@ export interface Project {
   status: 'draft' | 'designing' | 'checked' | 'exported';
 }
 
+/** AI 接入模式：
+ *  - off     只用内置本地引擎，界面明确标注「未调用 AI」
+ *  - browser 浏览器直连 OpenAI 兼容接口，密钥只存本机
+ *  - proxy   密钥放在你自己的后台，前端只填代理地址即可全站启用 AI */
+export type AIProviderMode = 'off' | 'browser' | 'proxy';
+
 export interface AISettings {
+  mode: AIProviderMode;
   baseUrl: string;
   apiKey: string;
+  /** 后台代理的可选鉴权令牌（不是模型厂商密钥） */
+  proxyToken: string;
   textModel: string;
   imageModel: string;
   imageEnabled: boolean;

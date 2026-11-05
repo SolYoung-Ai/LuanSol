@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { useApp } from '../store';
 import { Button, Card, Field, Modal, Notice, PageHead, SectionLabel, Tag, Toggle, go } from '../ui';
-import { DEFAULT_AI, aiConfigured, saveAI, testConnection } from '../engine/llm';
+import { DEFAULT_AI, aiEnabled, aiStatusLabel, aiMode, saveAI, testConnection } from '../engine/llm';
+import { aiCapabilitySummary, getAIRunLog, clearAIRunLog } from '../ai/provider';
 import { STRUCTURES } from '../engine/structure';
 import { downloadBlob, formatDate } from '../engine/utils';
 import type { AISettings, Project } from '../types';
@@ -70,8 +71,13 @@ export function ModelConfig() {
   const [testing, setTesting] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
-  const set = (p: Partial<AISettings>) => setDraft({ ...draft, ...p });
-  const save = () => { saveAI(draft); update({ ai: draft }); setToast('AI 配置已保存到本机浏览器'); };
+  const [logTick, setLogTick] = useState(0);
+  const set = (p: Partial<AISettings>) => setDraft((x) => ({ ...x, ...p }));
+  const enabled = aiEnabled(draft);
+  const mode = aiMode(draft);
+  const caps = aiCapabilitySummary();
+  const runs = getAIRunLog().slice(0, 8);
+  const save = () => { saveAI(draft); update({ ai: draft }); setToast('AI 配置已保存到本机浏览器，全站 AI 能力即时切换'); };
   const test = async () => {
     saveAI(draft); setTesting(true);
     const r = await testConnection(draft);
@@ -80,48 +86,72 @@ export function ModelConfig() {
     setTesting(false); setToast(r.ok ? '连接测试通过' : `连接失败：${r.message.slice(0, 60)}`);
   };
   return <div className="page page-narrow">
-    <PageHead kicker="AI MODELS / 14" title="AI 模型配置中心" desc="接入你自己的 OpenAI 兼容接口。未配置时，网站仍可手动创作、编辑、保存与基础导出。" />
+    <PageHead kicker="AI MODELS / 14" title="AI 模型配置中心" desc="AI 已融入十步创作流程的每一个决策点。这里只配置接入方式：后台代理由服务端保管密钥，前端填一个地址即可全站生效。" />
     <div className="model-status">
-      <div><span className={`status-dot ${aiConfigured(draft) ? draft.lastTest?.ok ? 'on' : 'pending' : 'off'}`} />
-        <strong>{aiConfigured(draft) ? draft.lastTest?.ok ? '已连接' : '已配置，未验证连接' : '未配置 AI 模型'}</strong>
-        <p>{aiConfigured(draft) ? draft.lastTest ? `${draft.lastTest.message} · ${formatDate(draft.lastTest.at)}` : '点击「测试连接」验证接口可用性' : '当前使用内置中文解析与原创矢量素材，所有基础功能可用。'}</p></div>
-      <Tag tone={aiConfigured(draft) ? 'green' : 'plain'}>{aiConfigured(draft) ? 'AI 功能已启用' : '内置基础引擎'}</Tag>
+      <div><span className={`status-dot ${enabled ? draft.lastTest?.ok ? 'on' : 'pending' : 'off'}`} />
+        <strong>{enabled ? (mode === 'proxy' ? '后台代理已启用' : draft.lastTest?.ok ? '已连接' : '已配置，未验证连接') : '未启用 AI 接入'}</strong>
+        <p>{enabled ? draft.lastTest ? `${draft.lastTest.message} · ${formatDate(draft.lastTest.at)}` : '点击「测试连接」验证接口可用性' : '当前每一步由内置设计引擎给出确定性建议，界面明确标注「未调用 AI」，基础创作与导出不受影响。'}</p></div>
+      <Tag tone={enabled ? 'green' : 'plain'}>{aiStatusLabel(draft)}</Tag>
     </div>
     <div className="settings-grid">
-      <Card className="pad-card"><SectionLabel en="CONNECTION">接口连接</SectionLabel>
-        <Field label="Base URL" hint="OpenAI 兼容地址，例如 https://api.openai.com/v1 或你自己的代理地址"><input value={draft.baseUrl} onChange={(e) => set({ baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" /></Field>
-        <Field label="API Key" hint="仅保存在当前浏览器，不写入源码，不上传到任何 LunaSol 服务器"><div className="pwd-row"><input type={showPwd ? 'text' : 'password'} value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} placeholder="sk-..." /><button className="link-btn" onClick={() => setShowPwd(!showPwd)}>{showPwd ? '隐藏' : '显示'}</button></div></Field>
-        <Field label="文字模型"><input value={draft.textModel} onChange={(e) => set({ textModel: e.target.value })} placeholder="gpt-4o-mini" /></Field>
+      <Card className="pad-card"><SectionLabel en="CONNECTION">接入方式</SectionLabel>
+        <Field label="AI 接入模式" hint="后台代理模式由你的服务端保管模型密钥，前端不需要也不应该保存厂商 Key">
+          <div className="seg">{(['off', 'browser', 'proxy'] as const).map((m) => <button key={m}
+            className={mode === m ? 'active' : ''} onClick={() => set({ mode: m })}>
+            {{ off: '关闭', browser: '浏览器直连', proxy: '后台代理' }[m]}</button>)}</div>
+        </Field>
+        <Field label="Base URL" hint={mode === 'proxy' ? '你的后台代理地址，例如 https://api.yourdomain.com/v1' : 'OpenAI 兼容地址，例如 https://api.openai.com/v1'}>
+          <input value={draft.baseUrl} onChange={(e) => set({ baseUrl: e.target.value })} placeholder={mode === 'proxy' ? 'https://your-backend.example.com/v1' : 'https://api.openai.com/v1'} /></Field>
+        {mode === 'browser' && <Field label="API Key" hint="仅保存在当前浏览器，不写入源码，不上传到任何 LunaSol 服务器"><div className="pwd-row"><input type={showPwd ? 'text' : 'password'} value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} placeholder="sk-..." /><button className="link-btn" onClick={() => setShowPwd(!showPwd)}>{showPwd ? '隐藏' : '显示'}</button></div></Field>}
+        {mode === 'proxy' && <>
+          <Notice tone="success">厂商密钥留在后台。前端不会发送 <code>Authorization: Bearer</code> 厂商 Key，也不会把它写进浏览器存储；模型名可留空由后台决定。</Notice>
+          <Field label="代理鉴权令牌（可选）" hint="如后台需要简单鉴权，会以 X-LunaSol-Token 头发送；这不是模型厂商密钥">
+            <input type={showPwd ? 'text' : 'password'} value={draft.proxyToken} onChange={(e) => set({ proxyToken: e.target.value })} placeholder="可留空" /></Field>
+        </>}
+        <Field label="文字模型" hint={mode === 'proxy' ? '留空则由后台决定模型；填写后由代理转发也可' : 'OpenAI 兼容模型名'}><input value={draft.textModel} onChange={(e) => set({ textModel: e.target.value })} placeholder="gpt-4o-mini" /></Field>
         <Field label={`温度 ${draft.temperature}`}><input type="range" min="0" max="1.4" step="0.1" value={draft.temperature} onChange={(e) => set({ temperature: Number(e.target.value) })} /></Field>
         <Field label="失败重试次数"><div className="seg">{[0, 1, 2, 3].map((r) => <button key={r} className={draft.retries === r ? 'active' : ''} onClick={() => set({ retries: r })}>{r}</button>)}</div></Field>
       </Card>
       <Card className="pad-card"><SectionLabel en="IMAGE MODEL">图像模型</SectionLabel>
         <Toggle label="启用 AI 图像生成" hint="启用后，方案页可调用真实图像模型生成原创插画素材" checked={draft.imageEnabled} onChange={(v) => set({ imageEnabled: v })} />
         <Field label="图像模型名"><input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} placeholder="gpt-image-1" /></Field>
-        <Notice tone="warn">静态网站无法安全隐藏第三方 API Key。密钥只放在你自己的浏览器里，请求由浏览器直连你配置的接口。团队共用密钥请自建服务端代理。</Notice>
-        <div className="model-actions"><Button onClick={test} disabled={testing || !aiConfigured(draft)}>{testing ? '测试中…' : '测试连接'}</Button>
+        <Notice tone="warn">纯静态前端无法安全隐藏第三方 API Key。正式上线建议用「后台代理」模式：密钥留在服务端，前端只发请求地址。浏览器直连模式仅适合个人本机使用。</Notice>
+        <div className="model-actions"><Button onClick={test} disabled={testing || !enabled}>{testing ? '测试中…' : '测试连接'}</Button>
           <Button variant="outline" onClick={save}>保存配置</Button>
           <Button variant="ghost" onClick={() => { setDraft({ ...DEFAULT_AI }); setToast('已恢复默认值（尚未保存）'); }}>恢复默认</Button></div>
       </Card>
     </div>
-    <Card className="pad-card"><SectionLabel en="MODES">三种接入方式</SectionLabel>
-      <div className="mode-grid">
-        <div><strong>本地直连</strong><p>浏览器直接请求你填写的 Base URL。成本最低，适合个人使用，密钥只在本机。</p></div>
-        <div><strong>用户自有代理</strong><p>把 Base URL 指向自己的服务端代理，由代理保管密钥，适合小团队。</p></div>
-        <div><strong>可选安全网关</strong><p>未来可接入统一网关做额度、审计与密钥轮换；当前版本不依赖任何虚构后端。</p></div>
+    <Card className="pad-card"><SectionLabel en="AI IN THE FLOW">AI 已融入哪些环节</SectionLabel>
+      <p className="ai-caps-intro">共 {caps.total} 个能力点（{caps.steps} 个向导步骤 + {caps.global} 个全局节点）。每个能力点都已定义输入上下文、输出结构、合规约束与本地回退；后台接好模型后，流程与界面代码一行都不用改。</p>
+      <div className="ai-cap-grid">{caps.list.map((t) => <div className="ai-cap" key={t.id}>
+        <span>{typeof t.step === 'number' ? `STEP ${String(t.step + 1).padStart(2, '0')}` : t.step === 'review' ? '需求汇总' : '在线编辑器'}</span>
+        <strong>{t.title}</strong><em>{t.constraints} 条合规约束</em>
+      </div>)}</div>
+      <Button variant="ghost" onClick={() => setDocOpen(true)}>查看后台接入契约 <span aria-hidden>→</span></Button>
+    </Card>
+    <Card className="pad-card"><SectionLabel en="RUN LOG">最近调用记录</SectionLabel>
+      <div className="ai-runlog" data-tick={logTick}>
+        {runs.length ? runs.map((r) => <div className="ai-run" key={`${r.at}-${r.taskId}`}>
+          <span className={`ai-run-src ai-run-${r.source}`}>{r.source === 'ai' ? 'AI' : r.source === 'fallback' ? '回退' : '本地'}</span>
+          <strong>{r.taskId}</strong><em>{new Date(r.at).toLocaleTimeString('zh-CN')} · {r.durationMs}ms · {r.mode}</em>
+          <p>{r.note}</p>
+        </div>) : <p className="ai-runlog-empty">还没有调用记录。进入十步向导，在任意一步点「获取建议」即可看到这里记录来源、耗时与回退原因。</p>}
       </div>
-      <Button variant="ghost" onClick={() => setDocOpen(true)}>查看接口说明 <span aria-hidden>→</span></Button>
+      <div className="model-actions"><Button variant="ghost" onClick={() => { clearAIRunLog(); setLogTick((n) => n + 1); setToast('调用记录已清空'); }}>清空记录</Button></div>
     </Card>
-    <Card className="pad-card"><SectionLabel en="NO KEY MODE">没有 API Key 时</SectionLabel>
-      <div className="nokey-grid">{['手动创建项目', '内置基础方案生成', '编辑文字与上传图片', '手动排版与图层管理', '保存与恢复项目', '基础 PDF / SVG / DXF 导出'].map((x) => <span key={x}>✓ {x}</span>)}</div>
-      <Notice tone="info">内置引擎是确定性的程序化设计，不会被标注成「AI 生成」；只有配置模型并调用成功后，界面才会显示真实 AI 结果。</Notice>
+    <Card className="pad-card"><SectionLabel en="NO KEY MODE">没有接入 AI 时</SectionLabel>
+      <div className="nokey-grid">{['手动创建项目', '十步本地建议', '内置配色与风格推荐', '编辑文字与上传图片', '保存与恢复项目', 'PDF / SVG / PNG / DXF 导出'].map((x) => <span key={x}>✓ {x}</span>)}</div>
+      <Notice tone="info">内置引擎是确定性的程序化设计，界面会标注「未调用 AI」；只有真正调用模型并通过合规校验后，才会显示 AI 结果。调用失败会如实回退，绝不冒充。</Notice>
     </Card>
-    <Modal open={docOpen} title="AI 接口说明" onClose={() => setDocOpen(false)} wide>
+    <Modal open={docOpen} title="后台接入契约" onClose={() => setDocOpen(false)} wide>
       <div className="doc-body">
-        <h4>文字模型</h4><p>POST <code>{draft.baseUrl.replace(/\/$/, '')}/chat/completions</code>，Header <code>Authorization: Bearer &lt;API Key&gt;</code>，Body 使用标准 <code>model / messages / temperature</code>。需求理解与对话修改会要求模型返回 JSON。</p>
-        <h4>图像模型</h4><p>POST <code>{draft.baseUrl.replace(/\/$/, '')}/images/generations</code>，Body 使用 <code>model / prompt / n:1 / size / response_format</code>。支持返回 <code>b64_json</code> 或图片 URL。</p>
-        <h4>错误处理</h4><p>60s 超时（图像 120s）、可配置重试、失败自动回退到内置引擎并在界面明确提示，不会把模拟结果伪装成 AI 输出。</p>
-        <h4>安全</h4><p>不要在任何公开前端代码里硬编码密钥；不要把生产密钥填进不可信的第三方站点。LunaSol 是纯静态站点，没有任何自有后端接收你的密钥。</p>
+        <h4>一、推荐方式：后台代理</h4><p>在上方切到「后台代理」，<code>Base URL</code> 填你的服务地址即可，<strong>前端不需要 API Key</strong>。你的服务端负责保管 GPT 密钥、转发请求、控制额度与审计。文字模型名可留空，由后台决定。</p>
+        <h4>二、文字接口</h4><p>POST <code>{draft.baseUrl.replace(/\/$/, '')}/chat/completions</code>。请求体是标准 OpenAI 兼容格式 <code>messages / temperature / response_format:&#123;"type":"json_object"&#125;</code>，<code>model</code> 可省略。返回 <code>choices[0].message.content</code>，内容为一个 JSON 对象。</p>
+        <p>浏览器直连模式会带 <code>Authorization: Bearer &lt;API Key&gt;</code>；后台代理模式不带厂商 Key，如填写了代理令牌则带 <code>X-LunaSol-Token</code>。</p>
+        <h4>三、图像接口（可选）</h4><p>POST <code>{draft.baseUrl.replace(/\/$/, '')}/images/generations</code>，Body 使用 <code>model / prompt / n:1 / size / response_format</code>，支持返回 <code>b64_json</code> 或图片 URL。</p>
+        <h4>四、输出结构与合规校验</h4><p>所有流程节点统一返回 <code>&#123;"suggestions":[&#123;"title","detail","value"&#125;]&#125;</code>，每个节点的 <code>value</code> 结构不同，详见 <code>src/ai/tasks.ts</code>。模型输出会先经过结构校验与合规校验：编造配料 / 功效 / 认证、生成商品条码数字、发明不存在的风格、在「不需要插画」时添加图案，都会被拦截并回退本地建议。</p>
+        <h4>五、替换传输实现</h4><p>如果你的后台不是 OpenAI 兼容协议，只需调用一次 <code>registerAITransport(fn)</code>（<code>src/ai/provider.ts</code>）换成自己的请求函数；任务定义、流程、界面、采纳动作全部不用改。</p>
+        <h4>六、错误处理与安全</h4><p>60s 超时（图像 120s）、可配置重试、失败或校验不通过自动回退内置引擎并在调用记录里留痕，不会把模拟结果伪装成 AI 输出。不要在公开前端代码里硬编码密钥；LunaSol 没有任何自有后端接收你的密钥。</p>
       </div>
     </Modal>
   </div>;

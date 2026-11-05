@@ -9,6 +9,8 @@ import { STEP_BODIES, type StepProps } from './stepBodies';
 import { PackagePreview } from './Preview';
 import { dimensionComplete, FORM_META } from './draft';
 import { Note } from './controls';
+import { AIAssist } from '../ai/AIAssist';
+import { aiEnabled, aiStatusLabel } from '../engine/llm';
 
 export default function Wizard() {
   const { s, patchDraft, saveProject, setToast, syncProject } = useApp();
@@ -72,7 +74,10 @@ export default function Wizard() {
   return <div className="page v3-wizard">
     {/* ---------------- 进度 ---------------- */}
     <div className="v3-wizard-head">
-      <div className="v3-wizard-kicker"><span>{step.kicker}</span><span>{progress} / {WIZARD_STEPS.length} 已完成</span></div>
+      <div className="v3-wizard-kicker"><span>{step.kicker}</span><span className="v3-wizard-kicker-right">
+        <span className={`v3-ai-pill ${aiEnabled(s.ai) ? 'on' : ''}`}>{aiStatusLabel(s.ai)}</span>
+        <span>{progress} / {WIZARD_STEPS.length} 已完成</span>
+      </span></div>
       <div className="v3-progress">{WIZARD_STEPS.map((s, k) => <button key={s.id}
         className={`v3-progress-seg ${k === i ? 'current' : ''} ${stepDone(d, k) ? 'done' : ''} ${d.visited.includes(k) ? 'visited' : ''}`}
         onClick={() => d.visited.includes(k) && navigate(k)} title={`${String(k + 1).padStart(2, '0')} ${s.short}`}>
@@ -88,6 +93,8 @@ export default function Wizard() {
           <p>{step.desc}</p>
         </header>
         <div className="v3-step-body"><Body {...props} /></div>
+        {/* AI 贯穿每一步：同一个任务层，后台接入后自动从本地建议切换为真实模型 */}
+        <AIAssist step={i} d={d} set={patchDraft} ai={s.ai} toast={setToast} />
         <footer className="v3-step-foot">
           <div className="v3-foot-left">
             <Button variant="outline" disabled={i === 0} onClick={() => navigate(i - 1)}>← 上一步</Button>
