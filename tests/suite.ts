@@ -10,6 +10,8 @@ import type { DesignBrief, DesignDoc, StructureId, TextLayer } from '../src/type
 import { STYLES, TRADITION_COUNT, styleById, buildStylePrompt } from '../src/v3/styles';
 import { createEmptyDraft, draftToBrief } from '../src/v3/draft';
 import { generatePalettes } from '../src/v3/colors';
+import { accountKey, otpTarget, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
+import { CLOUD, cloudConfigured, deepSeekReady } from '../src/cloud/config';
 import { validateBarcode, encodeBarcode, decodeEan, verifyBarcode } from '../src/v3/barcode';
 import { DEFAULT_AI, aiEnabled, aiMode, aiStatusLabel } from '../src/engine/llm';
 import { AI_TASKS, TASK_FOR_STEP } from '../src/ai/tasks';
@@ -342,6 +344,37 @@ export async function runTests(): Promise<Result[]> {
     A(blocked.source === 'fallback' && blocked.suggestions.every((s) => !/认证|ISO/.test(JSON.stringify(s.value))), '违规 AI 输出被当成了正常结果');
     resetAITransport();
     return 'local / ai / fallback / 合规拦截 四条路径均正确';
+  });
+
+  await t('云账号 · 用户名/邮箱/手机号分别归一化，注册只认手机号或邮箱', () => {
+    A(accountKey('lunasol_user').username === 'lunasol_user', '用户名归一化错误');
+    A(accountKey('a@b.com').email === 'a@b.com', '邮箱归一化错误');
+    A(accountKey('13800138000').phone === '+8613800138000', '手机号未补国家码');
+    A(accountKey('+85261234567').phone === '+85261234567', '国际号码被改写');
+    A(otpTarget('lunasol_user') === null, '用户名不该被当成验证码目标');
+    A(otpTarget('13800138000')?.label === '手机号', '手机号注册目标识别失败');
+    A(otpTarget('a@b.com')?.label === '邮箱', '邮箱注册目标识别失败');
+    return '4 类账号 + 3 类目标识别正确';
+  });
+
+  await t('云同步键 · 行主键带账号，换账号不覆盖别人的行', () => {
+    const a = rowId('uid_a', 'proj_1');
+    const b = rowId('uid_b', 'proj_1');
+    A(a !== b, '不同账号的同名项目主键冲突');
+    A(projectIdOf(a) === 'proj_1' && projectIdOf(b) === 'proj_1', '主键还原项目 ID 失败');
+    A(projectIdOf('legacy_id') === 'legacy_id', '旧主键兼容失败');
+    A(ownsProject(undefined, 'uid_a'), '未认领草稿应可带入首个账号');
+    A(ownsProject('uid_a', 'uid_a'), '同账号应可同步');
+    A(!ownsProject('uid_a', 'uid_b'), '其他账号的项目不应被上传');
+    return '主键隔离 + 归属判定正确';
+  });
+
+  await t('云配置 · 缺环境变量时不假装已接入云端', () => {
+    // Node 测试环境没有 VITE_* 变量，必须诚实报告「未配置」而不是默认成功
+    A(cloudConfigured === false, '缺少环境变量时不应认为云服务已配置');
+    A(deepSeekReady === false, '缺少代理地址时不应认为 DeepSeek 已接入');
+    A(typeof CLOUD.region === 'string' && CLOUD.region.length > 0, '默认区域缺失');
+    return '未配置状态如实上报';
   });
 
   if (inBrowser) {

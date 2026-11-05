@@ -5,6 +5,8 @@ dist/
 .env
 .env.*
 !.env.example
+# 只含公开的 CloudBase Publishable Key / 代理地址，CI 构建必须读到；不含任何厂商密钥
+!.env.production
 .vite/
 
 tests/.build/

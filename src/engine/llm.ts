@@ -1,21 +1,44 @@
 /* OpenAI 兼容接口客户端。
- * 安全说明：LunaSol 是纯静态站点，API Key 只保存在用户本机浏览器 localStorage，
- * 请求由浏览器直连用户自己配置的 Base URL。源码中不含任何密钥。
- * 若需要团队共用密钥，请自行部署服务端代理并把 Base URL 指向代理。 */
+ * 正式接入：CloudBase 国内站云函数代理 DeepSeek，厂商密钥保存在云函数环境变量。
+ * 前端只持有公开的网关地址与代理令牌；源码、Git、浏览器存储里都没有厂商 API Key。
+ * 「浏览器直连」模式仅用于个人本机：Key 存在用户自己浏览器的 localStorage。 */
 import type { AISettings } from '../types';
+import { CLOUD, deepSeekPreset, deepSeekReady } from '../cloud/config';
+
+const preset = deepSeekReady ? deepSeekPreset() : null;
 
 export const DEFAULT_AI: AISettings = {
-  mode: 'off',
-  baseUrl: 'https://api.openai.com/v1',
+  mode: preset ? 'proxy' : 'off',
+  baseUrl: preset ? preset.baseUrl : 'https://api.openai.com/v1',
   apiKey: '',
-  proxyToken: '',
-  textModel: 'gpt-4o-mini',
+  proxyToken: preset ? preset.proxyToken : '',
+  // 代理模式留空由后台决定模型；浏览器直连使用默认 OpenAI 兼容模型名
+  textModel: preset ? '' : 'gpt-4o-mini',
   imageModel: 'gpt-image-1',
+  // DeepSeek 只提供文本模型，不伪造图像生成能力
   imageEnabled: false,
   temperature: 0.7,
   retries: 1,
   lastTest: null,
 };
+
+/** 一键切回已部署的 DeepSeek 后台代理；设置页与首次引导复用。 */
+export function applyDeepSeekProxy(s: AISettings): AISettings {
+  if (!deepSeekReady) return s;
+  return {
+    ...s,
+    mode: 'proxy',
+    baseUrl: CLOUD.aiBaseUrl,
+    proxyToken: CLOUD.aiToken,
+    apiKey: '',
+    textModel: '',
+    imageEnabled: false,
+    lastTest: null,
+  };
+}
+
+export const isDeepSeekProxy = (s: AISettings) =>
+  deepSeekReady && aiMode(s) === 'proxy' && s.baseUrl.trim().replace(/\/+$/, '') === CLOUD.aiBaseUrl;
 
 const KEY = 'lunasol.ai.v1';
 
@@ -50,7 +73,8 @@ export const aiConfigured = aiEnabled;
 export const aiStatusLabel = (s: AISettings): string => {
   if (!aiEnabled(s)) return '本地建议 · 未调用 AI';
   const m = aiMode(s);
-  return m === 'proxy' ? 'AI 已接入 · 后台代理' : `AI 已接入 · ${s.textModel.trim() || '自定义模型'}`;
+  if (m === 'proxy') return isDeepSeekProxy(s) ? 'AI 已接入 · DeepSeek 后台代理' : 'AI 已接入 · 后台代理';
+  return `AI 已接入 · ${s.textModel.trim() || '自定义模型'}`;
 };
 
 /** 构造鉴权头：代理模式不发厂商 Key，可选发一个自有令牌 */

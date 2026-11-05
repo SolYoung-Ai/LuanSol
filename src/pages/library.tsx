@@ -8,6 +8,8 @@ import { buildDieline, dielineStats, STRUCTURES, structureById } from '../engine
 import { mockupSvg } from '../engine/export';
 import type { StructureId } from '../types';
 import { downloadBlob, formatDate, svgToDataUrl } from '../engine/utils';
+import { useAuth } from '../cloud/auth';
+import { useCloudSync } from '../cloud/useCloudSync';
 
 const SAMPLE: Record<StructureId, { l: number; w: number; h: number }> = {
   tuck: { l: 200, w: 150, h: 80 }, topBottom: { l: 200, w: 150, h: 80 }, drawer: { l: 200, w: 150, h: 80 },
@@ -103,24 +105,42 @@ export function Structures() {
 export function Projects() {
   const { s, newProject, loadProject, deleteProject, duplicateProject, setToast } = useApp();
   const [confirm, setConfirm] = useState<string | null>(null);
+  const auth = useAuth();
+  const sync = useCloudSync();
+  const [syncing, setSyncing] = useState<string | null>(null);
   return <div className="page">
-    <PageHead kicker="MY PROJECTS / 09" title="我的作品" desc={`项目保存在本机浏览器（${s.storage}），自动保存，可随时恢复历史版本。`}
-      right={<Button onClick={() => { newProject(); go('/wizard'); }}>＋ 新建项目</Button>} />
+    <PageHead kicker="MY PROJECTS / 09" title="我的作品" desc={auth.user
+      ? `已登录 ${auth.user.label}：项目自动保存到本机，并同步到你的云端空间（${sync.message}）。`
+      : `项目保存在本机浏览器（${s.storage}），自动保存，可随时恢复历史版本。登录后可同步到云端。`}
+      right={<div className="head-actions">
+        <Button variant="outline" onClick={() => { if (!auth.user) { setToast('请先在右上角登录，再同步到云端'); go('/account'); return; } void sync.syncNow(); }}>
+          {auth.user ? '同步到云端' : '登录后云同步'}
+        </Button>
+        <Button onClick={() => { newProject(); go('/wizard'); }}>＋ 新建项目</Button>
+      </div>} />
     {s.projects.length === 0 ? <Empty title="还没有作品" desc="用十步向导整理尺寸、风格与文案，创建你的第一个包装项目。" action={<Button onClick={() => { newProject(); go('/wizard'); }}>开始十步设计</Button>} /> :
       <div className="project-grid">{s.projects.map((p) => <Card key={p.id} className="project-card">
         <button className="project-thumb" onClick={() => { loadProject(p.id); go('/project/' + p.id); }}>
           {p.design?.faces.front ? <DesignView face={p.design.faces.front} /> : <div className="project-blank">LunaSol</div>}
         </button>
-        <div className="project-info"><div className="project-status"><Tag tone={p.status === 'exported' ? 'green' : p.status === 'checked' ? 'amber' : 'plain'}>{{ draft: '草稿', designing: '设计中', checked: '已检查', exported: '已导出' }[p.status]}</Tag><span>{formatDate(p.updatedAt)}</span></div>
+        <div className="project-info"><div className="project-status"><Tag tone={p.status === 'exported' ? 'green' : p.status === 'checked' ? 'amber' : 'plain'}>{{ draft: '草稿', designing: '设计中', checked: '已检查', exported: '已导出' }[p.status]}</Tag>
+          {auth.user && sync.ownerOf(p.id) && sync.ownerOf(p.id) !== auth.user.id && <Tag tone="amber">其他账号</Tag>}
+          <span>{formatDate(p.updatedAt)}</span></div>
           <h3>{p.name}</h3><p>{structureById(p.structure).name} · {p.brief.size.l} × {p.brief.size.w} × {p.brief.size.h} mm</p>
           <div className="project-actions"><Button size="sm" onClick={() => { loadProject(p.id); go(p.design ? '/editor' : '/create'); }}>打开</Button>
             <Button size="sm" variant="ghost" onClick={() => { loadProject(p.id); go('/project/' + p.id); }}>详情</Button>
+            {auth.user && <Button size="sm" variant="ghost" disabled={syncing === p.id} onClick={async () => {
+              setSyncing(p.id);
+              const ok = await sync.pushOne(p.id);
+              setSyncing(null);
+              setToast(ok ? `「${p.name}」已同步到云端` : '同步失败，请查看账户页的提示');
+            }}>{syncing === p.id ? '同步中…' : '存云端'}</Button>}
             <Button size="sm" variant="ghost" onClick={() => { duplicateProject(p.id); setToast('已复制项目'); }}>复制</Button>
             <Button size="sm" variant="ghost" onClick={() => setConfirm(p.id)}>删除</Button></div>
         </div>
       </Card>)}</div>}
     <Modal open={!!confirm} title="删除项目" onClose={() => setConfirm(null)}>
-      <p className="modal-p">删除后该项目的设计稿与历史版本将从本机浏览器移除，无法恢复。</p>
+      <p className="modal-p">删除后该项目的设计稿与历史版本将从本机浏览器移除，无法恢复。云端副本需要到「账户」页删除。</p>
       <div className="modal-buttons"><Button variant="outline" onClick={() => setConfirm(null)}>取消</Button>
         <Button onClick={() => { if (confirm) deleteProject(confirm); setConfirm(null); setToast('项目已删除'); }}>确认删除</Button></div>
     </Modal>

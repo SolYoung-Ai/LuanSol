@@ -19,14 +19,16 @@ const NAV = [
   { label: '包装类型', path: '/structures' }, { label: '我的作品', path: '/projects' },
 ];
 
-export function Nav({ onLogin }: { onLogin: () => void }) {
+export function Nav({ onLogin, accountLabel }: { onLogin: () => void; accountLabel?: string | null }) {
   const hash = useHash();
   return <header className="nav">
     <div className="nav-inner">
       <Logo />
       <nav className="nav-links">{NAV.map((n) => <a key={n.path} href={`#${n.path}`} className={hash === n.path || (n.path !== '/' && hash.startsWith(n.path)) ? 'active' : ''}>{n.label}</a>)}</nav>
       <div className="nav-actions">
-        <button className="link-btn" onClick={onLogin}>登录</button>
+        <button className={`link-btn ${accountLabel ? 'link-btn-user' : ''}`} onClick={onLogin}>
+          {accountLabel ? <><span className="nav-avatar">{accountLabel.slice(0, 1).toUpperCase()}</span>{accountLabel}</> : '登录'}
+        </button>
         <button className="btn btn-dark btn-sm" onClick={() => go('/wizard')}>开始设计 <span aria-hidden>↗</span></button>
       </div>
     </div>

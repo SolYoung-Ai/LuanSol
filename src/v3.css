@@ -333,3 +333,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans
   .v3-wizard-kicker-right { gap: 8px; }
   .ai-sug { flex-direction: column; }
 }
+
+/* ============================================================
+ * 账户 / 登录 / 云同步
+ * ============================================================ */
+.inline-link { color: var(--green); text-decoration: underline; text-underline-offset: 2px; margin-left: 6px; }
+.modal-hint { font-size: 11.5px; color: var(--muted); line-height: 1.7; margin: 2px 0 14px; }
+.modal-foot { font-size: 10.5px; color: #a5a199; line-height: 1.7; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.login-tabs { display: flex; width: 100%; margin-bottom: 18px; }
+.login-msg { margin-top: 12px; padding: 9px 11px; font-size: 12px; line-height: 1.6; border-left: 2px solid var(--line-2); background: var(--soft); }
+.login-msg.ok { border-left-color: #2f6b4f; color: #2f6b4f; background: #f3f8f4; }
+.login-msg.bad { border-left-color: var(--red); color: var(--red); background: #fdf5f4; }
+
+.nav-avatar { width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; margin-right: 7px; }
+.link-btn-user { display: inline-flex; align-items: center; }
+
+.acct-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
+.acct-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.acct-row span { color: var(--muted); flex: none; }
+.acct-row strong { font-weight: 500; text-align: right; word-break: break-all; }
+.acct-uid { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--ink-2); background: var(--soft); padding: 2px 6px; word-break: break-all; text-align: right; }
+.acct-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.acct-msg { font-size: 11px; color: var(--muted); line-height: 1.7; margin: 12px 0 0; }
+.acct-msg.bad { color: var(--red); }
+.acct-box { display: grid; }
+.cloud-list-card { margin-bottom: 18px; }
+.cloud-list { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.cloud-item { background: #fff; padding: 13px 14px; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.cloud-item-main { display: grid; gap: 3px; min-width: 0; }
+.cloud-item-main strong { font-size: 13px; font-weight: 500; }
+.cloud-item-main span { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+.cloud-item-actions { display: flex; gap: 8px; flex: none; }
+.cloud-off-flag { position: fixed; right: 14px; bottom: 14px; z-index: 40; font-size: 9.5px; letter-spacing: .12em; color: var(--muted); background: var(--soft); border: 1px solid var(--line); padding: 4px 8px; }
+
+@media (max-width: 860px) {
+  .acct-grid { grid-template-columns: 1fr; }
+  .cloud-item { align-items: flex-start; }
+  .cloud-item-actions { width: 100%; }
+}

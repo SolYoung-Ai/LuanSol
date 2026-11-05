@@ -1,0 +1,6 @@
+{
+  "name": "lunasol-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LunaSol DeepSeek OpenAI-compatible proxy for CloudBase HTTP function"
+}

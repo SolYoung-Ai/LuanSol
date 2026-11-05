@@ -103,3 +103,68 @@ python3 -m http.server 8765 --bind 127.0.0.1
 | 补充验收（Logo 上传、EAN-13、版本恢复、移动端） | 8/8 通过 |
 | 后台代理端到端（模拟 GPT 代理：接入 / 采纳 / 调用记录 / 故障回退 / 违规拦截） | 10/10 通过 |
 | 15 个路由桌面渲染 + 移动端 AI 助手 | 无 console error、无横向溢出 |
+
+## V3.2 版本说明（DeepSeek 真实接入 + 云开发账号与云同步）
+
+### 1. AI：从「预留位置」变成真实调用
+
+- CloudBase 国内站已部署 HTTP 云函数 `lunasol-ai`（`cloudfunctions/lunasol-ai`），作为 OpenAI 兼容代理转发到 DeepSeek：
+  - `POST /chat/completions` 转发厂商接口，密钥只存在云函数环境变量 `DEEPSEEK_API_KEY`；
+  - `GET /health` 返回 `{ok, provider, model, keyConfigured, tokenRequired}`，不泄露密钥；
+  - 可选 `X-LunaSol-Token` 鉴权；CORS 按 `LUNASOL_ALLOWED_ORIGINS` 白名单回源，非白名单来源不发 allow-origin。
+- 前端不再需要任何厂商 Key：`.env.production` 只写公开的网关地址与代理令牌，`src/engine/llm.ts` 默认 `mode: 'proxy'` 指向该网关。
+- 十步向导的 AI 助手在正式站点上已实测走真实模型：状态显示「AI 已接入 · DeepSeek 后台代理」，建议来自模型且仍由用户逐条采纳。
+
+### 2. 账号：CloudBase Auth（国内站）
+
+- 登录：`auth.signInWithPassword({ username | email | phone, password })`，只有真正拿到 `session` 才算成功。
+- 注册：`auth.signUp({ phone | email, password })` → `data.verifyOtp({ token })`，走 CloudBase 默认短信通道；用户名不支持直接注册（服务端会拒绝）。
+- 验证码免密登录：`auth.signInWithOtp` → `verifyOtp`。找回密码：`resetPasswordForEmail`（需环境侧配置邮件通道）。
+- 退出：`auth.signOut()`，`onAuthStateChange` 的 `SIGNED_OUT` 会清空用户态。
+- 失败一律如实展示服务端 message，没有本地假登录、没有静默降级。
+
+### 3. 云同步：CloudBase PostgreSQL + RLS
+
+- 表 `public.lunasol_projects(id, owner_id, title, payload jsonb, updated_at)`，迁移脚本在 `cloudbase/migrations/`。
+- 行主键为 `<uid>:<projectId>`：同一台设备换账号登录时不会撞上别人的行。
+- RLS 策略用 `auth.uid()` 比对 `owner_id`，服务端强制隔离；跨账号读写在数据库层被拒绝（已实测第二账号看不到第一个账号的行）。
+- 前端 `src/cloud/`：`auth.tsx`（会话与登录动作）、`projects.ts`（增删改查 + 写入后回读确认）、`useCloudSync.tsx`（登录合并 / 4 秒防抖自动上传 / 手动全量同步）、`LoginDialog.tsx`、`pages/account.tsx`。
+- 未登录时只写本机 IndexedDB，界面明确写「未登录：项目只保存在本机浏览器」。
+- 「哪个本机项目属于哪个账号」记在 localStorage `lunasol.cloud.owners.v1`，属于其他账号的项目不会被上传，卡片上标注「其他账号」。
+
+### 4. 部署与域名限制（重要）
+
+| 站点 | 地址 | 能力 |
+| --- | --- | --- |
+| GitHub Pages（公开站） | https://solyoung-ai.github.io/LuanSol/ | 全部设计能力 + DeepSeek AI + 本机保存；**登录被 CloudBase 安全域名拦截** |
+| CloudBase 静态托管 | https://solyoung-d4gpp1f7s4e075f6d-1499756427.tcloudbaseapp.com/ | 全部能力 + 登录 + 云同步；默认测试域名在真实浏览器会先显示「风险提醒」页 |
+
+原因（已实测，非推测）：
+
+- `POST https://solyoung-d4gpp1f7s4e075f6d.api.tcloudbasegateway.com/auth/v1/signin` 的预检：
+  - `Origin: https://solyoung-d4gpp1f7s4e075f6d-1499756427.tcloudbaseapp.com` → `204 + access-control-allow-origin`
+  - `Origin: https://solyoung-ai.github.io` → `403`
+- `tcb:CreateAuthDomain` 返回「当前套餐无法执行此操作」，体验版无法通过 API 追加 Web 安全域名。
+- CloudBase 默认测试域名带「风险提醒」拦截页（标题即 `风险提醒`），官方建议绑定已备案自定义域名后使用。
+
+因此当前构建在 GitHub Pages 上对登录做了诚实降级：`cloudOriginSupported()` 判定来源不在白名单时，登录弹窗与账户页显示原因并给出正式站点入口，绝不假装登录成功。
+
+去掉这个限制的两条路（都需要账号侧决策）：
+
+1. 升级 CloudBase 套餐，使其支持「Web 安全域名」，把 `solyoung-ai.github.io` 加进白名单；
+2. 绑定一个已备案的自定义域名到 CloudBase 静态托管，用它作为正式站点（默认测试域名的风险提示页同时消失）。
+
+### V3.2 验收结果
+
+| 检查 | 结果 |
+| --- | --- |
+| `npx tsc --noEmit` | 0 errors |
+| `npm test`（新增 3 组云账号 / 云同步键 / 云配置测试） | 27/27 通过 |
+| 生产构建 | 无告警；主包 304 kB，CloudBase SDK 拆成按需加载的 862 kB chunk（不在首屏 preload） |
+| 真实登录（localhost） | 通过，`getSession` 返回 uid 2118374985143525377 |
+| 真实登录（CloudBase 正式域名） | 静态托管可访问；登录需先过测试域名提示页 |
+| 项目写入 PG | 通过，写入后回读确认，`payload` 为完整项目 JSON |
+| 跨账号隔离 | 通过：第二账号查询云端项目为 0，尝试写入他人行被 RLS 拒绝 |
+| 跨设备恢复 | 通过：清空浏览器存储后登录同一账号，云端 1 个项目取回本机 |
+| DeepSeek 真实调用 | 通过：向导 STEP 01 建议由模型生成，界面显示「AI 已接入 · DeepSeek 后台代理」 |
+| 注册校验 | 通过：用户名注册被拒、密码 <8 位被拒、非法手机号返回服务端「不支持的手机号码」 |

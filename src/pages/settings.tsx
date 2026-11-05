@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { useApp } from '../store';
 import { Button, Card, Field, Modal, Notice, PageHead, SectionLabel, Tag, Toggle, go } from '../ui';
-import { DEFAULT_AI, aiEnabled, aiStatusLabel, aiMode, saveAI, testConnection } from '../engine/llm';
+import { DEFAULT_AI, aiEnabled, aiStatusLabel, aiMode, saveAI, testConnection, applyDeepSeekProxy, isDeepSeekProxy } from '../engine/llm';
 import { aiCapabilitySummary, getAIRunLog, clearAIRunLog } from '../ai/provider';
+import { CLOUD, deepSeekReady } from '../cloud/config';
 import { STRUCTURES } from '../engine/structure';
 import { downloadBlob, formatDate } from '../engine/utils';
 import type { AISettings, Project } from '../types';
@@ -93,6 +94,17 @@ export function ModelConfig() {
         <p>{enabled ? draft.lastTest ? `${draft.lastTest.message} · ${formatDate(draft.lastTest.at)}` : '点击「测试连接」验证接口可用性' : '当前每一步由内置设计引擎给出确定性建议，界面明确标注「未调用 AI」，基础创作与导出不受影响。'}</p></div>
       <Tag tone={enabled ? 'green' : 'plain'}>{aiStatusLabel(draft)}</Tag>
     </div>
+    {deepSeekReady && <Card className="pad-card"><SectionLabel en="DEEPSEEK / CLOUDBASE">已部署的后台模型</SectionLabel>
+      <p className="ai-caps-intro">LunaSol 已在腾讯云开发 CloudBase 国内站部署后台代理，<strong>DeepSeek API Key 只保存在云函数环境变量</strong>。前端使用公开的网关地址与代理令牌，十步向导、需求汇总与编辑器共用同一套 AI 能力层，无需改动流程即可切换模型。</p>
+      <div className="kv"><span>模型服务</span><strong>DeepSeek（OpenAI 兼容接口）</strong></div>
+      <div className="kv"><span>后台</span><strong>CloudBase HTTP 云函数 · {CLOUD.region}</strong></div>
+      <div className="kv"><span>当前状态</span><strong>{isDeepSeekProxy(draft) ? '已启用，可直接获取 AI 建议' : '未启用，点击下方按钮一键切换'}</strong></div>
+      <div className="model-actions">
+        <Button onClick={() => { const n = applyDeepSeekProxy(draft); setDraft(n); saveAI(n); update({ ai: n }); setToast('已切换到 DeepSeek 后台代理，全站 AI 能力即时生效'); }}>一键接入 DeepSeek <span aria-hidden>→</span></Button>
+        <Button variant="outline" onClick={test} disabled={testing || !isDeepSeekProxy(draft)}>{testing ? '测试中…' : '测试真实模型调用'}</Button>
+      </div>
+      <Notice tone="info">DeepSeek 目前只提供文本模型，不提供图像生成；开启「AI 图像生成」会如实报错并回退，不会伪造插画。代理网关按来源域名与令牌校验，并设有 QPS 限制。</Notice>
+    </Card>}
     <div className="settings-grid">
       <Card className="pad-card"><SectionLabel en="CONNECTION">接入方式</SectionLabel>
         <Field label="AI 接入模式" hint="后台代理模式由你的服务端保管模型密钥，前端不需要也不应该保存厂商 Key">
@@ -151,7 +163,8 @@ export function ModelConfig() {
         <h4>三、图像接口（可选）</h4><p>POST <code>{draft.baseUrl.replace(/\/$/, '')}/images/generations</code>，Body 使用 <code>model / prompt / n:1 / size / response_format</code>，支持返回 <code>b64_json</code> 或图片 URL。</p>
         <h4>四、输出结构与合规校验</h4><p>所有流程节点统一返回 <code>&#123;"suggestions":[&#123;"title","detail","value"&#125;]&#125;</code>，每个节点的 <code>value</code> 结构不同，详见 <code>src/ai/tasks.ts</code>。模型输出会先经过结构校验与合规校验：编造配料 / 功效 / 认证、生成商品条码数字、发明不存在的风格、在「不需要插画」时添加图案，都会被拦截并回退本地建议。</p>
         <h4>五、替换传输实现</h4><p>如果你的后台不是 OpenAI 兼容协议，只需调用一次 <code>registerAITransport(fn)</code>（<code>src/ai/provider.ts</code>）换成自己的请求函数；任务定义、流程、界面、采纳动作全部不用改。</p>
-        <h4>六、错误处理与安全</h4><p>60s 超时（图像 120s）、可配置重试、失败或校验不通过自动回退内置引擎并在调用记录里留痕，不会把模拟结果伪装成 AI 输出。不要在公开前端代码里硬编码密钥；LunaSol 没有任何自有后端接收你的密钥。</p>
+        <h4>六、已部署的 DeepSeek 后台代理</h4><p>本项目已在腾讯云开发 CloudBase 国内站（{CLOUD.region}）部署 HTTP 云函数 <code>lunasol-ai</code>：函数从环境变量读取 <code>DEEPSEEK_API_KEY</code> 并转发 <code>/chat/completions</code>，同时校验 <code>X-LunaSol-Token</code>、限制模型白名单、去掉图像接口（返回 501）。前端只配置网关路径与代理令牌，不接触厂商密钥。更换模型只需改云函数环境变量与代理地址，流程与界面代码不用改。</p>
+        <h4>七、错误处理与安全</h4><p>60s 超时（图像 120s）、可配置重试、失败或校验不通过自动回退内置引擎并在调用记录里留痕，不会把模拟结果伪装成 AI 输出。代理令牌是静态站点的共享访问令牌，不是厂商密钥；如需按用户额度管控，应在网关启用 CloudBase 登录态鉴权。请不要在公开前端代码里硬编码任何厂商 API Key。</p>
       </div>
     </Modal>
   </div>;

@@ -85,6 +85,8 @@ interface AppCtx {
   saveProject: (name?: string) => Project;
   syncProject: () => void;
   loadProject: (id: string) => void;
+  /** 把云端项目并入本地：同 id 取 updatedAt 更新的一方，云端独有则新增 */
+  mergeCloudProjects: (list: Project[]) => void;
   deleteProject: (id: string) => void;
   duplicateProject: (id: string) => void;
   newProject: () => void;
@@ -174,6 +176,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const mergeCloudProjects = useCallback((list: Project[]) => setS((prev) => {
+    if (!list.length) return prev;
+    const map = new Map(prev.projects.map((p) => [p.id, p]));
+    let changed = false;
+    for (const c of list) {
+      const local = map.get(c.id);
+      if (!local) { map.set(c.id, c); changed = true; continue; }
+      if ((c.updatedAt || 0) > (local.updatedAt || 0)) { map.set(c.id, c); changed = true; }
+    }
+    if (!changed) return prev;
+    const projects = [...map.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    return { ...prev, projects };
+  }), []);
+
   const deleteProject = useCallback((id: string) => setS((prev) => ({
     ...prev, projects: prev.projects.filter((p) => p.id !== id), activeId: prev.activeId === id ? null : prev.activeId,
   })), []);
@@ -207,7 +223,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppCtx = {
     s, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
-    saveProject, syncProject, loadProject, deleteProject, duplicateProject, newProject, addVersion, restoreVersion,
+    saveProject, syncProject, loadProject, mergeCloudProjects, deleteProject, duplicateProject, newProject, addVersion, restoreVersion,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
