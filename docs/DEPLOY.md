@@ -67,7 +67,7 @@ python3 -m http.server 8765 --bind 127.0.0.1
 - 视觉层已回滚到手绘改版前：`index.html` / `src/styles.css` 恢复 Modern Minimalism；删除 `src/components/doodle.tsx`、`hand.ts`、`scenes.tsx`；首页不再有手绘角色、涂鸦、统计条与手写字体 CDN。
 - 新增十步向导（`#/wizard`）与需求汇总（`#/review`），统一项目模型 `ProjectDraft` 由 `src/v3/draft.ts` 定义，自动保存沿用 IndexedDB + localStorage 兜底。
 - 风格库：10 个现代商业风格 + 18 个传统选项（归入 14 组中国传统艺术风格），每个风格都有完整配置并由自身纹样规则生成独立矢量图层，不是只把风格名拼进提示词。
-- 构建分包：`vite.config.ts` 用 `manualChunks` 拆出 `vendor-three` / `vendor-pdf` / `vendor-canvas` / `vendor-react` / `vendor-zip`，主包由约 1.3 MB 降到约 255 KB，构建无 chunk 体积警告。
+- 构建分包：`vite.config.ts` 用 `manualChunks` 拆出 `vendor-three` / `vendor-pdf` / `vendor-canvas` / `vendor-react` / `vendor-zip` 等可长期缓存的 chunk，主包由约 1.3 MB 降到约 255 KB，构建无 chunk 体积警告。`three` / `jsPDF` / `JSZip` 仍为静态依赖，首屏会以 `modulepreload` 并行下载；真正按需加载的是 `html2canvas` / `dompurify`（`vendor-canvas`）。
 - 无 WebGL 的环境（部分无头浏览器 / 关闭硬件加速）会自动切换为 2D 立体图预览，并在页面上明确说明，不影响平面稿与印刷文件导出。
 
 ### 本次验收结果
