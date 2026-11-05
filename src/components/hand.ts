@@ -533,9 +533,9 @@ export function drawPerson(rnd: Rnd, p: Pose, opt: { w?: number } = {}): PStroke
   }
   if (hair === 'bun') {
     // 丸子头（在朝向的反侧，靠后脑勺）
-    const bx = hx - facing * hr * 1.06;
-    const by = hy - hr * 0.56;
-    out.push({ d: hEllipse(rnd, bx, by, hr * 0.34, hr * 0.31, { n: 9, wob: 0.1, jit: 0.6 }), w: W * 0.95 });
+    const bx = hx - facing * hr * 1.24;
+    const by = hy - hr * 0.72;
+    out.push({ d: hEllipse(rnd, bx, by, hr * 0.3, hr * 0.28, { n: 9, wob: 0.1, jit: 0.6 }), w: W * 0.95 });
   }
 
   /* ---------- 五官 ---------- */
