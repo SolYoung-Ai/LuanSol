@@ -71,7 +71,16 @@ Vite 提示主 chunk >500 kB，属预期（3D + PDF 库），未做代码分割�
 
 无头 Chrome 逐个加载 `/`、`/create`、`/brief`、`/schemes`、`/editor`、`/preview`、`/inspiration`、`/structures`、`/projects`、`/prepress`、`/export`、`/settings`、`/models`；DOM 均包含预期内容，无 `Uncaught` / React 错误。
 
-## 6. 测试中发现并修复的真实缺陷
+## 6. 线上部署验证
+
+- 仓库：`https://github.com/SolYoung-Ai/LuanSol`（public，`main` 源码 + `gh-pages` 构建产物）
+- Pages：`https://solyoung-ai.github.io/LuanSol/`，API 状态 `built`，来源 `gh-pages / root`
+- HTTP：`/` 200、`/favicon.svg` 200、`assets/*.js` 200、`assets/*.css` 200
+- 无头 Chrome 加载线上首页：DOM 49,808 字节，包含「让包装设计」「你想制作什么」「灵感展示」「八个各司其职」等全部区块，无 `Uncaught` / React 错误
+
+> 备注：创建仓库所用令牌仅有 `repo` 权限，缺少 `workflow` 权限，因此 `.github/workflows/deploy.yml` 无法由脚本推送；工作流内容以 `docs/deploy-workflow.yml` 模板提供，本次上线通过直接推送 `gh-pages` 分支完成。
+
+## 7. 测试中发现并修复的真实缺陷
 
 1. **产品名误提取**：「我想做一个茶叶包装盒」被识别为产品名。→ 先剥离句首意愿/数量词再提取名词，结果为「茶叶」。
 2. **颜色子串误判**：「米白色」额外识别出「白色」。→ 命中词从文本中移除后再匹配，配色正确为米白 + 深绿。
@@ -79,7 +88,7 @@ Vite 提示主 chunk >500 kB，属预期（3D + PDF 库），未做代码分割�
 4. **PDF 预检误报**：刀模页图例含中文时 jsPDF 标准字体切换 UTF-16 编码，标记不可读。→ 图例改为 ASCII；PDF 内容流改为不压缩并对完整字节流预检（原来只扫前 3 MB 会漏掉尾部刀模页）。
 5. **WebGL 不可用会白屏**：→ 增加 2D 立体效果图降级预览。
 
-## 7. 尚未覆盖 / 明确限制
+## 8. 尚未覆盖 / 明确限制
 
 | 项目 | 状态 |
 | --- | --- |
