@@ -10,8 +10,8 @@ import { aiModify, applyPatch, localIntent, versionLabel } from '../engine/modif
 import { spreadSvg } from '../engine/export';
 import type { DesignDoc, FaceId, ImageLayer, Layer, ShapeKind, StructureId, TextLayer } from '../types';
 import { FLOW_STEPS } from '../data';
-import { DoodlePersonThinking, DoodlePersonMeasuring, DoodlePersonDrawing } from '../components/doodle';
 import { clamp, downloadBlob, formatDate, hexToRgb, uid } from '../engine/utils';
+import { styleById, styleByName } from '../v3/styles';
 
 const FACE_LABEL: Record<FaceId, string> = { front: '正面', back: '背面', left: '左侧', right: '右侧', top: '顶面' };
 
@@ -100,7 +100,7 @@ export function Create() {
 
   return <div className="page page-narrow">
     <StepBar steps={FLOW_STEPS} current={0} />
-    <PageHead kicker="AI CREATION CENTER / 01" title="告诉我，你想做什么包装？" desc="简单描述你的想法，剩下的交给 LunaSol。一次只问一个问题。" doodle={<DoodlePersonThinking className="page-doodle-inline" />} />
+    <PageHead kicker="AI CREATION CENTER / 01" title="告诉我，你想做什么包装？" desc="简单描述你的想法，剩下的交给 LunaSol。一次只问一个问题。" />
     <div className="create-grid">
       <div className="chat-panel">
         <div className="chat-scroll">
@@ -169,15 +169,14 @@ export function BriefPage() {
     setToast(r.applied ? 'AI 已更新需求' : r.message);
   };
   const proceed = () => {
-    update({ schemes: buildSchemes(b), report: null });
+    update({ schemes: buildSchemes(b, styleById(s.draft?.style_id || '') || styleByName(b.style)), report: null });
     saveProject(); go('/schemes');
   };
 
   return <div className="page page-narrow">
     <StepBar steps={FLOW_STEPS} current={1} />
     <PageHead kicker="DESIGN BRIEF / 02" title="确认一下，就按这个方向设计？" desc="AI 已把你的描述整理成结构化需求。所有建议都不会覆盖你明确指定的内容。"
-      right={<Button variant="outline" onClick={() => go('/create')}>我想修改一下</Button>}
-      doodle={<DoodlePersonMeasuring className="page-doodle-inline" />} />
+      right={<Button variant="outline" onClick={() => go('/create')}>我想修改一下</Button>} />
     <div className="brief-grid">
       <Card className="brief-card">
         <div className="brief-card-head"><span>DESIGN DIRECTION</span><Tag tone="green">{b.style || 'AI 推荐风格'}</Tag></div>
@@ -240,7 +239,7 @@ export function Schemes() {
   const [detail, setDetail] = useState<number | null>(null);
   const [busyIdx, setBusyIdx] = useState<number | null>(null);
   const configured = aiConfigured(s.ai);
-  useEffect(() => { if (!s.schemes.length && s.brief.brand) update({ schemes: buildSchemes(s.brief) }); }, []); // eslint-disable-line
+  useEffect(() => { if (!s.schemes.length && s.brief.brand) update({ schemes: buildSchemes(s.brief, styleById(s.draft?.style_id || '') || styleByName(s.brief.style)) }); }, []); // eslint-disable-line
 
   const choose = (d: DesignDoc) => {
     update({ design: cloneDesign(d) });
@@ -248,7 +247,7 @@ export function Schemes() {
     addChat({ role: 'ai', kind: 'result', text: `已选择「${SCHEME_META[d.scheme].title}」方向，进入工作台后可以继续用对话修改。` });
     go('/editor');
   };
-  const regenerate = () => { update({ schemes: buildSchemes(s.brief) }); setToast('已重新生成三套方向'); };
+  const regenerate = () => { update({ schemes: buildSchemes(s.brief, styleById(s.draft?.style_id || '') || styleByName(s.brief.style)) }); setToast('已按当前风格配置重新生成三套方向'); };
   const genImage = async (i: number) => {
     if (!s.ai.imageEnabled || !configured) { setToast('请先在「AI 模型配置」启用图像模型'); go('/models'); return; }
     setBusyIdx(i);
@@ -262,13 +261,12 @@ export function Schemes() {
     setBusyIdx(null);
   };
 
-  if (!s.schemes.length) return <div className="page page-narrow"><Empty title="还没有设计方案" desc="先回到创作中心描述你的想法。" action={<Button onClick={() => go('/create')}>去描述需求</Button>} /></div>;
+  if (!s.schemes.length) return <div className="page page-narrow"><Empty title="还没有设计方案" desc="先用十步向导整理尺寸、风格与文案，再生成三个设计方向。" action={<Button onClick={() => go('/wizard')}>开始十步设计</Button>} /></div>;
 
   return <div className="page">
     <StepBar steps={FLOW_STEPS} current={2} />
     <PageHead kicker="THREE DIRECTIONS / 03" title="三套明显不同的设计方向" desc="每套都包含正 / 背 / 侧 / 顶的完整分层设计稿。文字独立可编辑，不是一张图片。"
-      right={<Button variant="outline" onClick={regenerate}>重新生成</Button>}
-      doodle={<DoodlePersonDrawing className="page-doodle-inline" />} />
+      right={<Button variant="outline" onClick={regenerate}>重新生成</Button>} />
     <div className="scheme-grid">
       {s.schemes.map((d, i) => <Card key={d.id} className="scheme-card">
         <div className="scheme-top"><span>{SCHEME_META[d.scheme].en}</span><span>0{i + 1}</span></div>

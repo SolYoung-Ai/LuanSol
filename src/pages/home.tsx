@@ -1,45 +1,29 @@
 import React, { useState } from 'react';
-import { CATEGORIES, INSPIRATIONS, type InspirationItem } from '../data';
+import { CATEGORIES, INSPIRATIONS, QUICK_START, type InspirationItem } from '../data';
 import { ProductMockup } from '../components/visuals';
-import { DoodleBox, DoodleUnderline } from '../components/doodle';
-import { HeroScene, SceneBigBox, SceneIdeas, SceneRun, SceneSketch, SceneStudio } from '../components/scenes';
-import { Button, Modal, SectionLabel, go } from '../ui';
+import { Button, Card, Modal, SectionLabel, go } from '../ui';
 import { useApp } from '../store';
 import { createEmptyBrief, parseUtterance } from '../engine/brief';
 import type { StructureId } from '../types';
+import { createEmptyDraft, defaultDimensions, type PackageForm } from '../v3/draft';
+import { WIZARD_STEPS } from '../v3/steps';
 
 const sizeFor: Record<string, { l: number; w: number; h: number }> = {
   box: { l: 200, w: 150, h: 80 }, label: { l: 90, w: 120, h: 0 }, pouch: { l: 140, w: 60, h: 220 }, custom: { l: 200, w: 150, h: 80 },
 };
 
-/* 第一屏的包装形态入口（用真实包装作品做视觉主角） */
-const WORKS = [
-  { kind: 'box' as const, brand: '山隐茶集', sub: 'TEA BOX', palette: { bg: '#f3eee4', primary: '#20463a', accent: '#c8a86b', ink: '#1d1d1b', muted: '#8d8d8a' }, label: '纸盒', note: '茶叶、点心、伴手礼', cls: 'work-card-1' },
-  { kind: 'pouch' as const, brand: '屿光咖啡', sub: 'COFFEE POUCH', palette: { bg: '#efe2cd', primary: '#8a5a3b', accent: '#a8352c', ink: '#3b2b20', muted: '#8d8d8a' }, label: '包装袋', note: '咖啡、零食、散装', cls: 'work-card-2' },
-  { kind: 'bottle' as const, brand: '素白研', sub: 'BOTTLE', palette: { bg: '#f7f6f2', primary: '#1d1d1b', accent: '#c9c4b8', ink: '#1d1d1b', muted: '#8d8d8a' }, label: '瓶罐', note: '护肤、香氛、清洁', cls: 'work-card-3' },
-  { kind: 'gift' as const, brand: '长物', sub: 'GIFT BOX', palette: { bg: '#f6f1ea', primary: '#8c3b2f', accent: '#d9b26a', ink: '#3a2a22', muted: '#8d8d8a' }, label: '礼品盒', note: '节令礼、生日伴手', cls: 'work-card-4' },
-  { kind: 'tube' as const, brand: '青屿', sub: 'TUBE', palette: { bg: '#eef2ef', primary: '#2f5d4c', accent: '#d7c9a6', ink: '#22302a', muted: '#8d8d8a' }, label: '管装', note: '护肤、牙膏、清洁', cls: 'work-card-5' },
-  { kind: 'label' as const, brand: '见山', sub: 'LABEL', palette: { bg: '#eef1ef', primary: '#22395c', accent: '#c8a86b', ink: '#1b2733', muted: '#8d8d8a' }, label: '标签', note: '瓶贴、罐贴、封口贴', cls: 'work-card-6' },
-];
-
-/* 第四屏：四步创作，每一步配一个动作场景 */
-const STEPS = [
-  { n: '01', t: '描述想法', d: '用一句话说清你要做什么', art: SceneStudio },
-  { n: '02', t: 'AI 生成', d: '自动整理需求，给出三套方向', art: SceneBigBox },
-  { n: '03', t: '调整设计', d: '对话式改稿，随时看 3D 效果', art: SceneSketch },
-  { n: '04', t: '下载文件', d: '拿到可印刷的 PDF / SVG / DXF', art: SceneRun },
-];
-
 export default function Home() {
-  const { update, addChat, setToast } = useApp();
+  const { update, setToast } = useApp();
   const [cat, setCat] = useState('全部');
   const [active, setActive] = useState<InspirationItem | null>(null);
   const list = cat === '全部' ? INSPIRATIONS : INSPIRATIONS.filter((i) => i.category === cat);
 
-  const start = (packType: string, extra: Partial<ReturnType<typeof createEmptyBrief>> = {}) => {
-    const b = { ...createEmptyBrief(), packType, size: sizeFor[packType] || sizeFor.box, ...extra };
-    update({ brief: b, chat: [], schemes: [], design: null, report: null, activeId: null });
-    go('/create');
+  /** 从首页进入新的十步向导；选择形态时预填第一步 */
+  const startWizard = (form?: PackageForm) => {
+    const d = createEmptyDraft();
+    if (form) { d.package_type = form; d.package_dimensions = defaultDimensions(form); }
+    update({ draft: d, brief: createEmptyBrief(), chat: [], schemes: [], design: null, report: null, activeId: null });
+    go('/wizard');
   };
 
   const useInspiration = (item: InspirationItem) => {
@@ -59,137 +43,85 @@ export default function Home() {
   };
 
   return <div className="home">
-    {/* ---------- 第一屏：品牌主视觉 ----------
-        整幅手绘场景铺满首屏，标题浮在左上的留白里，
-        文字与插画通过手写批注和箭头产生空间互动，而不是左右两栏。 */}
-    <section className="hero">
-      <div className="hero-stage">
-        <div className="hero-scene"><HeroScene /></div>
-        <div className="hero-annot hero-annot-1">一张纸就能开始</div>
-        <div className="hero-annot hero-annot-2">真的能印出来</div>
-      </div>
-      <div className="hero-copy">
+    {/* ---------------- 首屏：干净的品牌介绍 + 产品入口 ---------------- */}
+    <section className="hero hero-v3">
+      <div className="hero-left">
         <div className="hero-eyebrow">LUNASOL · AI PACKAGING DESIGN STUDIO</div>
-        <div className="hero-en en-hand">Make something your own.</div>
-        <h1>把想法，<br />变成包装。</h1>
-        <div className="hero-underline"><DoodleUnderline /></div>
-        <p className="hero-sub">告诉 AI 你想做什么，<br />创意、排版、刀模到可印刷文件，全程帮你完成。</p>
+        <h1>让包装设计，<br />变得简单。</h1>
+        <p className="hero-sub">没有设计经验也没关系。<br />从一个尺寸和一个想法开始，让 AI 帮你完成包装设计。</p>
         <div className="hero-actions">
-          <Button size="lg" onClick={() => start('box')}>开始创作 <span aria-hidden>↗</span></Button>
-          <Button size="lg" variant="outline" onClick={() => go('/inspiration')}>探索灵感</Button>
+          <Button size="lg" onClick={() => startWizard()}>开始设计 <span aria-hidden>→</span></Button>
+          <Button size="lg" variant="outline" onClick={() => go('/inspiration')}>探索设计灵感</Button>
+        </div>
+        <div className="hero-note">尺寸 · Logo · 风格 · 配色 · 文案 · 印刷文件，全程引导完成</div>
+      </div>
+      <div className="hero-right hero-right-v3">
+        <div className="hero-v3-frame">
+          <div className="hero-v3-frame-label">01 / PACKAGING PREVIEW</div>
+          <ProductMockup kind="box" palette={INSPIRATIONS[0].palette} brand="山隐茶集" sub="HIGHLAND OOLONG" />
         </div>
       </div>
     </section>
 
-    {/* ---------- 第二屏：我们是谁 ---------- */}
-    <section className="section section-pad">
-      <div className="whoare-grid">
-        <div className="whoare-text">
-          <SectionLabel en="WHO WE ARE">我们是谁？</SectionLabel>
-          <h2 className="display">好设计，<br />本来就不该有门槛。</h2>
-          <p>我们相信，每个人都可以把自己的想法变成一个真正的包装作品。你不需要会排版、不需要懂刀模、也不需要学 Photoshop——只要说出来，剩下的交给 LunaSol。</p>
-          <Button variant="outline" onClick={() => go('/create')}>开始你的第一份设计 <span aria-hidden>→</span></Button>
-        </div>
-        <div className="whoare-art">
-          <SceneIdeas />
-          <div className="whoare-tag">打开就有惊喜</div>
-        </div>
+    {/* ---------------- 创作入口 ---------------- */}
+    <section className="section section-pad" id="start">
+      <SectionLabel en="START WITH A SHAPE">从一种包装形态开始</SectionLabel>
+      <div className="section-head"><h2>选一个最接近的形态，<br />剩下的由系统逐步引导。</h2><p>不需要一次填完所有参数，每一步只问你一件事。</p></div>
+      <div className="quick-grid">
+        {QUICK_START.map((q, i) => <Card key={q.id} hover className="quick-card" onClick={() => startWizard(q.id as PackageForm)}>
+          <div className="quick-top"><span className="quick-index">0{i + 1} / {q.en}</span><span className="quick-arrow">→</span></div>
+          <div className="quick-visual"><ProductMockup kind={q.kind} palette={q.palette} brand="LunaSol" sub={q.en} /></div>
+          <h3>{q.title}</h3><p>{q.desc}</p>
+        </Card>)}
       </div>
     </section>
 
-    {/* ---------- 第三屏：你想做什么（真实包装作品） ---------- */}
-    <section className="section section-pad section-soft">
-      <div className="section-head">
-        <SectionLabel en="WHAT DO YOU WANT TO MAKE">你想做什么？</SectionLabel>
-        <h2 className="display">六种包装形态，<br />挑一个最近的就行。</h2>
-        <p>选错也没关系——创作过程中随时可以改尺寸、换结构。</p>
-      </div>
-      <div className="works-grid">
-        {WORKS.map((w, i) => (
-          <button key={w.brand} className={`work-card ${w.cls}`} onClick={() => start(['box', 'pouch', 'box', 'label'][i])}>
-            <div className="work-shot">
-              <ProductMockup kind={w.kind} palette={w.palette} brand={w.brand} sub={w.sub} />
-            </div>
-            <div className="work-cap"><strong>{w.label}</strong><span>{w.note}</span></div>
-            {i === 0 && <div className="work-handlabel work-handlabel-1">留白多一点</div>}
-            {i === 1 && <div className="work-handlabel work-handlabel-2">牛皮纸质感</div>}
-            {i === 3 && <div className="work-handlabel work-handlabel-1">一根丝带就够</div>}
-          </button>
-        ))}
-      </div>
-      <div className="section-head row" style={{ marginTop: 56 }}>
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          <DoodleBox className="quick-doodle" />
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>也可以上传现有包装照片，由 AI 反推结构与尺寸</span>
+    {/* ---------------- 流程说明 ---------------- */}
+    <section className="section section-flow">
+      <div className="flow-grid">
+        <div className="flow-left">
+          <SectionLabel en="HOW IT WORKS">十步完成一个包装</SectionLabel>
+          <h2>从尺寸到印刷文件，<br />一条清晰的路径。</h2>
+          <p>每一步只处理一个决定。可以随时返回修改，所有已填内容自动保存；不确定的地方，系统会给出推荐。</p>
+          <Button variant="outline" onClick={() => startWizard()}>进入创作流程 <span aria-hidden>→</span></Button>
         </div>
-        <Button variant="ghost" onClick={() => start('custom')}>自定义包装 <span aria-hidden>→</span></Button>
+        <div className="flow-steps">{WIZARD_STEPS.map((s, i) => <div className="flow-step" key={s.id}>
+          <span className="flow-num">{String(i + 1).padStart(2, '0')}</span><span className="flow-name">{s.short}</span><span className="flow-line" />
+        </div>)}</div>
       </div>
     </section>
 
-    {/* ---------- 第四屏：创作真的很简单 ---------- */}
-    <section className="section section-pad steps-section">
-      <div className="section-head">
-        <SectionLabel en="HOW IT WORKS">创作真的很简单</SectionLabel>
-        <h2 className="display">把复杂的事，交给 AI。</h2>
-        <p>你只负责说清楚想要什么，剩下的四步自动完成。</p>
-      </div>
-      <div className="steps-track">
-        {/* 贯穿四步的手绘连续路径 */}
-        <div className="steps-path" aria-hidden>
-          <svg viewBox="0 0 1200 90" preserveAspectRatio="none">
-            <path d="M40 58 C170 22 250 66 360 44 C470 22 540 62 660 40 C780 18 860 58 980 36 C1060 22 1120 44 1160 34"
-              fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-            <path d="M1128 22 L1160 34 L1136 52" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-          </svg>
-        </div>
-        <div className="steps-grid">
-          {STEPS.map((s) => {
-            const Art = s.art;
-            return <div className="step-card" key={s.n}>
-              <div className="step-art"><Art /></div>
-              <div className="step-num">{s.n}</div>
-              <h3>{s.t}</h3>
-              <p>{s.d}</p>
-            </div>;
-          })}
-        </div>
-      </div>
-    </section>
-
-    {/* ---------- 第五屏：设计灵感 ---------- */}
-    <section className="section section-pad section-soft">
-      <div className="section-head row">
-        <div>
-          <SectionLabel en="INSPIRATION">设计灵感</SectionLabel>
-          <h2 className="display">好的包装，<br />先有一个方向。</h2>
-        </div>
-        <Button variant="ghost" onClick={() => go('/inspiration')}>查看全部灵感 <span aria-hidden>→</span></Button>
-      </div>
+    {/* ---------------- 作品展示：彩色只留给包装本身 ---------------- */}
+    <section className="section section-pad" id="inspiration">
+      <div className="section-head row"><div><SectionLabel en="GALLERY">设计灵感</SectionLabel><h2>好的包装，先有一个方向。</h2></div>
+        <Button variant="ghost" onClick={() => go('/inspiration')}>查看全部灵感 <span aria-hidden>→</span></Button></div>
       <div className="chips">{CATEGORIES.map((c) => <button key={c} className={`chip ${cat === c ? 'active' : ''}`} onClick={() => setCat(c)}>{c}</button>)}</div>
-      <div className="magazine">
-        {list.slice(0, 4).map((item, i) => (
-          <button key={item.id} className={`mag-item mag-${['a', 'b', 'c', 'd'][i]}`} onClick={() => setActive(item)}>
-            <ProductMockup kind={item.kind} palette={item.palette} brand={item.brand} sub={item.sub} />
-            <div className="mag-cap"><strong>{item.brand}</strong><span>{item.category} · {item.style}</span></div>
-            {i === 0 && <div className="mag-hand mag-hand-1">深绿 + 米白</div>}
-            {i === 1 && <div className="mag-hand mag-hand-2">牛皮纸底</div>}
-            {i === 2 && <div className="mag-hand mag-hand-3">一个强视觉中心就够</div>}
-          </button>
-        ))}
+      <div className="gallery">
+        {list.slice(0, 6).map((item, i) => <button key={item.id} className={`gallery-item ${i === 0 ? 'gallery-big' : ''}`} onClick={() => setActive(item)}>
+          <ProductMockup kind={item.kind} palette={item.palette} brand={item.brand} sub={item.sub} />
+          <div className="gallery-meta"><span>{item.category} · {item.style}</span><strong>{item.brand}</strong></div>
+        </button>)}
       </div>
     </section>
 
-    {/* ---------- 第六屏：结束画面 ---------- */}
-    <section className="cta">
-      <div className="cta-text">
-        <span className="cta-kicker">START WITH A SENTENCE</span>
-        <h2 className="display">你的下一个创意，<br />从这里开始。</h2>
-        <div style={{ marginTop: 30, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-          <Button size="lg" onClick={() => { start('box'); addChat({ role: 'ai', text: '告诉我，你想做什么包装？', kind: 'question' }); }}>开始创作 <span aria-hidden>↗</span></Button>
-          <Button size="lg" variant="outline" onClick={() => go('/structures')}>看看包装结构</Button>
-        </div>
+    {/* ---------------- 能力说明 ---------------- */}
+    <section className="section section-pad section-soft">
+      <SectionLabel en="PROFESSIONAL OUTPUT">设计结果可以直接交付</SectionLabel>
+      <div className="section-head"><h2>可编辑的平面稿，<br />真实的结构与印刷文件。</h2><p>文字是独立图层，刀模按实际尺寸计算，导出前逐项检查。</p></div>
+      <div className="agent-grid">
+        {[
+          ['01', '可编辑图层', '品牌名、产品名、文案与条码各自独立，随时修改'],
+          ['02', '真实结构', '按成品尺寸生成刀模、折痕线与安全边距'],
+          ['03', '配色系统', '主色、辅助色、点缀色按比例应用并实时预览'],
+          ['04', '3D 预览', '把平面稿映射到真实结构模型查看实物效果'],
+          ['05', '印前检查', '尺寸、出血、DPI、色彩、字体与条码可读性'],
+          ['06', '文件输出', '毫米级 PDF / SVG / 高清 PNG / 刀模 DXF'],
+        ].map(([n, t, d]) => <div className="agent" key={n}><span>{n}</span><h4>{t}</h4><p>{d}</p></div>)}
       </div>
-      <div className="cta-art"><SceneRun /></div>
+    </section>
+
+    <section className="cta"><div><span className="cta-kicker">START NOW</span><h2>从一句话开始，<br />完成你的第一个包装。</h2></div>
+      <Button size="lg" onClick={() => startWizard()}>开始设计 <span aria-hidden>→</span></Button>
     </section>
 
     <Modal open={!!active} title={active ? `${active.brand} · 设计方向` : ''} onClose={() => setActive(null)} wide>
@@ -199,7 +131,7 @@ export default function Home() {
           <p className="inspire-desc">{active.desc}</p>
           <div className="kv"><span>品类</span><strong>{active.category}</strong></div>
           <div className="kv"><span>风格</span><strong>{active.style}</strong></div>
-          <div className="kv"><span>配色</span><strong className="swatches">{active.palette.bg && [active.palette.bg, active.palette.primary, active.palette.accent].map((c) => <i key={c} style={{ background: c }} />)}</strong></div>
+          <div className="kv"><span>配色</span><strong className="swatches">{[active.palette.bg, active.palette.primary, active.palette.accent].map((c) => <i key={c} style={{ background: c }} />)}</strong></div>
           <div className="kv"><span>结构</span><strong>{active.structure}</strong></div>
           <div className="kv"><span>关键词</span><strong>{active.keywords.join('、')}</strong></div>
           <div className="inspire-note">LunaSol 只提取风格、配色与构图逻辑，生成全新原创方案，不复制第三方品牌作品。</div>

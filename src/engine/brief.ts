@@ -157,7 +157,7 @@ export function parseUtterance(brief: DesignBrief, text: string): { brief: Desig
     if (!size && !brief.size.l) b.size = { ...QUICK_DEFAULTS[pack] };
   }
   const st = detectStructure(t, b.structure);
-  if (st !== b.structure) { b.structure = st; found.push(`结构：${{ tuck: '插舌盒', topBottom: '天地盖', drawer: '抽屉盒', pouch: '自立袋', labelRect: '矩形标签', labelRound: '圆形标签' }[st]}`); }
+  if (st !== b.structure) { b.structure = st; found.push(`结构：${{ tuck: '插舌盒', topBottom: '天地盖', drawer: '抽屉盒', mailer: '飞机盒', pouch: '自立袋', labelRect: '矩形标签', labelRound: '圆形标签' }[st]}`); }
   if (b.packType === 'label' && !/labelRect|labelRound/.test(b.structure)) b.structure = 'labelRect';
   if (b.packType === 'pouch' && b.structure !== 'pouch') b.structure = 'pouch';
 

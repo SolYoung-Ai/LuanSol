@@ -8,10 +8,10 @@ import { buildDieline, dielineStats, STRUCTURES, structureById } from '../engine
 import { mockupSvg } from '../engine/export';
 import type { StructureId } from '../types';
 import { downloadBlob, formatDate, svgToDataUrl } from '../engine/utils';
-import { DoodleStar, DoodleBox, DoodleOpenBox, DoodleFlower } from '../components/doodle';
 
 const SAMPLE: Record<StructureId, { l: number; w: number; h: number }> = {
   tuck: { l: 200, w: 150, h: 80 }, topBottom: { l: 200, w: 150, h: 80 }, drawer: { l: 200, w: 150, h: 80 },
+  mailer: { l: 240, w: 180, h: 60 },
   pouch: { l: 140, w: 60, h: 220 }, labelRect: { l: 90, w: 120, h: 0 }, labelRound: { l: 90, w: 90, h: 0 },
 };
 
@@ -31,7 +31,7 @@ export function Inspiration() {
     setItem(null); go('/create');
   };
   return <div className="page">
-    <PageHead kicker="INSPIRATION / 07" title="包装灵感库" desc="看一个方向，而不是抄一个作品。LunaSol 只提取风格、配色与构图逻辑。" doodle={<DoodleStar className="page-doodle-inline" />} />
+    <PageHead kicker="INSPIRATION / 07" title="包装灵感库" desc="看一个方向，而不是抄一个作品。LunaSol 只提取风格、配色与构图逻辑。" />
     <div className="chips">{CATEGORIES.map((c) => <button key={c} className={`chip ${cat === c ? 'active' : ''}`} onClick={() => setCat(c)}>{c}</button>)}</div>
     <div className="inspire-grid">{list.map((x) => <button className="inspire-card" key={x.id} onClick={() => setItem(x)}>
       <ProductMockup kind={x.kind} palette={x.palette} brand={x.brand} sub={x.sub} />
@@ -68,8 +68,7 @@ export function Structures() {
   };
   return <div className="page">
     <PageHead kicker="STRUCTURE LIBRARY / 08" title="包装结构库" desc="普通用户看实物效果与适用场景；有经验的用户可以查看结构参数与刀模。"
-      right={<Toggle checked={advanced} onChange={setAdvanced} label="显示结构参数" />}
-      doodle={<DoodleBox className="page-doodle-inline" />} />
+      right={<Toggle checked={advanced} onChange={setAdvanced} label="显示结构参数" />} />
     <div className="chips">{STRUCTURE_GROUPS.map((g) => <button key={g} className={`chip ${group === g ? 'active' : ''}`} onClick={() => setGroup(g)}>{g}</button>)}</div>
     <div className="structure-grid">{list.map((st) => {
       const d = buildDieline(st.id, SAMPLE[st.id]);
@@ -106,9 +105,8 @@ export function Projects() {
   const [confirm, setConfirm] = useState<string | null>(null);
   return <div className="page">
     <PageHead kicker="MY PROJECTS / 09" title="我的作品" desc={`项目保存在本机浏览器（${s.storage}），自动保存，可随时恢复历史版本。`}
-      right={<Button onClick={() => { newProject(); go('/create'); }}>＋ 新建项目</Button>}
-      doodle={<DoodleOpenBox className="page-doodle-inline" />} />
-    {s.projects.length === 0 ? <Empty title="还没有作品" desc="从一句话开始，创建你的第一个包装项目。" action={<Button onClick={() => { newProject(); go('/create'); }}>开始创作</Button>} /> :
+      right={<Button onClick={() => { newProject(); go('/wizard'); }}>＋ 新建项目</Button>} />
+    {s.projects.length === 0 ? <Empty title="还没有作品" desc="用十步向导整理尺寸、风格与文案，创建你的第一个包装项目。" action={<Button onClick={() => { newProject(); go('/wizard'); }}>开始十步设计</Button>} /> :
       <div className="project-grid">{s.projects.map((p) => <Card key={p.id} className="project-card">
         <button className="project-thumb" onClick={() => { loadProject(p.id); go('/project/' + p.id); }}>
           {p.design?.faces.front ? <DesignView face={p.design.faces.front} /> : <div className="project-blank">LunaSol</div>}
@@ -148,8 +146,7 @@ export function ProjectDetail() {
   return <div className="page page-narrow">
     <PageHead kicker="PROJECT / 10" title={p.name} desc={`创建于 ${formatDate(p.createdAt)} · 最后修改 ${formatDate(p.updatedAt)}`}
       right={<div className="head-actions"><Button variant="outline" onClick={() => { loadProject(p.id); go(p.design ? '/editor' : '/create'); }}>继续编辑</Button>
-        <Button onClick={() => { loadProject(p.id); go('/export'); }}>导出文件 <span aria-hidden>→</span></Button></div>}
-      doodle={<DoodleFlower className="page-doodle-inline" />} />
+        <Button onClick={() => { loadProject(p.id); go('/export'); }}>导出文件 <span aria-hidden>→</span></Button></div>} />
     <div className="detail-grid">
       <Card className="pad-card"><div className="project-hero">{p.design?.faces.front ? <DesignView face={p.design.faces.front} /> : <div className="project-blank">LunaSol</div>}</div></Card>
       <Card className="pad-card"><SectionLabel en="PROJECT DATA">项目信息</SectionLabel>

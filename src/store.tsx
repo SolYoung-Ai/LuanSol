@@ -6,6 +6,7 @@ import { buildDieline } from './engine/structure';
 import { DEFAULT_AI } from './engine/llm';
 import { cloneDesign } from './engine/design';
 import { uid } from './engine/utils';
+import { createEmptyDraft, normalizeDraft, type ProjectDraft } from './v3/draft';
 
 const DB_NAME = 'lunasol-studio';
 const STORE = 'state';
@@ -59,11 +60,14 @@ interface Persisted {
   settings: UserSettings;
   ai: AISettings;
   storage: string;
+  /** V3 十步向导的统一项目数据（旧数据没有此字段，载入时兜底） */
+  draft: ProjectDraft;
 }
 
 const initial = (): Persisted => ({
   projects: [], activeId: null, brief: createEmptyBrief(), chat: [], schemes: [], design: null,
   report: null, settings: { ...DEFAULT_SETTINGS }, ai: { ...DEFAULT_AI }, storage: '—',
+  draft: createEmptyDraft(),
 });
 
 interface AppCtx {
@@ -73,6 +77,8 @@ interface AppCtx {
   setToast: (t: string | null) => void;
   update: (p: Partial<Persisted>) => void;
   patchBrief: (p: Partial<DesignBrief>) => void;
+  /** 局部更新 V3 十步向导数据（自动保存、返回上一步不丢数据） */
+  patchDraft: (p: Partial<ProjectDraft> | ((d: ProjectDraft) => Partial<ProjectDraft>)) => void;
   addChat: (m: Omit<ChatMessage, 'id' | 'at'>) => void;
   clearChat: () => void;
   refreshDieline: () => Dieline;
@@ -97,7 +103,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     idbLoad().then((v) => {
-      if (v && typeof v === 'object') setS((prev) => ({ ...prev, ...(v as Partial<Persisted>), settings: { ...DEFAULT_SETTINGS, ...(v as Persisted).settings }, ai: { ...DEFAULT_AI, ...(v as Persisted).ai } }));
+      if (v && typeof v === 'object') setS((prev) => ({
+        ...prev, ...(v as Partial<Persisted>),
+        settings: { ...DEFAULT_SETTINGS, ...(v as Persisted).settings },
+        ai: { ...DEFAULT_AI, ...(v as Persisted).ai },
+        draft: normalizeDraft((v as Persisted).draft),
+      }));
       setReady(true);
     });
   }, []);
@@ -115,6 +126,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const update = useCallback((p: Partial<Persisted>) => setS((prev) => ({ ...prev, ...p })), []);
   const patchBrief = useCallback((p: Partial<DesignBrief>) => setS((prev) => ({ ...prev, brief: { ...prev.brief, ...p } })), []);
+  const patchDraft = useCallback((p: Partial<ProjectDraft> | ((d: ProjectDraft) => Partial<ProjectDraft>)) => setS((prev) => {
+    const next = typeof p === 'function' ? p(prev.draft) : p;
+    return { ...prev, draft: normalizeDraft({ ...prev.draft, ...next, savedAt: Date.now() }) };
+  }), []);
   const addChat = useCallback((m: Omit<ChatMessage, 'id' | 'at'>) => setS((prev) => ({ ...prev, chat: [...prev.chat, { ...m, id: uid('msg'), at: Date.now() }] })), []);
   const clearChat = useCallback(() => setS((prev) => ({ ...prev, chat: [] })), []);
 
@@ -171,6 +186,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const newProject = useCallback(() => setS((prev) => ({
     ...prev, activeId: null, brief: createEmptyBrief(), chat: [], schemes: [], design: null, report: null,
+    draft: createEmptyDraft(),
   })), []);
 
   const addVersion = useCallback((label: string) => setS((prev) => {
@@ -190,7 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }), []);
 
   const value: AppCtx = {
-    s, dieline, toast, setToast, update, patchBrief, addChat, clearChat, refreshDieline,
+    s, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
     saveProject, syncProject, loadProject, deleteProject, duplicateProject, newProject, addVersion, restoreVersion,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

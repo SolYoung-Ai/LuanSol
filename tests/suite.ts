@@ -7,6 +7,10 @@ import { applyPatch, localIntent } from '../src/engine/modify';
 import { autoFix, runPrepress } from '../src/engine/prepress';
 import { buildBundle, buildDxf, buildPdf, spreadSvg, svgToCanvas, verifyPdf } from '../src/engine/export';
 import type { DesignBrief, DesignDoc, StructureId, TextLayer } from '../src/types';
+import { STYLES, TRADITION_COUNT, styleById, buildStylePrompt } from '../src/v3/styles';
+import { createEmptyDraft, draftToBrief } from '../src/v3/draft';
+import { generatePalettes } from '../src/v3/colors';
+import { validateBarcode, encodeBarcode, decodeEan, verifyBarcode } from '../src/v3/barcode';
 
 export interface Result { name: string; ok: boolean; detail: string }
 const A = (cond: unknown, msg: string) => { if (!cond) throw new Error(msg); };
@@ -166,6 +170,94 @@ export async function runTests(): Promise<Result[]> {
     const fixed = autoFix(design, dieline);
     A(fixed.design.faces.front!.layers.length === design.faces.front!.layers.length, '自动修复误删图层');
     return `${r.items.length} 项检查 / 状态 ${r.status} / ${r.summary}`;
+  });
+
+  /* ==================== V3 十步向导 / 风格库 / 配色 / 条码 回归 ==================== */
+  await t('V3 风格库 · 14 组传统艺术风格且每个风格配置完整', () => {
+    A(TRADITION_COUNT === 14, `传统艺术风格组数为 ${TRADITION_COUNT}，应为 14`);
+    const trad = STYLES.filter((s) => s.group === 'tradition');
+    A(trad.length >= 14, `传统风格可选项只有 ${trad.length} 个`);
+    for (const s of STYLES) {
+      const missing = (['style_id', 'style_name', 'description', 'visual_features', 'dominant_colors',
+        'supporting_colors', 'pattern_elements', 'illustration_guidance', 'typography_guidance',
+        'composition_guidance', 'suitable_categories', 'reference_thumbnail', 'ai_prompt_template', 'shapes'] as const)
+        .filter((k) => { const v = s[k]; return !v || (Array.isArray(v) && !v.length); });
+      A(!missing.length, `${s.style_id} 缺少字段：${missing.join(',')}`);
+      A(s.reference_thumbnail.startsWith('data:image/svg+xml'), `${s.style_id} 缩略图不是独立 SVG`);
+      A(s.shapes.length > 0, `${s.style_id} 没有可执行纹样配置`);
+    }
+    const ids = new Set(STYLES.map((s) => s.style_id));
+    A(ids.size === STYLES.length, 'style_id 存在重复');
+    const thumbs = new Set(STYLES.map((s) => s.reference_thumbnail));
+    A(thumbs.size === STYLES.length, '不同风格复用了同一张缩略图');
+    const shapeSigs = new Set(trad.map((s) => JSON.stringify(s.shapes.map((x) => x.shape))));
+    A(shapeSigs.size >= 10, `传统风格纹样配置过于雷同：只有 ${shapeSigs.size} 种组合`);
+    return `${STYLES.length} 个风格 / ${trad.length} 个传统选项 / ${TRADITION_COUNT} 组 / ${shapeSigs.size} 种纹样组合`;
+  });
+
+  await t('V3 风格提示词 · 展开完整配置而非只拼风格名', () => {
+    const cfg = styleById('yuan-blue')!;
+    const p = buildStylePrompt(cfg, { product: '高山乌龙茶', brand: '山隐茶集', audience: '年轻潮流人群', form: '包装盒', primary: '#2b4c7e', motif: '缠枝莲纹' });
+    A(p.length > 300, `提示词过短：${p.length} 字`);
+    A(p.includes(cfg.illustration_guidance.slice(0, 8)), '未包含插画规则');
+    A(p.includes(cfg.typography_guidance.slice(0, 8)), '未包含字体规则');
+    A(p.includes(cfg.composition_guidance.slice(0, 8)), '未包含构图规则');
+    A(p.includes('元代'), '未包含时代约束');
+    return `${p.length} 字，含插画 / 字体 / 构图 / 时代约束`;
+  });
+
+  await t('V3 项目数据 · 第 09 步产品名称不被品类覆盖', () => {
+    const d = createEmptyDraft();
+    d.product_category.type = '茶叶';
+    d.copy_content.productName = '高山乌龙茶';
+    const b = draftToBrief(d, '元青花');
+    A(b.product === '高山乌龙茶', `产品名被改写为「${b.product}」`);
+    A(b.category !== '高山乌龙茶', '品类与产品名混淆');
+    return `product=${b.product} / category=${b.category}`;
+  });
+
+  await t('V3 不需要插画 · 不向设计引擎传入任何装饰图案', () => {
+    const d = createEmptyDraft();
+    d.illustration_type = 'none';
+    d.illustration_description = '不应出现';
+    const b = draftToBrief(d, '元青花');
+    A(b.motif === '', `仍传入了 motif：${b.motif}`);
+    const cfg = styleById('yuan-blue')!;
+    const none = buildSchemes(b, cfg);
+    const decorOf = (doc: DesignDoc) => Object.values(doc.faces).flatMap((f) => (f?.layers || [])
+      .filter((l) => l.type === 'shape' && l.name.includes(cfg.style_name)));
+    A(decorOf(none[0]).length === 0 && decorOf(none[1]).length === 0, '「不需要插画」仍生成了风格装饰图层');
+    const withLine = { ...b, motif: '缠枝莲纹' };
+    A(decorOf(buildSchemes(withLine, cfg)[1]).length > 0, '选择线稿后反而没有生成对应纹样');
+    return '无插画 0 个装饰层 / 有线稿时纹样层存在';
+  });
+
+  await t('V3 配色 · 4–6 套方案且不同风格使用不同配色逻辑', () => {
+    const heritage = generatePalettes({ primary: '#2b4c7e', style: styleById('yuan-blue'), category: '茶叶' });
+    const mono = generatePalettes({ primary: '#e8e3d6', style: styleById('song-glaze'), category: '茶叶' });
+    A(heritage.length >= 4 && heritage.length <= 6, `传统配色方案数量异常：${heritage.length}`);
+    A(mono.length >= 4 && mono.length <= 6, `单色釉配色方案数量异常：${mono.length}`);
+    A(new Set(heritage.map((p) => p.id)).size === heritage.length, '配色方案 id 重复');
+    for (const p of heritage) A(p.ratio.length === 4 && p.ratio.reduce((a, b) => a + b, 0) === 100, `${p.name} 比例不合计 100`);
+    const h1 = heritage[0].primary.toLowerCase(), m1 = mono[0].primary.toLowerCase();
+    A(h1 !== m1, '不同风格配色逻辑产出完全相同的主色');
+    return `heritage=${heritage.length} / monochrome=${mono.length}`;
+  });
+
+  await t('V3 条码 · EAN-13 / UPC-A 校验位与反向解码', () => {
+    A(validateBarcode('EAN-13', '6901234567892').ok, '合法 EAN-13 被拒绝');
+    A(!validateBarcode('EAN-13', '6901234567893').ok, '错误校验位被接受');
+    A(!validateBarcode('EAN-13', '690123').ok, '位数不足被接受');
+    A(validateBarcode('UPC-A', '036000291452').ok, '合法 UPC-A 被拒绝');
+    A(!validateBarcode('UPC-A', '036000291453').ok, '错误 UPC-A 校验位被接受');
+    A(validateBarcode('Code 128', 'SKU-2026-001').ok, '合法内部 SKU 被拒绝');
+    const e = encodeBarcode('EAN-13', '6901234567892');
+    A(e.ok && e.modules.length > 50, 'EAN-13 编码失败');
+    A(verifyBarcode(e).ok, `条码自检失败：${verifyBarcode(e).message}`);
+    const dec = decodeEan(e.modules);
+    A(dec.ok && dec.value === '6901234567892', `反向解码不一致：${dec.value} / ${dec.message}`);
+    A(e.quietMm > 0 && e.widthMm >= e.minWidthMm && Math.abs(e.widthMm - 37.29) < 0.01, '静区或 EAN-13 标准宽度异常');
+    return `${e.modules.length} 模块 / ${e.widthMm.toFixed(1)} mm / 静区 ${e.quietMm.toFixed(1)} mm`;
   });
 
   if (inBrowser) {

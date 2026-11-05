@@ -1,11 +1,14 @@
 /* LunaSol 核心数据模型 —— 所有智能体共享同一份项目数据 */
 
 export type SchemeId = 'minimal' | 'illustration' | 'commercial';
-export type StructureId = 'tuck' | 'topBottom' | 'drawer' | 'pouch' | 'labelRect' | 'labelRound';
+export type StructureId = 'tuck' | 'topBottom' | 'drawer' | 'mailer' | 'pouch' | 'labelRect' | 'labelRound';
 export type FaceId = 'front' | 'back' | 'left' | 'right' | 'top';
 export type ShapeKind =
   | 'rect' | 'circle' | 'line' | 'mountain' | 'wave' | 'sun' | 'arch'
-  | 'grid' | 'botanical' | 'dots' | 'stripes' | 'blob' | 'seal';
+  | 'grid' | 'botanical' | 'dots' | 'stripes' | 'blob' | 'seal'
+  /* 中国传统艺术风格专用纹样（各自有独立的绘制语法） */
+  | 'spiral' | 'concentric' | 'cloud' | 'lotus' | 'taotie' | 'fish' | 'woodgrain' | 'glaze' | 'blueband'
+  | 'barcode';
 export type TextRole = 'brand' | 'product' | 'tagline' | 'info' | 'legal' | 'custom';
 
 export interface Palette {
@@ -48,6 +51,8 @@ export interface ShapeLayer extends BaseLayer {
   strokeWidth: number;
   seed: number;
   rx?: number;
+  /** barcode 图层：独立矢量条码，type/value 用于真实编码 */
+  barcode?: { type: string; value: string };
 }
 
 export interface ImageLayer extends BaseLayer {

@@ -4,6 +4,8 @@
  * 严禁把整张生成图当作最终印刷稿：所有文字与图形都是独立图层。 */
 import type { DesignBrief, DesignDoc, Face, FaceId, ImageLayer, Layer, Palette, SchemeId, ShapeKind, ShapeLayer, TextLayer, TextRole } from '../types';
 import { STYLE_PRESETS } from './brief';
+import type { StyleConfig } from '../v3/styles';
+import { encodeBarcode } from '../v3/barcode';
 import { faceSizes } from './structure';
 import { clamp, escapeXml, ptToMm, readableOn, round, seeded, uid, wrapText } from './utils';
 
@@ -128,6 +130,137 @@ export function shapePrims(l: ShapeLayer): Prim[] {
       out.push({ k: 'rect', x: w * 0.1, y: h * 0.1, w: w * 0.8, h: h * 0.8, fill: 'none', opacity: 0.7 * l.opacity });
       break;
     }
+    /* ---------- 传统风格纹样：每种有独立的绘制语法，不做跨时代混搭 ---------- */
+    case 'spiral': { // 马家窑：旋涡纹 + 水波纹连续环绕
+      for (let s = 0; s < 3; s++) {
+        const cx = w * (0.2 + s * 0.3), cy = h * (0.36 + (s % 2) * 0.26);
+        const pts: [number, number][] = [];
+        for (let i = 0; i <= 54; i++) {
+          const t = i / 54, a = t * Math.PI * 4.2 + s, r = Math.min(w, h) * 0.055 * (1 - t * 0.86);
+          pts.push([cx + Math.cos(a) * r * (1 + t), cy + Math.sin(a) * r * (1 + t)]);
+        }
+        out.push({ k: 'poly', pts, stroke: f, strokeWidth: sw * 1.2, opacity: 0.8 * l.opacity });
+      }
+      for (let i = 0; i < 3; i++) {
+        const pts: [number, number][] = [];
+        for (let x = 0; x <= w; x += Math.max(2, w / 30)) pts.push([x, h * (0.76 + i * 0.09) + Math.sin(x / w * Math.PI * 5 + i) * h * 0.025]);
+        out.push({ k: 'poly', pts, stroke: f, strokeWidth: sw * 0.8, opacity: 0.45 * l.opacity });
+      }
+      break;
+    }
+    case 'concentric': { // 同心圆
+      const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.47;
+      for (let k = 1; k <= 5; k++) {
+        const r = R * k / 5, pts: [number, number][] = [];
+        for (let i = 0; i <= 40; i++) { const a = Math.PI * 2 * i / 40; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+        out.push({ k: 'poly', pts, stroke: f, strokeWidth: sw * (k === 5 ? 1.4 : 0.75), opacity: (0.35 + k * 0.1) * l.opacity, close: true });
+      }
+      circle(cx, cy, R * 0.13, 0.8 * l.opacity);
+      break;
+    }
+    case 'cloud': { // 汉云气纹：云头回卷 + 长尾舒展
+      for (let s = 0; s < 3; s++) {
+        const oy = h * (0.22 + s * 0.28), dir = s % 2 ? -1 : 1;
+        const pts: [number, number][] = [];
+        for (let i = 0; i <= 46; i++) {
+          const t = i / 46, a = t * Math.PI * 2.4;
+          const r = Math.min(w, h) * 0.075 * (1 - t * 0.7);
+          pts.push([w * (0.22 + s * 0.1) + dir * Math.cos(a) * r, oy + Math.sin(a) * r]);
+        }
+        for (let i = 0; i <= 20; i++) pts.push([w * (0.22 + s * 0.1) + dir * w * 0.02 + i * w * 0.032, oy + Math.sin(i * 0.36) * h * 0.035]);
+        out.push({ k: 'poly', pts, stroke: f, strokeWidth: sw * 1.3, opacity: 0.72 * l.opacity });
+      }
+      break;
+    }
+    case 'lotus': { // 北朝石窟：莲瓣层叠、忍冬连续边饰
+      const cx = w / 2, cy = h * 0.72;
+      for (let i = -3; i <= 3; i++) {
+        const a = -Math.PI / 2 + i * 0.34, r1 = Math.min(w, h) * 0.18, r2 = Math.min(w, h) * 0.52;
+        const px = cx + Math.cos(a), py = cy + Math.sin(a) * 0.62;
+        out.push({ k: 'poly', pts: [
+          [cx, cy], [cx + px * r1 * 0.6 - w * 0.045, cy - r1 * 0.42],
+          [cx + px * r2 - w * 0.02, cy - r2 * 0.62], [cx + px * r2 + w * 0.02, cy - r2 * 0.62],
+          [cx + px * r1 * 0.6 + w * 0.045, cy - r1 * 0.42],
+        ], stroke: f, strokeWidth: sw, fill: f, opacity: (0.16 + (3 - Math.abs(i)) * 0.06) * l.opacity, close: true });
+      }
+      for (let x = 0; x < w; x += Math.max(8, w / 12)) {
+        out.push({ k: 'poly', pts: [[x, h * 0.94], [x + w * 0.025, h * 0.89], [x + w * 0.05, h * 0.94]], stroke: f, strokeWidth: sw * 0.8, opacity: 0.5 * l.opacity });
+      }
+      break;
+    }
+    case 'taotie': { // 商周青铜：兽面左右对称 + 云雷纹填底
+      for (let gx = 0; gx < w; gx += Math.max(8, w / 9)) {
+        for (let gy = 0; gy < h; gy += Math.max(8, h / 8)) {
+          out.push({ k: 'poly', pts: [[gx, gy + h * 0.035], [gx, gy], [gx + w * 0.035, gy], [gx + w * 0.035, gy + h * 0.02], [gx + w * 0.018, gy + h * 0.02]], stroke: f, strokeWidth: sw * 0.42, opacity: 0.28 * l.opacity });
+        }
+      }
+      for (const side of [-1, 1]) {
+        const ex = w / 2 + side * w * 0.17;
+        out.push({ k: 'rect', x: ex - w * 0.075, y: h * 0.38, w: w * 0.15, h: h * 0.11, fill: f, opacity: 0.82 * l.opacity, rx: h * 0.045 });
+        out.push({ k: 'poly', pts: [[w / 2, h * 0.3], [ex + side * w * 0.16, h * 0.16], [ex + side * w * 0.2, h * 0.34]], stroke: f, strokeWidth: sw * 2, opacity: 0.8 * l.opacity });
+        out.push({ k: 'poly', pts: [[ex, h * 0.52], [ex + side * w * 0.09, h * 0.66], [ex, h * 0.72]], stroke: f, strokeWidth: sw * 1.6, opacity: 0.7 * l.opacity });
+      }
+      break;
+    }
+    case 'fish': { // 仰韶彩陶：概括的几何鱼纹 + 分区带
+      for (let i = 0; i < 2; i++) {
+        const cy = h * (0.38 + i * 0.32), cx = w * (0.36 + i * 0.28);
+        out.push({ k: 'poly', pts: [[cx - w * 0.2, cy], [cx + w * 0.11, cy - h * 0.09], [cx + w * 0.22, cy], [cx + w * 0.11, cy + h * 0.09]], fill: f, opacity: 0.78 * l.opacity, close: true });
+        out.push({ k: 'poly', pts: [[cx + w * 0.22, cy], [cx + w * 0.31, cy - h * 0.1], [cx + w * 0.31, cy + h * 0.1]], fill: f, opacity: 0.78 * l.opacity, close: true });
+        circle(cx - w * 0.09, cy - h * 0.012, Math.min(w, h) * 0.018, 0.9 * l.opacity);
+      }
+      line(0, h * 0.1, w, h * 0.1, 0.6); line(0, h * 0.9, w, h * 0.9, 0.6);
+      break;
+    }
+    case 'woodgrain': { // 明式家具：靠比例与简练线脚，木纹只是细线
+      for (let i = 0; i < 13; i++) {
+        const x = (i + 0.5) * w / 13, pts: [number, number][] = [];
+        for (let y = 0; y <= h; y += Math.max(2, h / 22)) pts.push([x + Math.sin(y / h * 7 + i) * w * 0.012, y]);
+        out.push({ k: 'poly', pts, stroke: f, strokeWidth: sw * 0.5, opacity: (0.12 + (i % 3) * 0.07) * l.opacity });
+      }
+      line(w * 0.06, h * 0.06, w * 0.94, h * 0.06, 0.55);
+      line(w * 0.06, h * 0.94, w * 0.94, h * 0.94, 0.55);
+      break;
+    }
+    case 'glaze': { // 宋代单色釉：不添加纹样，只有单色与极轻的釉面色差
+      out.push({ k: 'rect', x: 0, y: 0, w, h, fill: f, opacity: 0.12 * l.opacity });
+      out.push({ k: 'rect', x: w * 0.08, y: h * 0.1, w: w * 0.84, h: h * 0.68, fill: f, opacity: 0.08 * l.opacity, rx: Math.min(w, h) * 0.3 });
+      break;
+    }
+    case 'barcode': { // 独立矢量条码：白底 + 静区 + 逐条 rect，导出 PDF/SVG 仍为矢量
+      const bc = l.barcode;
+      if (!bc) break;
+      const r = encodeBarcode(bc.type as never, bc.value);
+      if (!r.ok || !r.modules.length) break;
+      out.push({ k: 'rect', x: 0, y: 0, w, h, fill: '#ffffff', opacity: l.opacity });
+      const mw = w / (r.modules.length + 16);
+      let i = 0;
+      while (i < r.modules.length) {
+        if (!r.modules[i]) { i++; continue; }
+        let j = i;
+        while (j < r.modules.length && r.modules[j]) j++;
+        out.push({ k: 'rect', x: 8 * mw + i * mw, y: h * 0.08, w: (j - i) * mw, h: h * 0.74, fill: '#111111', opacity: l.opacity });
+        i = j;
+      }
+      break;
+    }
+    case 'blueband': { // 元青花：主体纹 + 多道边饰分层环绕
+      const bands = [0.06, 0.14, 0.78, 0.9];
+      for (const b of bands) line(0, h * b, w, h * b, 0.72);
+      for (let x = w * 0.06; x < w * 0.94; x += Math.max(7, w / 16)) {
+        out.push({ k: 'poly', pts: [[x, h * 0.135], [x + w * 0.018, h * 0.095], [x + w * 0.036, h * 0.135]], stroke: f, strokeWidth: sw * 0.8, opacity: 0.6 * l.opacity });
+      }
+      const cx = w / 2, cy = h * 0.46, R = Math.min(w, h) * 0.2;
+      for (let p = 0; p < 8; p++) {
+        const a = Math.PI * 2 * p / 8;
+        out.push({ k: 'poly', pts: [
+          [cx + Math.cos(a) * R * 0.35, cy + Math.sin(a) * R * 0.35],
+          [cx + Math.cos(a + 0.25) * R, cy + Math.sin(a + 0.25) * R],
+          [cx + Math.cos(a - 0.25) * R, cy + Math.sin(a - 0.25) * R],
+        ], fill: f, opacity: 0.42 * l.opacity, close: true });
+      }
+      break;
+    }
   }
   return out;
 }
@@ -250,7 +383,20 @@ function pickPalette(b: DesignBrief, scheme: SchemeId): Palette {
 }
 
 interface FaceSpec { w: number; h: number }
-function buildFace(id: FaceId, spec: FaceSpec, b: DesignBrief, p: Palette, scheme: SchemeId): Face {
+
+/** 把风格配置展开为真正会画出来的独立矢量图层（不是只写进提示词） */
+function styleDecor(cfg: StyleConfig | undefined, w: number, h: number, p: Palette, strength: number): ShapeLayer[] {
+  if (!cfg || !cfg.shapes.length) return [];
+  const colorOf = (k: 'primary' | 'accent' | 'ink' | 'bg') =>
+    k === 'primary' ? p.primary : k === 'accent' ? p.accent : k === 'ink' ? p.ink : p.bg;
+  return cfg.shapes.map((sp, i) => makeShape(
+    `${cfg.style_name} · ${sp.shape}`, sp.shape,
+    { x: w * sp.box[0], y: h * sp.box[1], w: w * sp.box[2], h: h * sp.box[3] },
+    { fill: colorOf(sp.fill), stroke: colorOf(sp.fill), strokeWidth: sp.strokeWidth ?? 0.6, opacity: sp.opacity * strength, seed: 811 + i * 29 },
+  ));
+}
+
+function buildFace(id: FaceId, spec: FaceSpec, b: DesignBrief, p: Palette, scheme: SchemeId, cfg?: StyleConfig): Face {
   const { w, h } = spec;
   const m = Math.min(8, Math.max(3, Math.min(w, h) * 0.06));
   const innerW = Math.max(10, w - m * 2);
@@ -303,6 +449,15 @@ function buildFace(id: FaceId, spec: FaceSpec, b: DesignBrief, p: Palette, schem
       layers.push(makeText('规格', infos[0].text, 'info', { x: m, y: h * 0.86, w: innerW, h: h * 0.08 }, { fontSize: 7.5, color: p.muted, placeholder: infos[0].placeholder }));
     } else layers.push(...buildInfoFace(spec, b, p, font, S, texts));
   }
+  /* 风格纹样置于所有文字图层之下。
+     用户选择「不需要插画」时 draftToBrief 会把 motif 置空，此时不添加任何装饰。 */
+  if (cfg && b.motif && (id === 'front' || id === 'top' || isSmall)) {
+    const strength = scheme === 'illustration' ? 1 : scheme === 'commercial' ? 0.7 : 0.55;
+    const base = scheme === 'illustration'
+      ? layers.filter((l) => !(l.type === 'shape' && (l.name === '主插画' || l.name === '点缀')))
+      : layers;
+    return { id, w, h, bg: p.bg, layers: [...styleDecor(cfg, w, h, p, strength), ...base] };
+  }
   return { id, w, h, bg: p.bg, layers };
 }
 
@@ -323,21 +478,24 @@ function buildInfoFace(spec: FaceSpec, b: DesignBrief, p: Palette, font: string,
   return out;
 }
 
-export function buildSchemes(b: DesignBrief): DesignDoc[] {
+export function buildSchemes(b: DesignBrief, cfg?: StyleConfig): DesignDoc[] {
   const sizes = faceSizes(b.structure, b.size);
   const schemes: SchemeId[] = ['minimal', 'illustration', 'commercial'];
   return schemes.map((scheme) => {
     const palette = pickPalette(b, scheme);
     const faces: Partial<Record<FaceId, Face>> = {};
     for (const [id, spec] of Object.entries(sizes) as [FaceId, FaceSpec][]) {
-      faces[id] = buildFace(id, spec, b, palette, scheme);
+      faces[id] = buildFace(id, spec, b, palette, scheme, cfg);
     }
     const structureNote = b.structure === 'labelRect' || b.structure === 'labelRound' ? '标签结构' : b.structure === 'pouch' ? '自立袋结构' : '折叠纸盒结构';
+    const styleNote = cfg
+      ? `已读取「${cfg.style_name}」完整风格配置：${cfg.pattern_elements.join('、')}；执行规则 ${cfg.illustration_guidance}${cfg.group === 'tradition' ? ` 时代约束：仅使用 ${cfg.era} 的视觉语法，不混用其它时期纹样（视觉设计参考，非文物复原）。` : ''}`
+      : `视觉元素采用「${b.motif || b.style || '推荐'}」方向。`;
     return {
       id: uid('design'), name: `${b.brand || 'LunaSol'} · ${SCHEME_META[scheme].title}`,
       scheme, palette, faces, createdAt: Date.now(),
       rationale: `${SCHEME_META[scheme].desc} 依据「${b.style || '现代极简'}」风格、${b.colors.length ? b.colors.join(' / ') : '推荐配色'} 与 ${structureNote} 生成。${
-        b.motif ? `视觉元素采用「${b.motif}」方向的原创矢量插画。` : ''} 所有文字均为独立可编辑图层，未使用整张图片充当设计稿。`,
+        b.motif ? styleNote : '用户选择不需要图案，仅使用纯色、排版与材质，未擅自添加装饰。'} 所有文字均为独立可编辑图层，未使用整张图片充当设计稿。`,
     };
   });
 }

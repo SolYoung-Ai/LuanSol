@@ -10,6 +10,7 @@ export const STRUCTURES: StructureInfo[] = [
   { id: 'tuck', name: '常规插舌盒', group: '盒类', desc: '一体成型、上下插舌，最常见的折叠纸盒。', use: '茶叶、零食、轻食、小型礼品', difficulty: 1, first: true },
   { id: 'topBottom', name: '天地盖盒', group: '盒类', desc: '上下两片套合，开合有仪式感，硬挺度高。', use: '高端茶礼、礼盒、文创、美妆套盒', difficulty: 2, first: true },
   { id: 'drawer', name: '抽屉盒', group: '盒类', desc: '外套 + 内盒抽拉结构，层次丰富。', use: '茶礼、首饰、香氛、限定礼盒', difficulty: 3, first: true },
+  { id: 'mailer', name: '飞机盒', group: '盒类', desc: '一体折叠、侧翼包覆，运输保护性好、组装快。', use: '电商快递、服装、文创、订阅礼盒', difficulty: 2, first: true },
   { id: 'pouch', name: '自立袋', group: '袋类', desc: '正面 + 背面 + 底部折角，带顶部封口边。', use: '咖啡豆、零食、茶叶、谷物', difficulty: 2, first: true },
   { id: 'labelRect', name: '矩形标签', group: '标签类', desc: '直角或圆角矩形贴标，适配瓶身与袋体。', use: '瓶贴、食品标签、护肤品标签', difficulty: 1, first: true },
   { id: 'labelRound', name: '圆形标签', group: '标签类', desc: '圆形模切贴标，适合封口贴与瓶盖贴。', use: '封口贴、罐贴、手作品牌', difficulty: 1, first: true },
@@ -165,6 +166,24 @@ function trayNet(l: number, w: number, wall: number, prefix: string, topFace?: F
   return r.map((p) => ({ ...p, x: p.x - minX }));
 }
 
+/** 飞机盒：一体折叠，顶盖 + 侧翼 + 前后墙 + 底面。侧翼长度由用户确认。 */
+function mailerNet(l: number, w: number, h: number, flap: number): PanelRect[] {
+  const t = round(Math.max(10, Math.min(flap, w * 0.6)), 2);
+  const x = h;
+  const yTop = t, yRear = t + w, yBottom = yRear + h, yFront = yBottom + w;
+  return [
+    { x, y: 0, w: l, h: t, label: '前插舌' },
+    { x, y: yTop, w: l, h: w, face: 'top', label: '顶盖', artwork: true },
+    { x, y: yRear, w: l, h, face: 'back', label: '后墙', artwork: true },
+    { x, y: yBottom, w: l, h: w, label: '底面' },
+    { x, y: yFront, w: l, h, face: 'front', label: '前墙', artwork: true },
+    { x: 0, y: yTop, w: h, h: w, face: 'left', label: '左侧翼', artwork: true },
+    { x: h + l, y: yTop, w: h, h: w, face: 'right', label: '右侧翼', artwork: true },
+    { x: 0, y: yBottom, w: h, h: w, label: '左侧墙' },
+    { x: h + l, y: yBottom, w: h, h: w, label: '右侧墙' },
+  ];
+}
+
 function sleeveNet(l: number, w: number, h: number): PanelRect[] {
   const g = 10;
   return [
@@ -198,6 +217,9 @@ export function buildDieline(
       assemble('dw-tray', '内盒展开图', trayNet(l - 3, w - 3, Math.max(14, h * 0.85), '内盒'), bleed, safe),
       assemble('dw-sleeve', '外套展开图', sleeveNet(l, w, h), bleed, safe),
     ];
+  } else if (structure === 'mailer') {
+    const flap = round(Math.min(120, Math.max(15, w * 0.28)), 2);
+    sheets = [assemble('mailer-main', '飞机盒展开图', mailerNet(l, w, h, flap), bleed, safe)];
   } else if (structure === 'pouch') {
     const gusset = round(Math.min(60, Math.max(20, w * 0.5)), 2);
     const seal = 12;

@@ -61,3 +61,24 @@ python3 -m http.server 8765 --bind 127.0.0.1
 - **资源 404**：`vite.config.ts` 使用 `base: './'`，不要改成绝对路径 `/`，否则项目站子路径会失败。
 - **刷新子页面 404**：本站使用 hash 路由，不会出现该问题。
 - **API Key 报错**：密钥只存在本机浏览器，换设备需重新配置；详见 [AI_SETUP.md](AI_SETUP.md)。
+
+## V3 版本说明（恢复现代简洁视觉 + 十步向导）
+
+- 视觉层已回滚到手绘改版前：`index.html` / `src/styles.css` 恢复 Modern Minimalism；删除 `src/components/doodle.tsx`、`hand.ts`、`scenes.tsx`；首页不再有手绘角色、涂鸦、统计条与手写字体 CDN。
+- 新增十步向导（`#/wizard`）与需求汇总（`#/review`），统一项目模型 `ProjectDraft` 由 `src/v3/draft.ts` 定义，自动保存沿用 IndexedDB + localStorage 兜底。
+- 风格库：10 个现代商业风格 + 18 个传统选项（归入 14 组中国传统艺术风格），每个风格都有完整配置并由自身纹样规则生成独立矢量图层，不是只把风格名拼进提示词。
+- 构建分包：`vite.config.ts` 用 `manualChunks` 拆出 `vendor-three` / `vendor-pdf` / `vendor-canvas` / `vendor-react` / `vendor-zip`，主包由约 1.3 MB 降到约 255 KB，构建无 chunk 体积警告。
+- 无 WebGL 的环境（部分无头浏览器 / 关闭硬件加速）会自动切换为 2D 立体图预览，并在页面上明确说明，不影响平面稿与印刷文件导出。
+
+### 本次验收结果
+
+| 检查 | 结果 |
+| --- | --- |
+| `npx tsc --noEmit` | 0 errors |
+| `npm test`（Node） | 19/19 通过 |
+| 浏览器测试套件（PDF 字节级预检、300DPI 渲染、SVG/DXF） | 21/21 通过 |
+| 十步向导端到端浏览器验收（含生成三方案、可编辑文字、条码图层、印前与导出） | 28/28 通过 |
+| 补充验收（Logo 真实上传、EAN-13 校验位、版本恢复、移动端步骤） | 8/8 通过 |
+| 14 个路由桌面渲染 / 无横向溢出 / 无 console error | 通过 |
+
+未配置 AI 模型时，界面明确标注「未调用 AI」，不会把内置模板冒充真实生成；零售 GTIN/EAN/UPC 条码必须由用户合法取得，系统只提供校验位验证、预览占位码与内部 SKU（Code 128）。

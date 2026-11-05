@@ -6,12 +6,14 @@ import { BriefPage, Create, Editor, Schemes } from './pages/flow';
 import { Inspiration, ProjectDetail, Projects, Structures } from './pages/library';
 import { ExportCenter, Prepress, Preview3D } from './pages/output';
 import { ModelConfig, Settings } from './pages/settings';
+import Wizard from './v3/Wizard';
+import Review from './v3/Review';
 
 function Footer() {
   return <footer className="footer"><div className="footer-inner">
     <div className="footer-brand"><Logo /><p>让每个人都能轻松完成专业包装设计。</p><span>AI PACKAGING DESIGN STUDIO</span></div>
     <div className="footer-col"><strong>产品</strong>
-      <a href="#/create">开始创作</a><a href="#/inspiration">灵感库</a><a href="#/structures">包装类型</a><a href="#/projects">我的作品</a></div>
+      <a href="#/wizard">开始设计</a><a href="#/create">对话式快速开始</a><a href="#/inspiration">灵感库</a><a href="#/structures">包装类型</a><a href="#/projects">我的作品</a></div>
     <div className="footer-col"><strong>流程</strong>
       <a href="#/brief">需求分析</a><a href="#/editor">设计工作台</a><a href="#/preview">3D 预览</a><a href="#/prepress">印前检查</a><a href="#/export">文件导出</a></div>
     <div className="footer-col"><strong>设置</strong>
@@ -29,6 +31,8 @@ export default function App() {
   const path = hash.split('?')[0];
   let page: React.ReactNode;
   if (path === '/') page = <Home />;
+  else if (path === '/wizard') page = <Wizard />;
+  else if (path === '/review') page = <Review />;
   else if (path === '/create') page = <Create />;
   else if (path === '/brief') page = <BriefPage />;
   else if (path === '/schemes') page = <Schemes />;

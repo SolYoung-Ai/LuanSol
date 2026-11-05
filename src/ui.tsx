@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { DoodleOpenBox, DoodlePersonHoldingBox } from './components/doodle';
+
 export function useHash() {
   const [hash, setHash] = useState(() => window.location.hash.replace(/^#/, '') || '/');
   useEffect(() => { const h = () => setHash(window.location.hash.replace(/^#/, '') || '/'); window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h); }, []);
@@ -9,13 +9,13 @@ export const go = (path: string) => { window.location.hash = path.startsWith('/'
 
 export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?: () => void }) {
   return <button className="logo" onClick={onClick || (() => go('/'))} aria-label="LunaSol 首页">
-    <span className="logo-mark" aria-hidden><DoodleOpenBox style={{ width: 32, height: 32 }} /></span>
-    <span className="logo-text"><span className="logo-word">LunaSol</span>{!compact && <span className="logo-sub">AI PACKAGING STUDIO</span>}</span>
+    <span className="logo-word">LunaSol</span>
+    {!compact && <span className="logo-sub">AI PACKAGING STUDIO</span>}
   </button>;
 }
 
 const NAV = [
-  { label: '首页', path: '/' }, { label: '开始创作', path: '/create' }, { label: '灵感库', path: '/inspiration' },
+  { label: '首页', path: '/' }, { label: '开始设计', path: '/wizard' }, { label: '灵感库', path: '/inspiration' },
   { label: '包装类型', path: '/structures' }, { label: '我的作品', path: '/projects' },
 ];
 
@@ -27,7 +27,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
       <nav className="nav-links">{NAV.map((n) => <a key={n.path} href={`#${n.path}`} className={hash === n.path || (n.path !== '/' && hash.startsWith(n.path)) ? 'active' : ''}>{n.label}</a>)}</nav>
       <div className="nav-actions">
         <button className="link-btn" onClick={onLogin}>登录</button>
-        <button className="btn btn-dark btn-sm" onClick={() => go('/create')}>开始设计 <span aria-hidden>↗</span></button>
+        <button className="btn btn-dark btn-sm" onClick={() => go('/wizard')}>开始设计 <span aria-hidden>↗</span></button>
       </div>
     </div>
   </header>;
@@ -65,7 +65,7 @@ export function StepBar({ steps, current }: { steps: string[]; current: number }
 }
 
 export function Empty({ title, desc, action }: { title: string; desc: string; action?: React.ReactNode }) {
-  return <div className="empty"><div className="empty-mark"><DoodlePersonHoldingBox className="empty-doodle" /></div><h3>{title}</h3><p>{desc}</p>{action}</div>;
+  return <div className="empty"><div className="empty-mark">◇</div><h3>{title}</h3><p>{desc}</p>{action}</div>;
 }
 
 export function Modal({ open, title, onClose, children, wide = false }: { open: boolean; title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
@@ -90,10 +90,6 @@ export function Spinner({ label = 'AI 正在工作' }: { label?: string }) {
   return <span className="spinner-wrap"><span className="spinner" />{label}</span>;
 }
 
-export function PageHead({ kicker, title, desc, right, doodle }: { kicker?: string; title: string; desc?: string; right?: React.ReactNode; doodle?: React.ReactNode }) {
-  return <div className="page-head"><div>
-    {kicker && <div className="kicker">{kicker}</div>}
-    <div className="page-head-title-row"><h1>{title}</h1>{doodle}</div>
-    {desc && <p>{desc}</p>}
-  </div>{right && <div className="page-head-right">{right}</div>}</div>;
+export function PageHead({ kicker, title, desc, right }: { kicker?: string; title: string; desc?: string; right?: React.ReactNode }) {
+  return <div className="page-head"><div>{kicker && <div className="kicker">{kicker}</div>}<h1>{title}</h1>{desc && <p>{desc}</p>}</div>{right && <div className="page-head-right">{right}</div>}</div>;
 }

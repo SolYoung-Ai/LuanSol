@@ -145,6 +145,14 @@ function buildModel(p: Props): THREE.Group {
   return g;
 }
 
+/** 先探测 WebGL，避免在无 GPU / 禁用 WebGL 的环境里让 three.js 抛出控制台错误。 */
+function webglAvailable(): boolean {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'));
+  } catch { return false; }
+}
+
 const Viewer3D = forwardRef<Viewer3DHandle, Props>((props, ref) => {
   const mount = useRef<HTMLDivElement>(null);
   const engine = useRef<Engine | null>(null);
@@ -157,6 +165,7 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>((props, ref) => {
   useEffect(() => {
     const host = mount.current;
     if (!host) return;
+    if (!webglAvailable()) { setWebglFailed(true); return; }
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
