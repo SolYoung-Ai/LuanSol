@@ -96,6 +96,15 @@ img { display: block; max-width: 100%; }
 /* ============================================================
  * 通用组件
  * ============================================================ */
+/* ---------- 补充：此前遗漏的小工具类 ---------- */
+/* 首页根节点：防止首屏整幅场景产生横向溢出 */
+.home { overflow: hidden; }
+/* 行内的小手绘图标（"也可以上传…"那一行） */
+.quick-doodle { width: 34px; flex: 0 0 34px; color: var(--draw); }
+.quick-doodle svg { width: 100%; height: auto; display: block; }
+/* 编辑器画布下方的操作提示 */
+.canvas-tip { font-size: 11px; color: var(--muted); }
+
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; border-radius: var(--radius); font-weight: 500; letter-spacing: .02em; transition: transform .18s ease, background .18s ease, box-shadow .18s ease, opacity .18s; white-space: nowrap; }
 .btn:hover:not(:disabled) { transform: translateY(-1px); }
 .btn:disabled { opacity: .38; cursor: not-allowed; }
@@ -244,7 +253,7 @@ img { display: block; max-width: 100%; }
   position: relative;
   max-width: 1440px;
   margin: 0 auto;
-  padding: 0 0 44px;
+  padding: 0 0 16px;
 }
 .hero-stage { position: relative; z-index: 1; width: 100%; }
 .hero-scene { width: 100%; }
@@ -277,16 +286,12 @@ img { display: block; max-width: 100%; }
   color: var(--ink-2);
   white-space: nowrap;
 }
-.hero-annot-1 { left: 43.5%; top: 29%; transform: rotate(-4deg); }
-.hero-annot-2 { left: 85%; top: 11%; transform: rotate(3deg); }
-.hero-annot-arrow { position: absolute; z-index: 2; color: var(--draw); }
-.hero-annot-arrow-1 { left: 45.5%; top: 33%; width: 70px; transform: rotate(96deg); }
-.hero-annot-arrow-2 { left: 86.5%; top: 15%; width: 64px; transform: rotate(100deg); }
-.hero-annot-arrow svg { width: 100%; height: auto; display: block; }
+.hero-annot-1 { left: 49.3%; top: 34.1%; transform: rotate(-3deg); }
+.hero-annot-2 { left: 60.9%; top: 12.5%; transform: rotate(2deg); }
 
 /* ---------- 第二屏：我们是谁 ---------- */
 .section { max-width: 1440px; margin: 0 auto; }
-.section-pad { padding: 104px 40px; }
+.section-pad { padding: 88px 40px; }
 .whoare-grid { display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 60px; align-items: center; }
 .whoare-text h2 { font-family: var(--font-hand); font-weight: 300; font-size: clamp(28px, 3.2vw, 44px); line-height: 1.5; margin: 20px 0 0; }
 .whoare-text p { font-size: 15px; line-height: 2; color: var(--ink-2); margin: 24px 0 28px; max-width: 440px; }
@@ -299,13 +304,18 @@ img { display: block; max-width: 100%; }
 }
 
 /* ---------- 第三屏：你想做什么（真实包装作品） ---------- */
+/* 12 栏的非对称编辑式排布：
+   第一行 5+4+3，第二行 7+5 —— 每一行都填满，右边不会留下空洞。 */
 .works-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 26px 24px; align-items: start; }
 .work-card { position: relative; grid-column: span 4; }
 .work-card-1 { grid-column: span 5; }
 .work-card-2 { grid-column: span 4; margin-top: 44px; }
 .work-card-3 { grid-column: span 3; margin-top: -26px; }
+.work-card-4 { grid-column: span 4; margin-top: 12px; }
+.work-card-5 { grid-column: span 4; margin-top: -34px; }
+.work-card-6 { grid-column: span 4; margin-top: 48px; }
 .work-shot { position: relative; background: #fff; border: 1px solid var(--line); overflow: hidden; }
-.work-shot .mockup img { width: 100%; }
+.work-shot .mockup img { width: 100%; display: block; }
 .work-cap { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 2px 0; }
 .work-cap strong { font-family: var(--font-hand); font-weight: 400; font-size: 19px; }
 .work-cap span { font-size: 11.5px; color: var(--muted); }
@@ -329,8 +339,9 @@ img { display: block; max-width: 100%; }
 .steps-path svg { width: 100%; height: 100%; display: block; }
 .steps-grid { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px; }
 .step-card { position: relative; }
-.step-art { width: 100%; max-width: 240px; margin: 0 auto 6px; }
-.step-art svg { width: 100%; height: auto; }
+/* 四个场景统一高度，编号与文案才能对齐成一条线 */
+.step-art { width: 100%; max-width: 300px; height: 208px; margin: 0 auto 14px; display: flex; align-items: flex-end; justify-content: center; }
+.step-art svg { width: 100%; height: 100%; }
 .step-num { font-family: var(--font-hand-en); font-size: 30px; color: var(--ink); line-height: 1; margin-bottom: 10px; }
 .step-card h3 { font-family: var(--font-hand); font-weight: 400; font-size: 22px; margin-bottom: 8px; }
 .step-card p { font-size: 13px; color: var(--muted); line-height: 1.85; }
@@ -693,11 +704,16 @@ img { display: block; max-width: 100%; }
  * 响应式
  * ============================================================ */
 @media (max-width: 1180px) {
-  .hero-stage { width: min(58%, 640px); right: -40px; }
+  /* 首屏改为"文案在上、场景在下"：场景右侧是人物与工作台，
+     浮层文案继续压在上面一定会打架，不如老老实实排成两段。 */
+  .hero { padding-top: 46px; display: flex; flex-direction: column; }
+  .hero-copy { position: static; order: -1; width: 100%; max-width: 560px; margin: 0 0 10px; }
+  .hero-stage { width: 100%; }
+  .hero-annot { display: none; }
   .whoare-grid { grid-template-columns: 1fr; gap: 34px; }
   .steps-grid { grid-template-columns: repeat(2, 1fr); gap: 30px; }
   .steps-path { display: none; }
-  .work-card, .work-card-1, .work-card-2, .work-card-3 { grid-column: span 6; margin-top: 0; }
+  .work-card, .work-card-1, .work-card-2, .work-card-3, .work-card-4, .work-card-5, .work-card-6 { grid-column: span 6; margin-top: 0; }
   .mag-a { grid-column: 1 / span 7; } .mag-b { grid-column: 9 / span 4; margin-top: 30px; }
   .mag-c { grid-column: 2 / span 5; margin-top: 0; } .mag-d { grid-column: 8 / span 5; margin-top: 0; }
   .inspire-grid { grid-template-columns: repeat(3, 1fr); }
@@ -711,12 +727,14 @@ img { display: block; max-width: 100%; }
   .nav-links { display: none; }
   .page, .section-pad, .cta, .hero { padding-left: 20px; padding-right: 20px; }
   .nav-inner, .footer-inner, .footer-bottom { padding-left: 20px; padding-right: 20px; }
-  .hero { min-height: auto; padding-top: 48px; flex-direction: column; align-items: flex-start; }
-  .hero-copy { width: 100%; }
-  .hero-stage { position: relative; right: auto; top: auto; transform: none; width: 100%; max-width: 560px; margin: 34px auto 0; }
+  .hero { min-height: auto; padding-top: 40px; }
+  .hero-copy { width: 100%; max-width: none; }
+  .hero-stage { position: relative; right: auto; top: auto; transform: none; width: 100%; margin: 18px auto 0; overflow: hidden; }
+  /* 场景宽 1400，手机上只展示"人物 + 工作台 + 纸箱"这一段 */
+  .hero-scene { width: 155%; margin-left: -55.5%; }
   .hero-annot, .hero-annot-arrow { display: none; }
   .steps-grid { grid-template-columns: 1fr 1fr; }
-  .work-card, .work-card-1, .work-card-2, .work-card-3 { grid-column: span 12; }
+  .work-card, .work-card-1, .work-card-2, .work-card-3, .work-card-4, .work-card-5, .work-card-6 { grid-column: span 12; }
   .work-note, .work-handlabel { display: none; }
   .magazine { grid-template-columns: 1fr 1fr; }
   .mag-a, .mag-b, .mag-c, .mag-d { grid-column: span 1; margin-top: 0; }

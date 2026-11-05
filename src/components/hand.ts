@@ -163,14 +163,16 @@ export function hDot(rnd: Rnd, cx: number, cy: number, r: number): string {
  * 品牌角色「Luna」骨架
  * ------------------------------------------------------------
  * 一个简化但有个性的人物：偏瘦长比例（不是儿童头身比）、
- * 微驼的肩线、蓬松的短发翘一撮。所有页面共用同一套骨架与五官。
+ * 松弛的 T 恤轮廓、参差不齐的刘海、翘起的一撮短发。
+ * 全站共用同一套骨架与五官。
  *
  * 造型要点（决定"像不像手绘"而不是"像图标"）：
  *  · 头是蛋形不是正圆，下巴略收、略偏
- *  · 躯干是闭合的有机"衣服"轮廓：塌肩、收腰、圆臀，两侧不对称
+ *  · 躯干是一件"衣服"：肩比腰宽、下摆平直——绝不是连衣裙
  *  · 四肢是"有厚度的管子"（两条边 + 圆头端帽），而不是一根线
- *  · 手和脚是小体积的团块，末端明确
+ *  · 手和脚是小体积的团块，末端明确；脚是能看出鞋头的形状
  *  · 眼睛是实心墨点，缩到图标尺寸也能认出来
+ *  · 头发贴着颅骨长，刘海参差——不能变成一顶帽子
  * ============================================================ */
 
 export type Face = 'smile' | 'focus' | 'joy' | 'think' | 'surprise';
@@ -204,6 +206,8 @@ export interface Pose {
   hair?: Hair;
   /** 朝向：1 = 面朝右，-1 = 面朝左 */
   facing?: 1 | -1;
+  /** 手臂画在身体前面（托下巴、抱东西时用） */
+  armFront?: boolean;
 }
 
 type Pt = [number, number];
@@ -317,11 +321,45 @@ function hand(rnd: Rnd, w: Pt, r: number): string {
   return hSmooth(rnd, pts, true, 0.35);
 }
 
-/** 脚：朝向方向上的小楔形 */
-function foot(rnd: Rnd, ankle: Pt, dir: 1 | -1, len: number, w: number): string {
-  const toe: Pt = [ankle[0] + dir * len, ankle[1] + len * 0.14];
-  return limb(rnd, ankle, toe, w, w * 0.6);
+/**
+ * 脚：一只有鞋头的鞋 + 一道鞋底线。
+ * 之前只是一小段胶囊，远看像一个点，人就"站不住"。
+ */
+function shoe(rnd: Rnd, ankle: Pt, dir: 1 | -1, len: number, w: number): string[] {
+  const hx = ankle[0], hy = ankle[1];
+  const toeX = hx + dir * len;
+  const toeY = hy + len * 0.16;
+  const body: Pt[] = [
+    [hx - dir * len * 0.28, hy - w * 1.1],
+    [hx + dir * len * 0.34, hy - w * 0.8],
+    [hx + dir * len * 0.78, hy - w * 0.22],
+    [toeX, toeY - w * 0.05],
+    [toeX + dir * len * 0.03, toeY + w * 0.58],
+    [hx - dir * len * 0.32, hy + w * 0.62],
+  ];
+  return [
+    hSmooth(rnd, body, true, 0.42),
+    hLine(rnd, hx - dir * len * 0.32, hy + w * 0.62, toeX + dir * len * 0.03, toeY + w * 0.58, { bow: 0.06, over: 0.02 }),
+  ];
 }
+
+/**
+ * 膝盖位置校正。
+ * 姿势数据里的膝盖常常被随手写低，导致"大腿过长、小腿过短"的竹竿腿。
+ * 规则：站姿时把膝盖拉回髋→踝的 52% 处；
+ *      只有明显折叠的腿（跑、跨步）才保留作者给的膝盖。
+ */
+function kneeOf(hip: Pt, knee: Pt, ankle: Pt): Pt {
+  const span = Math.abs(ankle[1] - hip[1]);
+  if (span < 1) return knee;
+  const derived = hip[1] + (ankle[1] - hip[1]) * 0.52;
+  if (Math.abs(knee[1] - derived) > span * 0.3) return knee;
+  return [knee[0], derived];
+}
+
+/* ============================================================
+ * 角色绘制
+ * ============================================================ */
 
 /** 画一个人：返回若干条独立笔画 */
 export function drawPerson(rnd: Rnd, p: Pose, opt: { w?: number } = {}): PStroke[] {
@@ -331,68 +369,76 @@ export function drawPerson(rnd: Rnd, p: Pose, opt: { w?: number } = {}): PStroke
   const hr = p.hr;
   const facing: 1 | -1 = p.facing ?? (p.hip[0] < hx ? -1 : 1);
 
-  /* ---------- 规范比例：肩最宽、腰最细、臀略宽 ----------
-     肩/胯的横向位置由头半径与脊柱推导，保证任何姿势下
-     身体都不会被"缩"成一根细棍；姿势只负责脊柱的倾斜与手脚的落点。 */
-  const shw = hr * 1.24;   // 肩半宽
-  const chw = hr * 1.06;   // 胸半宽
-  const wsw = hr * 0.82;   // 腰半宽
-  const hpw = hr * 1.12;   // 胯半宽
-  const shY = p.chest[1] + 3;
-  const shL: Pt = [p.chest[0] - shw, shY];
-  const shR: Pt = [p.chest[0] + shw, shY];
-  const hipL: Pt = [p.hip[0] - hr * 0.62, p.hip[1]];
-  const hipR: Pt = [p.hip[0] + hr * 0.62, p.hip[1]];
-  // 脖子至少留出"下巴到颈根"的一小段，避免头像贴在肩上
-  const neckY = Math.max(p.neck[1], hy + hr * 1.2);
+  /* ---------- 规范比例：全部由头半径推导 ----------
+     肩比腰宽、衣摆平直——这是一件松垮的 T 恤，不是连衣裙。
+     姿势只负责脊柱的倾斜与手脚的落点。 */
+  const shw = hr * 1.34;   // 肩半宽
+  const chw = hr * 1.16;   // 胸半宽
+  const wsw = hr * 1.06;   // 腰半宽（几乎不收腰）
+  const hpw = hr * 1.10;   // 胯半宽
+  const hw = hr * 1.12;    // 衣摆半宽
+  const shY = p.chest[1] + 4;
+  const hemY = p.hip[1] + hr * 0.55;
+  const neckY = Math.max(p.neck[1], hy + hr * 1.32);
   const neckX = p.neck[0];
 
+  const hipL: Pt = [p.hip[0] - hpw * 0.46, p.hip[1] + hr * 0.06];
+  const hipR: Pt = [p.hip[0] + hpw * 0.46, p.hip[1] + hr * 0.06];
+
   /* ---------- 腿（画在最底层）：胯→膝→踝 一条连续的锥形管 ---------- */
-  const legs: [Pt, Pt, Pt][] = [[hipL, p.legL[1], p.legL[2]], [hipR, p.legR[1], p.legR[2]]];
+  const legs: [Pt, Pt, Pt][] = [
+    [hipL, kneeOf(hipL, p.legL[1], p.legL[2]), p.legL[2]],
+    [hipR, kneeOf(hipR, p.legR[1], p.legR[2]), p.legR[2]],
+  ];
   for (const [hip, knee, ankle] of legs) {
-    out.push({ d: tubePath(rnd, [hip, knee, ankle], hr * 0.46, hr * 0.22), w: W });
-    out.push({ d: foot(rnd, ankle, facing, hr * 0.5, hr * 0.2), w: W });
+    out.push({ d: tubePath(rnd, [hip, knee, ankle], hr * 0.5, hr * 0.27), w: W });
+    for (const s of shoe(rnd, ankle, facing, hr * 0.62, hr * 0.3)) out.push({ d: s, w: W * 0.92 });
   }
 
   /* ---------- 手臂：肩→肘→腕 一条连续的锥形管 ---------- */
-  const arms: [Pt, Pt, Pt][] = [[shL, p.armL[1], p.armL[2]], [shR, p.armR[1], p.armR[2]]];
-  for (const [sh, el, wr] of arms) {
-    out.push({ d: tubePath(rnd, [sh, el, wr], hr * 0.36, hr * 0.19), w: W });
-    out.push({ d: hand(rnd, wr, hr * 0.2), w: W });
-  }
+  // 起点藏在躯干轮廓内，胳膊才像是"从肩膀下面长出来"，而不是外挂一根
+  const shL: Pt = [p.chest[0] - shw * 0.56, shY + hr * 0.12];
+  const shR: Pt = [p.chest[0] + shw * 0.56, shY + hr * 0.12];
+  const armStrokes = (): PStroke[] => {
+    const a: PStroke[] = [];
+    const arms: [Pt, Pt, Pt][] = [[shL, p.armL[1], p.armL[2]], [shR, p.armR[1], p.armR[2]]];
+    for (const [sh, el, wr] of arms) {
+      a.push({ d: tubePath(rnd, [sh, el, wr], hr * 0.38, hr * 0.2), w: W });
+      a.push({ d: hand(rnd, wr, hr * 0.21), w: W });
+    }
+    return a;
+  };
+  if (!p.armFront) out.push(...armStrokes());
 
-  /* ---------- 躯干：闭合的有机"衣服"轮廓 ---------- */
-  const midCW = (p.chest[1] + p.waist[1]) / 2 + 4;
-  const midWH = (p.waist[1] + p.hip[1]) / 2;
+  /* ---------- 躯干：一件松垮的 T 恤 ---------- */
   const torso: Pt[] = [
-    [shL[0], shL[1] + 1],
-    [neckX - hr * 0.34, neckY + 1],
-    [neckX + hr * 0.34, neckY + 1],
-    [shR[0], shR[1] + 1],
-    [p.chest[0] + chw, p.chest[1] + 8],
-    [p.chest[0] + chw * 0.92, midCW],
+    [neckX - hr * 0.52, neckY],                                     // 领口左
+    [p.chest[0] - shw * 0.8, shY - hr * 0.16],                      // 左斜肩
+    [p.chest[0] - shw, shY + hr * 0.02],                            // 左肩点
+    [p.chest[0] - chw * 0.99, p.chest[1] + hr * 1.06],              // 左腋下
+    [p.waist[0] - wsw, p.waist[1]],                                 // 左腰
+    [p.hip[0] - hpw, p.hip[1] - hr * 0.06],                         // 左胯
+    [p.hip[0] - hw, hemY],                                          // 左衣摆角
+    [p.hip[0] - hw * 0.34, hemY + hr * 0.03],                       // 下摆
+    [p.hip[0] + hw * 0.34, hemY + hr * 0.03],
+    [p.hip[0] + hw, hemY],                                          // 右衣摆角
+    [p.hip[0] + hpw, p.hip[1] - hr * 0.06],
     [p.waist[0] + wsw, p.waist[1]],
-    [p.waist[0] + wsw * 1.06, midWH],
-    [p.hip[0] + hpw, p.hip[1] - 2],
-    [p.hip[0] + hpw * 0.55, p.hip[1] + 7],
-    [p.hip[0], p.hip[1] + 9],
-    [p.hip[0] - hpw * 0.55, p.hip[1] + 7],
-    [p.hip[0] - hpw, p.hip[1] - 2],
-    [p.waist[0] - wsw * 1.06, midWH],
-    [p.waist[0] - wsw, p.waist[1]],
-    [p.chest[0] - chw * 0.92, midCW],
-    [p.chest[0] - chw, p.chest[1] + 8],
+    [p.chest[0] + chw * 0.99, p.chest[1] + hr * 1.06],
+    [p.chest[0] + shw, shY + hr * 0.02],
+    [p.chest[0] + shw * 0.8, shY - hr * 0.16],
+    [neckX + hr * 0.52, neckY],                                     // 领口右
   ];
-  out.push({ d: hSmooth(rnd, torso, true, 0.9), w: W });
-  // 领口
+  out.push({ d: hSmooth(rnd, torso, true, 0.85), w: W });
+  // 圆领
   out.push({
-    d: hArc(rnd, neckX, neckY, hr * 0.44, Math.PI * 0.12, Math.PI * 0.88, { n: 5, wob: 0.08 }),
-    w: W * 0.85,
+    d: hArc(rnd, neckX, neckY + hr * 0.04, hr * 0.58, Math.PI * 0.16, Math.PI * 0.84, { n: 5, wob: 0.09 }),
+    w: W * 0.82,
   });
 
   /* ---------- 脖子 ---------- */
-  out.push({ d: hLine(rnd, hx - hr * 0.34, hy + hr * 0.72, neckX - hr * 0.16, neckY + 1, { bow: 0.05, over: 0.01 }), w: W * 0.9 });
-  out.push({ d: hLine(rnd, hx + hr * 0.34, hy + hr * 0.72, neckX + hr * 0.16, neckY + 1, { bow: 0.05, over: 0.01 }), w: W * 0.9 });
+  out.push({ d: hLine(rnd, hx - hr * 0.34, hy + hr * 0.68, neckX - hr * 0.24, neckY + 1, { bow: 0.05, over: 0.01 }), w: W * 0.9 });
+  out.push({ d: hLine(rnd, hx + hr * 0.34, hy + hr * 0.68, neckX + hr * 0.24, neckY + 1, { bow: 0.05, over: 0.01 }), w: W * 0.9 });
 
   /* ---------- 头：蛋形（下巴略收、略偏） ---------- */
   const headPts: Pt[] = [
@@ -409,56 +455,93 @@ export function drawPerson(rnd: Rnd, p: Pose, opt: { w?: number } = {}): PStroke
   ];
   out.push({ d: hSmooth(rnd, headPts, true, 0.7), w: W });
 
-  /* ---------- 头发 ---------- */
+  /* ---------- 耳朵（背向一侧露出来，给侧脸一点厚度） ---------- */
+  const earX = hx - facing * hr * 0.88;
+  out.push({
+    d: hArc(rnd, earX, hy + hr * 0.2, hr * 0.17, Math.PI * 0.55, Math.PI * 1.5, { n: 4, wob: 0.12 }),
+    w: W * 0.75,
+  });
+
+  /* ---------- 头发：外轮廓 + 一条参差的刘海 ----------
+     关键：不要把头发画成一个闭合的"帽壳"。
+     闭合形状的下缘会被平滑成一道弧线，一眼就是帽檐。
+     正确做法是——外轮廓一笔（从左鬓角绕过头顶到右鬓角），
+     刘海另外一笔，画成参差不齐的折线。 */
   const hair = p.hair ?? 'short';
-  const shortCap: Pt[] = [
-    [hx - hr * 1.01, hy + hr * 0.02],
-    [hx - hr * 0.90, hy - hr * 0.60],
-    [hx - hr * 0.46, hy - hr * 1.00],
-    [hx + hr * 0.16, hy - hr * 1.06],
-    [hx + hr * 0.68, hy - hr * 0.84],
-    [hx + hr * 0.99, hy - hr * 0.12],
-    [hx + hr * 0.64, hy - hr * 0.40],
-    [hx - hr * 0.52, hy - hr * 0.44],
+  const hairOuter: Pt[] = [
+    [hx - hr * 1.0, hy + hr * 0.12],
+    [hx - hr * 1.0, hy - hr * 0.42],
+    [hx - hr * 0.84, hy - hr * 0.82],
+    [hx - hr * 0.48, hy - hr * 1.04],
+    [hx - hr * 0.08, hy - hr * 1.1],
+    [hx + hr * 0.34, hy - hr * 1.0],
+    [hx + hr * 0.68, hy - hr * 0.86],
+    [hx + hr * 0.92, hy - hr * 0.5],
+    [hx + hr * 1.0, hy - hr * 0.1],
   ];
-  if (hair === 'messy') {
-    const messy: Pt[] = [
-      [hx - hr * 1.02, hy + hr * 0.06],
-      [hx - hr * 0.95, hy - hr * 0.52],
-      [hx - hr * 0.72, hy - hr * 0.90],
-      [hx - hr * 0.44, hy - hr * 1.16],
-      [hx - hr * 0.14, hy - hr * 0.90],
-      [hx + hr * 0.10, hy - hr * 1.19],
-      [hx + hr * 0.36, hy - hr * 0.94],
-      [hx + hr * 0.62, hy - hr * 1.08],
-      [hx + hr * 0.88, hy - hr * 0.66],
-      [hx + hr * 1.02, hy - hr * 0.06],
-      [hx + hr * 0.70, hy - hr * 0.34],
-      [hx - hr * 0.48, hy - hr * 0.40],
+  out.push({ d: hSmooth(rnd, hairOuter, false, 0.55), w: W });
+  // 刘海：横过额头的参差折线（不是圆弧）
+  const bangs: Pt[] = hair === 'messy'
+    ? [
+      [hx + hr * 0.94, hy - hr * 0.14],
+      [hx + hr * 0.58, hy + hr * 0.04],
+      [hx + hr * 0.26, hy - hr * 0.22],
+      [hx - hr * 0.06, hy + hr * 0.08],
+      [hx - hr * 0.4, hy - hr * 0.2],
+      [hx - hr * 0.72, hy - hr * 0.02],
+      [hx - hr * 0.94, hy - hr * 0.2],
+    ]
+    : [
+      [hx + hr * 0.92, hy - hr * 0.16],
+      [hx + hr * 0.52, hy - hr * 0.02],
+      [hx + hr * 0.1, hy - hr * 0.18],
+      [hx - hr * 0.32, hy - hr * 0.04],
+      [hx - hr * 0.7, hy - hr * 0.2],
+      [hx - hr * 0.92, hy - hr * 0.12],
     ];
-    out.push({ d: hSmooth(rnd, messy, true, 0.9), w: W });
-    // 呆毛
+  out.push({ d: hPoly(rnd, bangs, false, { bow: 0.02, jit: 0.5, over: 0.012 }).join(' '), w: W * 0.92 });
+  // 发丝：两三笔暗示头发的体积
+  out.push({
+    d: hSmooth(rnd, [[hx - hr * 0.66, hy - hr * 0.7], [hx - hr * 0.3, hy - hr * 0.84], [hx + hr * 0.08, hy - hr * 0.7]], false, 0.45),
+    w: W * 0.58,
+    o: 0.85,
+  });
+  out.push({
+    d: hSmooth(rnd, [[hx - hr * 0.16, hy - hr * 0.94], [hx + hr * 0.2, hy - hr * 0.92], [hx + hr * 0.5, hy - hr * 0.76]], false, 0.45),
+    w: W * 0.55,
+    o: 0.75,
+  });
+  if (hair === 'messy') {
+    // 头顶翘起来的两撮小发束
+    out.push({
+      d: hPoly(rnd, [[hx - hr * 0.4, hy - hr * 1.02], [hx - hr * 0.32, hy - hr * 1.3], [hx - hr * 0.1, hy - hr * 1.16]], false, { bow: 0.04, jit: 0.5 }).join(' '),
+      w: W * 0.88,
+    });
+    out.push({
+      d: hPoly(rnd, [[hx + hr * 0.16, hy - hr * 1.02], [hx + hr * 0.28, hy - hr * 1.32], [hx + hr * 0.48, hy - hr * 1.12]], false, { bow: 0.04, jit: 0.5 }).join(' '),
+      w: W * 0.88,
+    });
+    // 一撮呆毛
     out.push({
       d: hSmooth(rnd, [
-        [hx + hr * 0.06, hy - hr * 1.10],
-        [hx + hr * 0.30, hy - hr * 1.44],
-        [hx + hr * 0.56, hy - hr * 1.34],
-      ], false, 0.6),
+        [hx + hr * 0.18, hy - hr * 1.16],
+        [hx + hr * 0.44, hy - hr * 1.44],
+        [hx + hr * 0.66, hy - hr * 1.32],
+      ], false, 0.5),
       w: W * 0.9,
     });
-  } else if (hair === 'bun') {
-    out.push({ d: hSmooth(rnd, shortCap, true, 0.9), w: W });
-    // 丸子头（在朝向的反侧）
-    const bx = hx - facing * hr * 0.92;
-    out.push({ d: hEllipse(rnd, bx, hy - hr * 0.42, hr * 0.42, hr * 0.38, { n: 9, wob: 0.1, jit: 0.6 }), w: W * 0.95 });
-  } else {
-    out.push({ d: hSmooth(rnd, shortCap, true, 0.9), w: W });
+  }
+  if (hair === 'bun') {
+    // 丸子头（在朝向的反侧，靠后脑勺）
+    const bx = hx - facing * hr * 1.06;
+    const by = hy - hr * 0.56;
+    out.push({ d: hEllipse(rnd, bx, by, hr * 0.34, hr * 0.31, { n: 9, wob: 0.1, jit: 0.6 }), w: W * 0.95 });
   }
 
   /* ---------- 五官 ---------- */
   const f = p.face ?? 'smile';
-  const ey = hy + hr * 0.04;
-  const ex = hr * 0.36;
+  const ey = hy + hr * 0.16;
+  const ex = hr * 0.32;
   if (f === 'joy') {
     // 弯成月牙的开心眼
     out.push({ d: hArc(rnd, hx - ex, ey + hr * 0.08, hr * 0.24, Math.PI * 1.06, Math.PI * 1.94, { n: 5, wob: 0.06 }), w: W * 0.85 });
@@ -477,13 +560,17 @@ export function drawPerson(rnd: Rnd, p: Pose, opt: { w?: number } = {}): PStroke
   }
   // 嘴
   if (f === 'joy') {
-    out.push({ d: hArc(rnd, hx, hy + hr * 0.34, hr * 0.34, Math.PI * 0.08, Math.PI * 0.92, { n: 6, wob: 0.06 }), w: W * 0.85 });
+    out.push({ d: hArc(rnd, hx, hy + hr * 0.48, hr * 0.32, Math.PI * 0.08, Math.PI * 0.92, { n: 6, wob: 0.06 }), w: W * 0.85 });
   } else if (f === 'think') {
-    out.push({ d: hLine(rnd, hx - hr * 0.16, hy + hr * 0.46, hx + hr * 0.14, hy + hr * 0.42, { bow: 0.12, over: 0.02 }), w: W * 0.85 });
+    out.push({ d: hLine(rnd, hx - hr * 0.16, hy + hr * 0.6, hx + hr * 0.14, hy + hr * 0.56, { bow: 0.12, over: 0.02 }), w: W * 0.85 });
   } else if (f === 'surprise') {
-    out.push({ d: hEllipse(rnd, hx, hy + hr * 0.44, hr * 0.14, hr * 0.18, { n: 8, wob: 0.08, jit: 0.35 }), w: W * 0.8 });
+    out.push({ d: hEllipse(rnd, hx, hy + hr * 0.58, hr * 0.14, hr * 0.18, { n: 8, wob: 0.08, jit: 0.35 }), w: W * 0.8 });
   } else {
-    out.push({ d: hArc(rnd, hx, hy + hr * 0.28, hr * 0.3, Math.PI * 0.12, Math.PI * 0.88, { n: 6, wob: 0.07 }), w: W * 0.85 });
+    out.push({ d: hArc(rnd, hx, hy + hr * 0.42, hr * 0.28, Math.PI * 0.12, Math.PI * 0.88, { n: 6, wob: 0.07 }), w: W * 0.85 });
   }
+
+  /* ---------- 手臂画在身体前面（托下巴 / 抱东西） ---------- */
+  if (p.armFront) out.push(...armStrokes());
+
   return out;
 }

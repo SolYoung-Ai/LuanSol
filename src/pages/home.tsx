@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CATEGORIES, INSPIRATIONS, type InspirationItem } from '../data';
 import { ProductMockup } from '../components/visuals';
-import { DoodleArrow, DoodleBox, DoodleUnderline } from '../components/doodle';
+import { DoodleBox, DoodleUnderline } from '../components/doodle';
 import { HeroScene, SceneBigBox, SceneIdeas, SceneRun, SceneSketch, SceneStudio } from '../components/scenes';
 import { Button, Modal, SectionLabel, go } from '../ui';
 import { useApp } from '../store';
@@ -17,7 +17,9 @@ const WORKS = [
   { kind: 'box' as const, brand: '山隐茶集', sub: 'TEA BOX', palette: { bg: '#f3eee4', primary: '#20463a', accent: '#c8a86b', ink: '#1d1d1b', muted: '#8d8d8a' }, label: '纸盒', note: '茶叶、点心、伴手礼', cls: 'work-card-1' },
   { kind: 'pouch' as const, brand: '屿光咖啡', sub: 'COFFEE POUCH', palette: { bg: '#efe2cd', primary: '#8a5a3b', accent: '#a8352c', ink: '#3b2b20', muted: '#8d8d8a' }, label: '包装袋', note: '咖啡、零食、散装', cls: 'work-card-2' },
   { kind: 'bottle' as const, brand: '素白研', sub: 'BOTTLE', palette: { bg: '#f7f6f2', primary: '#1d1d1b', accent: '#c9c4b8', ink: '#1d1d1b', muted: '#8d8d8a' }, label: '瓶罐', note: '护肤、香氛、清洁', cls: 'work-card-3' },
-  { kind: 'label' as const, brand: '见山', sub: 'LABEL', palette: { bg: '#eef1ef', primary: '#22395c', accent: '#c8a86b', ink: '#1b2733', muted: '#8d8d8a' }, label: '标签', note: '瓶贴、罐贴、封口贴', cls: '' },
+  { kind: 'gift' as const, brand: '长物', sub: 'GIFT BOX', palette: { bg: '#f6f1ea', primary: '#8c3b2f', accent: '#d9b26a', ink: '#3a2a22', muted: '#8d8d8a' }, label: '礼品盒', note: '节令礼、生日伴手', cls: 'work-card-4' },
+  { kind: 'tube' as const, brand: '青屿', sub: 'TUBE', palette: { bg: '#eef2ef', primary: '#2f5d4c', accent: '#d7c9a6', ink: '#22302a', muted: '#8d8d8a' }, label: '管装', note: '护肤、牙膏、清洁', cls: 'work-card-5' },
+  { kind: 'label' as const, brand: '见山', sub: 'LABEL', palette: { bg: '#eef1ef', primary: '#22395c', accent: '#c8a86b', ink: '#1b2733', muted: '#8d8d8a' }, label: '标签', note: '瓶贴、罐贴、封口贴', cls: 'work-card-6' },
 ];
 
 /* 第四屏：四步创作，每一步配一个动作场景 */
@@ -64,9 +66,7 @@ export default function Home() {
       <div className="hero-stage">
         <div className="hero-scene"><HeroScene /></div>
         <div className="hero-annot hero-annot-1">一张纸就能开始</div>
-        <div className="hero-annot-arrow hero-annot-arrow-1"><DoodleArrow /></div>
         <div className="hero-annot hero-annot-2">真的能印出来</div>
-        <div className="hero-annot-arrow hero-annot-arrow-2"><DoodleArrow flip /></div>
       </div>
       <div className="hero-copy">
         <div className="hero-eyebrow">LUNASOL · AI PACKAGING DESIGN STUDIO</div>
@@ -101,7 +101,7 @@ export default function Home() {
     <section className="section section-pad section-soft">
       <div className="section-head">
         <SectionLabel en="WHAT DO YOU WANT TO MAKE">你想做什么？</SectionLabel>
-        <h2 className="display">五种包装形态，<br />挑一个最近的就行。</h2>
+        <h2 className="display">六种包装形态，<br />挑一个最近的就行。</h2>
         <p>选错也没关系——创作过程中随时可以改尺寸、换结构。</p>
       </div>
       <div className="works-grid">
@@ -113,6 +113,7 @@ export default function Home() {
             <div className="work-cap"><strong>{w.label}</strong><span>{w.note}</span></div>
             {i === 0 && <div className="work-handlabel work-handlabel-1">留白多一点</div>}
             {i === 1 && <div className="work-handlabel work-handlabel-2">牛皮纸质感</div>}
+            {i === 3 && <div className="work-handlabel work-handlabel-1">一根丝带就够</div>}
           </button>
         ))}
       </div>

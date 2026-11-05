@@ -355,8 +355,8 @@ export function DoodleThought(p: DProps) {
 const MASCOT_POSE: Pose = {
   head: [100, 54], hr: 27,
   neck: [100, 84], chest: [100, 104], waist: [102, 150], hip: [103, 186],
-  armL: [[80, 108], [62, 138], [70, 168]],
-  armR: [[120, 108], [138, 138], [130, 168]],
+  armL: [[70, 106], [56, 138], [60, 172]],
+  armR: [[130, 106], [144, 138], [140, 172]],
   legL: [[94, 186], [88, 222], [82, 248]],
   legR: [[112, 186], [116, 222], [120, 248]],
   face: 'smile', hair: 'messy',
@@ -376,8 +376,16 @@ function withBox(strokes: Stroke[], r: Rnd, cx: number, cy: number, w: number, h
 
 /** 吉祥物：双手捧着包装盒 */
 export function DoodlePersonHoldingBox(p: DProps) {
-  const s = build('mascot', r => withBox(drawPerson(r, MASCOT_POSE, { w: 3 }), r, 100, 172, 78, 58));
-  return <Ink vb="0 0 200 264" strokes={s} {...p} />;
+  const s = build('mascot', r => {
+    const strokes = drawPerson(r, MASCOT_POSE, { w: 3 });
+    // 盒子放在身体前方偏下一点，否则会整个被躯干盖住、看不出在"捧着"
+    const box = withBox(strokes, r, 100, 202, 84, 56);
+    // 两只手压在盒子上沿，交代"捧着"这个动作
+    box.push({ d: hLine(r, 60, 172, 58, 186, { bow: 0.06, over: 0.012 }), w: 3 });
+    box.push({ d: hLine(r, 140, 172, 142, 186, { bow: 0.06, over: 0.012 }), w: 3 });
+    return box;
+  });
+  return <Ink vb="0 0 200 270" strokes={s} {...p} />;
 }
 
 /** 手绘下划线：给标题用的马克笔笔触 */
@@ -397,8 +405,8 @@ export function DoodlePersonThinking(p: DProps) {
     const pose: Pose = {
       head: [104, 56], hr: 27,
       neck: [104, 86], chest: [104, 106], waist: [102, 152], hip: [102, 188],
-      armL: [[84, 110], [60, 128], [88, 86]],
-      armR: [[124, 110], [142, 140], [138, 174]],
+      armL: [[74, 108], [56, 134], [84, 92]],
+      armR: [[134, 108], [146, 140], [140, 176]],
       legL: [[94, 188], [88, 222], [82, 248]],
       legR: [[112, 188], [116, 222], [120, 248]],
       face: 'think', hair: 'short',
@@ -418,8 +426,8 @@ export function DoodlePersonDrawing(p: DProps) {
     const pose: Pose = {
       head: [92, 58], hr: 27,
       neck: [92, 88], chest: [92, 108], waist: [90, 152], hip: [90, 186],
-      armL: [[72, 112], [50, 138], [62, 166]],
-      armR: [[112, 110], [134, 134], [146, 162]],
+      armL: [[62, 112], [48, 140], [56, 168]],
+      armR: [[122, 110], [140, 138], [148, 164]],
       legL: [[82, 186], [78, 222], [74, 248]],
       legR: [[100, 186], [104, 222], [108, 248]],
       face: 'focus', hair: 'short',
@@ -442,8 +450,8 @@ export function DoodlePersonMeasuring(p: DProps) {
     const pose: Pose = {
       head: [88, 56], hr: 26,
       neck: [88, 86], chest: [88, 106], waist: [90, 150], hip: [90, 186],
-      armL: [[70, 110], [48, 136], [60, 162]],
-      armR: [[108, 108], [130, 130], [142, 158]],
+      armL: [[60, 110], [46, 138], [56, 164]],
+      armR: [[116, 108], [134, 132], [146, 158]],
       legL: [[82, 186], [78, 222], [74, 248]],
       legR: [[100, 186], [104, 222], [108, 248]],
       face: 'focus', hair: 'short',
@@ -468,8 +476,8 @@ export function DoodlePersonPackaging(p: DProps) {
     const pose: Pose = {
       head: [80, 56], hr: 26,
       neck: [80, 86], chest: [80, 106], waist: [82, 150], hip: [82, 186],
-      armL: [[62, 110], [42, 134], [54, 160]],
-      armR: [[100, 108], [122, 128], [134, 150]],
+      armL: [[52, 110], [38, 136], [44, 164]],
+      armR: [[108, 108], [126, 130], [138, 154]],
       legL: [[74, 186], [70, 222], [66, 248]],
       legR: [[92, 186], [96, 222], [100, 248]],
       face: 'smile', hair: 'bun',
@@ -493,8 +501,8 @@ export function DoodlePersonRunning(p: DProps) {
     const pose: Pose = {
       head: [96, 52], hr: 25,
       neck: [100, 80], chest: [104, 100], waist: [112, 142], hip: [118, 176],
-      armL: [[86, 104], [62, 142], [86, 172]],
-      armR: [[122, 100], [148, 136], [126, 168]],
+      armL: [[86, 104], [68, 126], [72, 150]],
+      armR: [[122, 100], [146, 124], [146, 150]],
       legL: [[110, 178], [86, 214], [48, 214]],
       legR: [[124, 176], [146, 210], [178, 244]],
       face: 'joy', hair: 'messy',
