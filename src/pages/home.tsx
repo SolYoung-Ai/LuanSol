@@ -36,7 +36,7 @@ export default function Home() {
     <div className="v4-home-mark" role="img" aria-label="LunaSol">
       <span className="hm-letter">L</span><span className="hm-letter">u</span><span className="hm-letter">n</span><span className="hm-letter">a</span><span className="hm-letter" style={{ color: '#e8783a' }}>S</span><span className="hm-letter" style={{ color: '#e8783a' }}>o</span><span className="hm-letter" style={{ color: '#e8783a' }}>l</span>
     </div>
-    <div className="v4-home-sub">AI PACKAGING DESIGN STUDIO</div>
+    <div className="v4-home-sub">在 AI 时代，人人都能成为设计师</div>
 
     <div className="v4-home-cta">
       <button className="v4-start" onClick={startWizard}>
