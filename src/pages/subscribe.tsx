@@ -44,6 +44,11 @@ export default function Subscribe() {
   const checkedToday = checkin.lastDate === today;
   const doCheckin = () => {
     if (checkedToday) return;
+    if (!a.user) {
+      setToast('请先登录再签到，积分会绑定到你的账号');
+      go('/');
+      return;
+    }
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     const newStreak = checkin.lastDate === yesterday ? checkin.streak + 1 : 1;
     const bonus = newStreak % 10 === 0 ? 100 : 0;
@@ -100,7 +105,7 @@ export default function Subscribe() {
         onClick={doCheckin}
         style={{ whiteSpace: 'nowrap', opacity: checkedToday ? 0.5 : 1 }}
       >
-        {checkedToday ? '今日已签到 ✓' : '立即签到 +10'}
+        {checkedToday ? '今日已签到 ✓' : !a.user ? '登录后签到' : '立即签到 +10'}
       </button>
     </div>
 

@@ -383,14 +383,17 @@ input, textarea, select { border-radius: 2px; }
   .v4-nav-item { font-size: 13px; }
 }
 @media (max-width: 640px) {
-  .v4-nav-inner { padding: 0 14px; }
-  .v4-nav-center { gap: 12px; }
+  .v4-nav-inner { padding: 0 14px; gap: 6px; }
+  .v4-wordmark { font-size: 13px; letter-spacing: 0; }
+  .v4-nav-center { gap: 10px; }
+  .v4-nav-item { font-size: 11.5px; letter-spacing: 0; }
   .v4-toolbar { flex-direction: column; align-items: stretch; }
   .v4-tools { width: 100%; }
   .v4-search { flex: 1; width: auto; min-width: 0; }
   .v4-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; }
   .v4-home { padding-top: 64px; padding-bottom: 96px; }
   .v4-work-actions { opacity: 1; }
+  .v4-credits-pill { font-size: 11px; padding: 2px 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .v4-home-mark, .v4-home-sub, .v4-home-cta, .v4-menu { animation: none !important; }
