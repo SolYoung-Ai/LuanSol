@@ -194,6 +194,14 @@ input, textarea, select { border-radius: 2px; }
   text-indent: 0.14em; /* 视觉居中：抵消字距带来的右侧空隙 */
   animation: v4-fade 1.1s cubic-bezier(.2,.7,.2,1) both;
 }
+.hm-letter {
+  display: inline-block;
+  transition: transform .2s ease;
+  cursor: pointer;
+}
+.hm-letter:hover {
+  transform: translateY(-8px) rotate(-6deg);
+}
 .v4-home-sub {
   margin-top: var(--v4-s4);
   font-size: 10.5px; letter-spacing: 0.34em; text-indent: 0.34em;

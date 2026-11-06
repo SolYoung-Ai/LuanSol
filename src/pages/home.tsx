@@ -33,7 +33,9 @@ export default function Home() {
   };
 
   return <div className="v4-home">
-    <div className="v4-home-mark" role="img" aria-label="LunaSol">LunaSol</div>
+    <div className="v4-home-mark" role="img" aria-label="LunaSol">
+      <span className="hm-letter">L</span><span className="hm-letter">u</span><span className="hm-letter">n</span><span className="hm-letter">a</span><span className="hm-letter" style={{ color: '#e8783a' }}>S</span><span className="hm-letter" style={{ color: '#e8783a' }}>o</span><span className="hm-letter" style={{ color: '#e8783a' }}>l</span>
+    </div>
     <div className="v4-home-sub">AI PACKAGING DESIGN STUDIO</div>
 
     <div className="v4-home-cta">
