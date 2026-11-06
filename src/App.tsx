@@ -6,6 +6,7 @@ import { useAuth } from './cloud/auth';
 import { LoginDialog } from './cloud/LoginDialog';
 import { SubscriptionProvider } from './cloud/subscription';
 import { cloudConfigured } from './cloud/config';
+import { LunaLoader } from './components/LunaLoader';
 
 // 路由级代码分割：除首页外壳外，所有页面按需加载。
 // 这样首屏不会拉起 three.js（3D 预览）、jsPDF / JSZip（导出）等重库，
@@ -45,8 +46,9 @@ function Footer() {
   </div></footer>;
 }
 
+/** 页面级加载态统一交给品牌加载组件：LunaSol 字标被橙色填满 + Sol 三字轻跳 */
 function PageFallback() {
-  return <div className="page-loading"><span className="spinner" />页面加载中…</div>;
+  return <LunaLoader />;
 }
 
 export default function App() {

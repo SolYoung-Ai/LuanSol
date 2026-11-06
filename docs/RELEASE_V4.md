@@ -85,3 +85,67 @@ git add -A && git commit -m "deploy: ..." && git push origin HEAD:gh-pages
 - 旧四步流程（`/create` `/brief` `/schemes` `/editor`）代码仍在，仅收口导航。
 - `src/data.ts` 的 12 条虚构 `INSPIRATIONS` 数据文件未删（路由已不再暴露）。
 - 工作台「我的收藏」目前只是标签，没有真实过滤逻辑。
+
+---
+
+## 6. 第二轮：品牌体验重塑（导航位置 / 语言 / 深浅色 / 品牌加载 / 会员价值 / 移动端）
+
+本轮不改产品结构，只做「体验层」的四件事，全部落在现有代码上，没有新增假能力。
+
+### 6.1 导航：登录/个人入口移到右上角，旁边加语言与深浅色
+
+- 顶栏三段：左 `LunaSol` 字标（点回首页）、中三个主入口、右上三件套（语言 / 深浅色 / 头像）。
+- 语言按钮显示「点了会变成什么」：中文态显示 `EN`，英文态显示 `中`；深浅色按钮月牙/太阳内联 SVG。
+- 头像仍在最右，菜单改为 `right: 0` 向右对齐展开——原来 `left: 0` 在右上角会被视口右侧裁掉。
+- 语言与主题各自持久化：`localStorage['lunasol.lang']`、`localStorage['lunasol.theme']`；
+  `main.tsx` 在 React 挂载之前先 `applyTheme(readTheme())`，避免「先闪白再变深色」。
+- 语言只切平台自己的界面文案（`t('中文','English')` 就地写），**审美市场的站点名/作品名/说明保持原文**，
+  理由是不破坏可溯源性与作者原意。
+
+### 6.2 品牌加载态：字标即进度条
+
+- `src/components/LunaLoader.tsx`：`LunaSol` 逐字用 `background-clip: text` + 每字独立 `--f` 填充比例，
+  橙色从左到右推进（`easeOutCubic` 1150ms），填到 `S/o/l`（索引 4 起）时逐字 `luna-jump` 轻跳，`animationDelay` 90ms 递增。
+- 颜色只用 `--v4-orange`（浅 `#d9602c` / 深 `#e0763f`），**不进 UI 主色**，避免整站发橙。
+- 尊重 `prefers-reduced-motion`（直接置 1、不跳）。
+- 注释里写明：这是「等待节奏」，不对外宣称真实加载百分比；AI 调用 / 导出的真实进度仍用各自真实状态。
+- `App.tsx` 的 `PageFallback` 由 `spinner + 页面加载中…` 换成 `<LunaLoader />`。
+
+### 6.3 会员页：删掉「调用成本测算表」，换成 600 次的价值解释
+
+- 删除 `buildPlanCalc()` / `planSummaryText()` 在订阅页的引用（成本、理论上限、毛利口径不再面向用户）。
+- 新增价值区：`¥0.67`（= 399 ÷ 600 = 0.665，按分四舍五入）、`600 次/月`、`20 次/天`（600 ÷ 30），
+  30 格刻度每格 = 一天，并写明推导：`¥399 ÷ 600 次 = 0.665 → ¥0.67`（不四舍五入夸低价格）。
+- 四条计次规则（均可对照 `subscription.tsx` 实现）：
+  1. 一次 = 一次真实模型调用，成功返回才计次（`reportAIUsage` 只在 `provider.ts` 校验通过后调用）；
+  2. 不按秒、不看输入长短；
+  3. 设计引擎 / 编辑 / 3D / 印前 / 导出不计次（本地确定性计算）；
+  4. 每个计费周期开始时额度重置为 600，不结转（`activatePlan` 写 `quota_used: 0`）。
+- 价格只从 `plans.ts` 的 `PRICING` 读；页内不出现推理成本、毛利、token 单价。
+
+### 6.4 移动端
+
+- 断点 900 / 720 / 560 / 384：导航 72px→64px、字标 15→14→13px、工具按钮 36→32px；
+  ≤560px 英文长标签换短标签（`Start / Work / Index`），≤384px 让出字标位并同步改成两列网格（否则三入口与工具区会重叠）。
+- `html,body { overflow-x: hidden }`、`img,svg,video,canvas { max-width: 100% }`；
+  会员三数字、工作台与市场网格在窄屏变单列。
+
+### 6.5 深色模式修到的真实缺陷（第一版是坏的）
+
+| 现象 | 根因 | 修法 |
+| --- | --- | --- |
+| 深色下顶栏仍是白条、导航字几乎看不见 | `.v4-nav` 背景写死 `#fff` | 改 `var(--v4-paper)` |
+| 主按钮「浅底白字」看不见 | 用 `var(--v4-ink)` 当底色、`#fff` 当字色，深色下 ink 反转成浅色 | 新增 `--v4-solid-bg/--v4-solid-fg`（深色下整体反转） |
+| 会员页提示条、市场按钮、工作台按钮同色不可读 | `.notice-*`、`.v4-btn-line`、`.v4-btn-dark` 同样是硬编码浅底 | 全部改语义 token，另给 notice 单独一档深色 |
+| 勾选框选中态看不清 | 勾线 1.5px 太细 | 改 2px、5×9px |
+| `.design-view` / `.editor-canvas` 变黑 | 深色覆盖误伤印品画布 | 强制 `#fff`（那是设计稿的纸，不是界面） |
+
+### 6.6 本轮验证证据（不是「打开看看能显示」）
+
+- `npx tsc --noEmit` 通过；`npm test` 34/34 通过；`npm run build` 成功（2.3s）。
+- 视觉：`vite preview` + browser_use 截图（浅色首页 / 深色首页 / 深色英文菜单 / 深色向导 / 深色市场 / 会员页桌面与手机）。
+- 加载态：真实导航时截到 fallback 帧（`L` 起手填橙、其余灰），另用同 class 注入冻结帧确认填充方向与 S 字跳动。
+- 手机端：headless Chrome 经 CDP 设 **CDP 真实 390×844 / 360×844** 视口（桌面窗口最小 500px，只能用 CDP 覆盖），
+  逐页 `scrollWidth === innerWidth`（home 390/390、wizard 390/390、subscribe 390/390、market 390/390、workspace 390/390；360 同）——
+  即无横向溢出、无裁切；会员页 30 格刻度实测 30 个，窄屏为单列。
+- 会员页数字：`UNIT_PRICE = 399/600 = 0.665 → ¥0.67`、`PER_DAY = 20`、刻度 30，均与 `plans.ts` 一致。

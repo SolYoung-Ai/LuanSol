@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from './cloud/auth';
+import { useLang } from './i18n';
+import { applyTheme, readTheme, saveTheme, type Theme } from './theme';
 
 export function useHash() {
   const [hash, setHash] = useState(() => window.location.hash.replace(/^#/, '') || '/');
@@ -16,18 +18,21 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
 }
 
 /** 全站唯一的顶层导航。
- *  V4 信息架构：左侧只有用户头像（唯一的个人功能入口），中间三个主入口，右侧留白。
- *  不允许再出现重复的「登录」「订阅」按钮——个人功能全部收进头像菜单。 */
+ *  V4.1 信息架构：左侧品牌字标，中间三个主入口，右侧「语言 / 深浅色 / 个人中心」。
+ *  个人功能（登录、账号、订阅、设置、帮助）全部收进右上角的头像菜单，
+ *  顶级导航不允许再出现重复的「登录」「订阅」按钮。 */
 const NAV_ITEMS = [
-  { label: '开始', path: '/', en: 'START' },
-  { label: '工作台', path: '/workspace', en: 'WORKSPACE' },
-  { label: '审美市场', path: '/market', en: 'THE AESTHETIC INDEX' },
+  { zh: '开始', en: 'Start', enShort: 'Start', path: '/' },
+  { zh: '工作台', en: 'Workspace', enShort: 'Work', path: '/workspace' },
+  { zh: '审美市场', en: 'Aesthetic Index', enShort: 'Index', path: '/market' },
 ];
 
 export function Nav({ onLogin }: { onLogin: () => void }) {
   const hash = useHash();
   const auth = useAuth();
+  const { lang, setLang, t } = useLang();
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => readTheme());
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,6 +43,13 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
   }, [open]);
+
+  const toggleTheme = () => {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    applyTheme(next);
+    saveTheme(next);
+  };
 
   const go2 = (p: string) => { setOpen(false); go(p); };
   const requestLogin = () => { setOpen(false); onLogin(); };
@@ -50,61 +62,87 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   };
 
   const guestItems: { label: string; path?: string; action?: () => void; primary?: boolean }[] = [
-    { label: '登录 / 注册', primary: true, action: requestLogin },
-    { label: '我的工作台', path: '/workspace' },
-    { label: '账号信息', path: '/account' },
-    { label: '订阅与会员', path: '/subscribe' },
-    { label: '个人设置', path: '/settings' },
-    { label: '帮助与反馈', path: '/help' },
+    { label: t('登录 / 注册', 'Sign in / Create account'), primary: true, action: requestLogin },
+    { label: t('我的工作台', 'Workspace'), path: '/workspace' },
+    { label: t('账号信息', 'Account'), path: '/account' },
+    { label: t('订阅与会员', 'Membership'), path: '/subscribe' },
+    { label: t('个人设置', 'Preferences'), path: '/settings' },
+    { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
   ];
   const userItems: { label: string; path?: string; action?: () => void }[] = [
-    { label: '账号信息', path: '/account' },
-    { label: '我的作品', path: '/workspace' },
-    { label: '我的收藏', path: '/workspace?tab=favorites' },
-    { label: '订阅状态', path: '/subscribe' },
-    { label: '账户设置', path: '/settings' },
-    { label: '帮助与反馈', path: '/help' },
+    { label: t('账号信息', 'Account'), path: '/account' },
+    { label: t('我的作品', 'My work'), path: '/workspace' },
+    { label: t('我的收藏', 'Favorites'), path: '/workspace?tab=favorites' },
+    { label: t('订阅状态', 'Membership'), path: '/subscribe' },
+    { label: t('账户设置', 'Preferences'), path: '/settings' },
+    { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
   ];
 
   return <header className="v4-nav">
     <div className="v4-nav-inner">
-      <div className="v4-nav-left" ref={menuRef}>
-        <button className={`v4-avatar-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label="个人中心">
-          {auth.user
-            ? <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>
-            /* 未登录用极简人形剪影，不用「○」字符——「○」在 30px 圆里会被看成加载圈 */
-            : <span className="v4-avatar v4-avatar-guest" aria-hidden>
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <circle cx="12" cy="8.2" r="3.1" />
-                  <path d="M5.8 19.2c.7-3.5 3.2-5.2 6.2-5.2s5.5 1.7 6.2 5.2" />
-                </svg>
-              </span>}
-        </button>
-        {open && <div className="v4-menu" role="menu">
-          {auth.user ? <>
-            <div className="v4-menu-user">
-              <span className="v4-avatar v4-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>
-              <div className="v4-menu-user-text"><strong>{auth.user.label}</strong><span>{auth.user.account || '已登录'}</span></div>
-            </div>
-            <div className="v4-menu-sep" />
-            {userItems.map((m) => <button key={m.label} className="v4-menu-item" role="menuitem" onClick={() => go2(m.path!)}>{m.label}</button>)}
-            <div className="v4-menu-sep" />
-            <button className="v4-menu-item v4-menu-danger" role="menuitem" onClick={async () => { setOpen(false); await auth.signOut(); }}>退出登录</button>
-          </> : <>
-            <div className="v4-menu-hint">未登录 · 作品只保存在本机</div>
-            <div className="v4-menu-sep" />
-            {guestItems.map((m) => <button key={m.label} className={`v4-menu-item ${m.primary ? 'v4-menu-primary' : ''}`} role="menuitem" onClick={() => (m.action ? m.action() : go2(m.path!))}>{m.label}</button>)}
-          </>}
-        </div>}
+      <div className="v4-nav-brand">
+        <button className="v4-wordmark" onClick={() => go('/')} aria-label="LunaSol">LunaSol</button>
       </div>
 
-      <nav className="v4-nav-center" aria-label="主导航">
+      <nav className="v4-nav-center" aria-label="Primary">
         {NAV_ITEMS.map((n) => <button key={n.path} className={`v4-nav-item ${active(n.path) ? 'active' : ''}`} onClick={() => go(n.path)} aria-current={active(n.path) ? 'page' : undefined}>
-          {n.label}
+          {/* 窄屏放不下长标签时换成短标签，而不是把导航挤成省略号或溢出 */}
+          <span className="v4-nav-label-long">{lang === 'en' ? n.en : n.zh}</span>
+          <span className="v4-nav-label-short">{lang === 'en' ? n.enShort : n.zh}</span>
         </button>)}
       </nav>
 
-      <div className="v4-nav-right" aria-hidden />
+      <div className="v4-nav-right" ref={menuRef}>
+        {/* 语言：显示的是「点了会变成什么」，而不是当前语言，点击即切换 */}
+        <button
+          className="v4-icon-btn v4-lang-btn"
+          onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+          aria-label={lang === 'zh' ? 'Switch to English' : '切换到简体中文'}
+          title={lang === 'zh' ? 'Switch to English' : '切换到简体中文'}
+        >{lang === 'zh' ? 'EN' : '中'}</button>
+
+        <button
+          className="v4-icon-btn"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+          title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+        >
+          {theme === 'dark'
+            ? <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="4.2" /><path d="M12 3.2v2.2M12 18.6v2.2M3.2 12h2.2M18.6 12h2.2M5.9 5.9l1.6 1.6M16.5 16.5l1.6 1.6M18.1 5.9l-1.6 1.6M7.5 16.5l-1.6 1.6" /></svg>
+            : <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M20 14.4A8.6 8.6 0 1 1 9.6 4a6.9 6.9 0 0 0 10.4 10.4Z" /></svg>}
+        </button>
+
+        <div className="v4-nav-user">
+          <button className={`v4-avatar-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={t('个人中心', 'Account menu')}>
+            {auth.user
+              ? <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>
+              /* 未登录用极简人形剪影，不用「○」字符——「○」在 30px 圆里会被看成加载圈 */
+              : <span className="v4-avatar v4-avatar-guest" aria-hidden>
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <circle cx="12" cy="8.2" r="3.1" />
+                    <path d="M5.8 19.2c.7-3.5 3.2-5.2 6.2-5.2s5.5 1.7 6.2 5.2" />
+                  </svg>
+                </span>}
+          </button>
+
+          {open && <div className="v4-menu" role="menu">
+            {auth.user ? <>
+              <div className="v4-menu-user">
+                <span className="v4-avatar v4-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>
+                <div className="v4-menu-user-text"><strong>{auth.user.label}</strong><span>{auth.user.account || t('已登录', 'Signed in')}</span></div>
+              </div>
+              <div className="v4-menu-sep" />
+              {userItems.map((m) => <button key={m.label} className="v4-menu-item" role="menuitem" onClick={() => go2(m.path!)}>{m.label}</button>)}
+              <div className="v4-menu-sep" />
+              <button className="v4-menu-item v4-menu-danger" role="menuitem" onClick={async () => { setOpen(false); await auth.signOut(); }}>{t('退出登录', 'Sign out')}</button>
+            </> : <>
+              <div className="v4-menu-hint">{t('未登录 · 作品只保存在本机', 'Not signed in · work saved on this device')}</div>
+              <div className="v4-menu-sep" />
+              {guestItems.map((m) => <button key={m.label} className={`v4-menu-item ${m.primary ? 'v4-menu-primary' : ''}`} role="menuitem" onClick={() => (m.action ? m.action() : go2(m.path!))}>{m.label}</button>)}
+            </>}
+          </div>}
+        </div>
+      </div>
     </div>
   </header>;
 }

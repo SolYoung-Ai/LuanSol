@@ -12,9 +12,11 @@ import { useApp } from '../store';
 import { createEmptyBrief } from '../engine/brief';
 import { createEmptyDraft } from '../v3/draft';
 import { WIZARD_STEPS, stepProgress } from '../v3/steps';
+import { useLang } from '../i18n';
 
 export default function Home() {
   const { s, update } = useApp();
+  const { t } = useLang();
   const [confirmNew, setConfirmNew] = useState(false);
 
   /** 从首页进入新的九步向导；第一步由用户在向导内选择形态 */
@@ -36,18 +38,19 @@ export default function Home() {
 
     <div className="v4-home-cta">
       <button className="v4-start" onClick={startWizard}>
-        开始设计
+        {t('开始设计', 'Start designing')}
         <span className="v4-start-arrow" aria-hidden>→</span>
       </button>
     </div>
 
-    <Modal open={confirmNew} title="你有一份未完成的草稿" onClose={() => setConfirmNew(false)}>
-      <p className="modal-p">
-        当前草稿已完成 {stepProgress(s.draft)} / {WIZARD_STEPS.length} 步。点击「重新开始」会清空这份草稿并新建一个空项目，此操作无法撤销。
-      </p>
+    <Modal open={confirmNew} title={t('你有一份未完成的草稿', 'You have a draft in progress')} onClose={() => setConfirmNew(false)}>
+      <p className="modal-p">{t(
+        `当前草稿已完成 ${stepProgress(s.draft)} / ${WIZARD_STEPS.length} 步。点击「重新开始」会清空这份草稿并新建一个空项目，此操作无法撤销。`,
+        `This draft is ${stepProgress(s.draft)} of ${WIZARD_STEPS.length} steps in. Starting over clears it and creates an empty project — this cannot be undone.`
+      )}</p>
       <div className="modal-buttons">
-        <button className="v4-btn-line" onClick={() => { setConfirmNew(false); go('/wizard'); }}>继续编辑草稿</button>
-        <button className="v4-btn-dark" onClick={beginFresh}>重新开始</button>
+        <button className="v4-btn-line" onClick={() => { setConfirmNew(false); go('/wizard'); }}>{t('继续编辑草稿', 'Keep editing')}</button>
+        <button className="v4-btn-dark" onClick={beginFresh}>{t('重新开始', 'Start over')}</button>
       </div>
     </Modal>
   </div>;
