@@ -87,7 +87,9 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   return <header className="v4-nav">
     <div className="v4-nav-inner">
       <div className="v4-nav-brand">
-        <button className="v4-wordmark" onClick={() => go('/')} aria-label="LunaSol">Luna<span style={{ color: '#e8783a' }}>Sol</span></button>
+        <button className="v4-wordmark" onClick={() => go('/')} aria-label="LunaSol">
+          <span className="wm-letter">L</span><span className="wm-letter">u</span><span className="wm-letter">n</span><span className="wm-letter">a</span><span className="wm-letter" style={{ color: '#e8783a' }}>S</span><span className="wm-letter" style={{ color: '#e8783a' }}>o</span><span className="wm-letter" style={{ color: '#e8783a' }}>l</span>
+        </button>
         <button
           className="v4-burger"
           onClick={() => setMobileNavOpen((o) => !o)}
