@@ -173,6 +173,10 @@ interface SubCtx {
   /** 当前拦截原因：匿名（需登录）还是额度不足（需订阅） */
   paywallNeed: PaywallNeed;
   setPaywall: (open: boolean, reason?: string) => void;
+  /** 内测期：签到 / 兑换码直接加到本地积分（localStorage），刷新保留 */
+  addLocalCredits: (n: number) => void;
+  /** 内测期：尝试兑换码，成功返回 {ok:true, points:n} */
+  redeemCode: (code: string) => Promise<{ ok: boolean; points?: number; message: string }>;
 }
 
 const Ctx = createContext<SubCtx | null>(null);
@@ -264,12 +268,50 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     if (reason) setPaywallReason(reason);
   }, []);
 
-  const usedLeft = metered ? remainingOf(sub) : null;
+  // ---- 内测期：本地积分（签到 / 兑换码直接加到 localStorage，刷新保留）----
+  const LOCAL_KEY = 'lunasol_local_credits';
+  const readLocal = () => {
+    try { return parseInt(localStorage.getItem(LOCAL_KEY) || '0', 10) || 0; } catch { return 0; }
+  };
+  const [localCredits, setLocalCredits] = useState<number>(readLocal);
+  const addLocalCredits = useCallback((n: number) => {
+    setLocalCredits((prev) => {
+      const next = Math.max(0, prev + n);
+      localStorage.setItem(LOCAL_KEY, String(next));
+      return next;
+    });
+  }, []);
+
+  // 内测兑换码表（硬编码，后续接云函数 /redeem 路由）
+  const REDEEM_CODES: Record<string, number> = {
+    'LS-FODOP5H3': 200,
+    'LS-100': 100,
+    'LS-200': 200,
+    'LS-500': 500,
+    'LS-TEST': 50,
+  };
+  const USED_KEY = 'lunasol_redeemed_codes';
+  const readUsed = () => { try { return JSON.parse(localStorage.getItem(USED_KEY) || '[]'); } catch { return []; } };
+  const redeemCode = useCallback(async (code: string): Promise<{ ok: boolean; points?: number; message: string }> => {
+    const c = code.trim().toUpperCase();
+    if (!c) return { ok: false, message: '请输入兑换码' };
+    const points = REDEEM_CODES[c];
+    if (!points) return { ok: false, message: '兑换码无效，检查后重试（内测测试码：LS-100 / LS-200 / LS-500）' };
+    const used = readUsed();
+    if (used.includes(c)) return { ok: false, message: '该兑换码已使用过' };
+    used.push(c);
+    localStorage.setItem(USED_KEY, JSON.stringify(used));
+    addLocalCredits(points);
+    return { ok: true, points, message: `兑换成功！+${points} 积分` };
+  }, [addLocalCredits]);
+
+  const usedLeftRaw = metered ? remainingOf(sub) : null;
+  const usedLeft = usedLeftRaw !== null ? usedLeftRaw + localCredits : null;
   const isPro = isProActive(sub);
 
   const value = useMemo<SubCtx>(() => ({
-    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall,
-  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall]);
+    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, redeemCode,
+  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, redeemCode]);
 
   return <Ctx.Provider value={value}>
     {children}

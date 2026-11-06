@@ -45,11 +45,12 @@ export default function Subscribe() {
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     const newStreak = checkin.lastDate === yesterday ? checkin.streak + 1 : 1;
     const bonus = newStreak % 10 === 0 ? 100 : 0;
+    const reward = 10 + bonus;
     const next = { lastDate: today, streak: newStreak };
     localStorage.setItem('lunasol_checkin', JSON.stringify(next));
     setCheckin(next);
-    // TODO: 接云函数 /checkin 路由，真正给用户加 10 积分
-    alert(`签到成功！今日 +10 积分${bonus ? `；连续 ${newStreak} 天，额外 +${bonus} 积分` : ''}。积分将在下次登录后到账。`);
+    sub.addLocalCredits(reward);
+    alert(`签到成功！今日 +${reward} 积分${bonus ? `（连续 ${newStreak} 天额外 +${bonus}）` : ''}。已加到你的积分余额。`);
   };
 
   const left = sub.usedLeft ?? PRICING.freeTrialUses;
@@ -59,12 +60,10 @@ export default function Subscribe() {
     const code = redeemCode.trim().toUpperCase();
     if (!code || redeeming) return;
     setRedeeming(true); setRedeemMsg(null);
-    // TODO: 接云函数 /redeem 路由校验兑换码并加积分
-    // 当前先做前端 UI，后端待云函数加 NoSQL 路由
-    setTimeout(() => {
-      setRedeeming(false);
-      setRedeemMsg({ ok: false, text: '兑换码系统正在接入，请稍后再试' });
-    }, 600);
+    const r = await sub.redeemCode(code);
+    setRedeemMsg({ ok: r.ok, text: r.message });
+    setRedeeming(false);
+    if (r.ok) setRedeemCode('');
   };
 
   return <div className="page subscribe-page">
@@ -205,6 +204,9 @@ export default function Subscribe() {
       <SectionLabel en={lang === 'en' ? '' : 'REDEEM'}>{t('兑换码', 'Redeem code')}</SectionLabel>
       <p style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>
         {t('如果你有兑换码（线下活动、邀请奖励等），在此输入兑换积分。', 'Have a code from an event or invite? Enter it here.')}
+      </p>
+      <p style={{ color: '#999', fontSize: 12, marginBottom: 12 }}>
+        内测测试码：LS-100（100 积分）、LS-200（200 积分）、LS-500（500 积分）
       </p>
       <div style={{ display: 'flex', gap: 8 }}>
         <input
