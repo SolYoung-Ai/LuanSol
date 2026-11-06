@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useAuth } from './cloud/auth';
 
 export function useHash() {
   const [hash, setHash] = useState(() => window.location.hash.replace(/^#/, '') || '/');
@@ -14,22 +15,70 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
   </button>;
 }
 
-const NAV = [
-  { label: '首页', path: '/' }, { label: '开始设计', path: '/wizard' }, { label: '灵感库', path: '/inspiration' },
-  { label: '包装类型', path: '/structures' }, { label: '我的作品', path: '/projects' }, { label: '订阅', path: '/subscribe' },
-];
-
-export function Nav({ onLogin, accountLabel }: { onLogin: () => void; accountLabel?: string | null }) {
+export function Nav({ onLogin }: { onLogin: () => void }) {
   const hash = useHash();
-  return <header className="nav">
+  const auth = useAuth();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+
+  const go2 = (p: string) => { setOpen(false); go(p); };
+  const requestLogin = () => { setOpen(false); onLogin(); };
+
+  const accountItems = [
+    { label: '个人主页', path: '/account' },
+    { label: '作品集', path: '/projects' },
+    { label: '我的订阅', path: '/subscribe' },
+    { label: '账号信息', path: '/settings' },
+  ];
+
+  return <header className="nav nav-min">
     <div className="nav-inner">
-      <Logo />
-      <nav className="nav-links">{NAV.map((n) => <a key={n.path} href={`#${n.path}`} className={hash === n.path || (n.path !== '/' && hash.startsWith(n.path)) ? 'active' : ''}>{n.label}</a>)}</nav>
+      <div className="nav-left">
+        <Logo compact />
+        <div className="nav-avatar-wrap" ref={menuRef}>
+          <button className="nav-avatar-btn" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open}>
+            {auth.user
+              ? <span className="nav-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>
+              : <span className="nav-avatar nav-avatar-guest" aria-hidden>👤</span>}
+            <span className="nav-avatar-name">{auth.user ? auth.user.label : '未登录'}</span>
+            <span className="nav-caret" aria-hidden>▾</span>
+          </button>
+          {open && <div className="nav-menu" role="menu">
+            {auth.user ? <>
+              <div className="nav-menu-user">
+                <span className="nav-avatar nav-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>
+                <div><strong>{auth.user.label}</strong><span>{auth.user.account || '已登录'}</span></div>
+              </div>
+              <div className="nav-menu-divider" />
+              {accountItems.map((m) => <button key={m.path} className="nav-menu-item" role="menuitem" onClick={() => go2(m.path)}>{m.label}</button>)}
+              <div className="nav-menu-divider" />
+              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/inspiration')}>灵感库</button>
+              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/structures')}>包装类型</button>
+              <div className="nav-menu-divider" />
+              <button className="nav-menu-item nav-menu-danger" role="menuitem" onClick={async () => { setOpen(false); await auth.signOut(); }}>退出登录</button>
+            </> : <>
+              <button className="nav-menu-item nav-menu-primary" role="menuitem" onClick={requestLogin}>登录 / 注册</button>
+              <div className="nav-menu-divider" />
+              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/inspiration')}>灵感库</button>
+              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/structures')}>包装类型</button>
+              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/projects')}>我的作品</button>
+              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/subscribe')}>订阅方案</button>
+            </>}
+          </div>}
+        </div>
+      </div>
       <div className="nav-actions">
-        <button className={`link-btn ${accountLabel ? 'link-btn-user' : ''}`} onClick={onLogin}>
-          {accountLabel ? <><span className="nav-avatar">{accountLabel.slice(0, 1).toUpperCase()}</span>{accountLabel}</> : '登录'}
-        </button>
-        <button className="btn btn-dark btn-sm" onClick={() => go('/wizard')}>开始设计 <span aria-hidden>↗</span></button>
+        {!auth.user && <button className="link-btn" onClick={onLogin}>登录</button>}
+        <button className="btn btn-dark btn-sm" onClick={() => go('/subscribe')}>订阅 <span aria-hidden>↗</span></button>
       </div>
     </div>
   </header>;

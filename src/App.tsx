@@ -30,16 +30,16 @@ const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default
 const Subscribe = lazy(() => import('./pages/subscribe'));
 
 function Footer() {
-  return <footer className="footer"><div className="footer-inner">
-    <div className="footer-brand"><Logo /><p>让每个人都能轻松完成专业包装设计。</p><span>AI PACKAGING DESIGN STUDIO</span></div>
-    <div className="footer-col"><strong>产品</strong>
-      <a href="#/wizard">开始设计</a><a href="#/create">对话式快速开始</a><a href="#/inspiration">灵感库</a><a href="#/structures">包装类型</a><a href="#/projects">我的作品</a></div>
-    <div className="footer-col"><strong>流程</strong>
-      <a href="#/brief">需求分析</a><a href="#/editor">设计工作台</a><a href="#/preview">3D 预览</a><a href="#/prepress">印前检查</a><a href="#/export">文件导出</a></div>
-    <div className="footer-col"><strong>账户</strong>
-      <a href="#/account">账户与云端项目</a><a href="#/subscribe">订阅方案</a><a href="#/models">平台模型</a><a href="#/settings">个人设置</a>
-      <span className="footer-note">未登录时项目保存在本机浏览器；登录后按账号同步到云端</span></div>
-  </div><div className="footer-bottom"><span>© 2026 LunaSol AI Packaging Studio</span><span>Made for people who have never designed before.</span></div></footer>;
+  return <footer className="footer-min"><div className="footer-min-inner">
+    <div className="footer-min-brand"><Logo compact /><span>AI PACKAGING DESIGN STUDIO</span></div>
+    <div className="footer-min-links">
+      <a href="#/wizard">开始设计</a>
+      <a href="#/subscribe">订阅方案</a>
+      <a href="#/account">账号</a>
+      <a href="#/inspiration">灵感库</a>
+    </div>
+    <span className="footer-min-copy">© 2026 LunaSol · 让包装设计变得简单</span>
+  </div></footer>;
 }
 
 function PageFallback() {
@@ -80,7 +80,7 @@ export default function App() {
 
   return <SubscriptionProvider requestLogin={requestLogin}>
     <div className="app">
-      <Nav onLogin={requestLogin} accountLabel={auth.user ? auth.user.label : null} />
+      <Nav onLogin={requestLogin} />
       <main className="main"><Suspense fallback={<PageFallback />}>{page}</Suspense></main>
       <Footer />
       {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
