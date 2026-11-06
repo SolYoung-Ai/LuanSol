@@ -35,6 +35,7 @@ const Subscribe = lazy(() => import('./pages/subscribe'));
 const Security = lazy(() => import('./pages/security'));
 const Help = lazy(() => import('./pages/help'));
 const Luna = lazy(() => import('./pages/luna'));
+const Admin = lazy(() => import('./pages/admin'));
 
 function Footer() {
   return <footer className="footer-min"><div className="footer-min-inner">
@@ -110,6 +111,7 @@ export default function App() {
   else if (path === '/security') page = <Security />;
   else if (path === '/help') page = <Help />;
   else if (path === '/luna') page = <Luna />;
+  else if (path === '/admin') page = <Admin />;
   else page = <div className="page page-narrow"><h1>页面不存在</h1><Button onClick={() => go('/')}>回到首页</Button></div>;
 
   return <SubscriptionProvider requestLogin={requestLogin}>

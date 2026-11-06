@@ -704,3 +704,21 @@ img, svg, video, canvas { max-width: 100%; }
   .v4-index-tools .v4-search { width: 100%; order: -1; }
   .v4-chip { font-size: 11.5px; padding: 6px 9px; }
 }
+
+/* 积分余额 pill（导航栏头像旁） */
+.v4-credits-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff8e1;
+  border: 1px solid #f5c451;
+  color: #7a5a10;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: background 0.15s;
+}
+.v4-credits-pill:hover { background: #ffecb3; }

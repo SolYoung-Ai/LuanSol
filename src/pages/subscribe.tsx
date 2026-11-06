@@ -1,84 +1,118 @@
 /* ============================================================
- * 会员说明页
+ * 积分 / 充值页（2026-11 改版）
  * ------------------------------------------------------------
- * 三条硬规则（改动前务必读）：
- *  1. 支付未接入：页面只说明「即将开放」，前端不提供任何开通入口，
- *     也不出现「已开通」的假状态。旧激活码输入框已移除（任意字符串即可开通，属后门）。
- *  2. 价格与额度只从 src/cloud/plans.ts 读，界面不写死数字。
- *  3. 不向用户展示「按 token 算的推理成本 / 毛利」。成本是内部经营数据，
- *     摆在用户面前既不可读，也容易被理解成「你们很赚」。用户真正关心的是
- *     「这一次值多少钱、能干什么、什么时候不扣次数」——页面只回答这三个问题。
+ *  - 积分制：聊天 1/轮、Seedream Flash 4/张、Lite 7/张、Pro 10/张
+ *  - 新注册送 100 积分；包月 ¥299 = 3000 积分/月
+ *  - 充值包：¥99=1000 / ¥199=2100 / ¥299=3500（支付未开放，先做卡片）
+ *  - 底部：兑换码兑换入口
+ *  - 不展示成本/毛利等内部经营数据
  * ============================================================ */
-import React from 'react';
+import React, { useState } from 'react';
 import { Button, Card, Notice, PageHead, SectionLabel, Tag, go } from '../ui';
 import { useAuth } from '../cloud/auth';
-import { useSubscription, remainingOf, isProActive } from '../cloud/subscription';
+import { useSubscription } from '../cloud/subscription';
 import { PRICING } from '../cloud/plans';
-import { CLOUD_SITE_URL } from '../cloud/config';
 import { useLang } from '../i18n';
 
-/** 单次 AI 建议的折算单价（元）。纯算术，不掺任何成本口径。 */
-const UNIT_PRICE = PRICING.proMonthlyPriceRMB / PRICING.proMonthlyQuota; // 0.665 → 展示 0.67
-const PER_DAY = Math.round(PRICING.proMonthlyQuota / 30);                // 20 次/天（满月口径）
-const DAYS = 30;
+/** LS 硬币图标（内联 SVG） */
+const Coin = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ verticalAlign: '-3px', marginRight: 4 }}>
+    <circle cx="12" cy="12" r="11" fill="#f5c451" stroke="#d4a027" strokeWidth="1.5" />
+    <circle cx="12" cy="12" r="8" fill="none" stroke="#d4a027" strokeWidth="1" strokeDasharray="1.5 1.5" />
+    <text x="12" y="15.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="#7a5a10" fontFamily="Arial">LS</text>
+  </svg>
+);
 
 export default function Subscribe() {
   const a = useAuth();
   const sub = useSubscription();
   const { lang, t } = useLang();
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemMsg, setRedeemMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const left = sub.usedLeft ?? (sub.sub ? remainingOf(sub.sub) : 0);
-  const pro = isProActive(sub.sub);
+  const left = sub.usedLeft ?? PRICING.freeTrialUses;
+  const pro = sub.isPro;
+
+  const redeem = async () => {
+    const code = redeemCode.trim().toUpperCase();
+    if (!code || redeeming) return;
+    setRedeeming(true); setRedeemMsg(null);
+    // TODO: 接云函数 /redeem 路由校验兑换码并加积分
+    // 当前先做前端 UI，后端待云函数加 NoSQL 路由
+    setTimeout(() => {
+      setRedeeming(false);
+      setRedeemMsg({ ok: false, text: '兑换码系统正在接入，请稍后再试' });
+    }, 600);
+  };
 
   return <div className="page subscribe-page">
     <PageHead
-      kicker="MEMBERSHIP"
-      title={t('会员说明', 'Membership')}
+      kicker="CREDITS"
+      title={t('积分与充值', 'Credits & Recharge')}
       desc={t(
-        '平台统一接入 DeepSeek，模型与密钥都在服务端，你不需要也无法自己配置。会员开通通道尚未上线，当前不扣费。',
-        'LunaSol runs DeepSeek behind our own server; the key never reaches your browser. Checkout is not live yet — nothing is charged today.'
+        '聊天和生图都消耗积分。新用户注册送 100 积分，用完后充值或订阅会员。',
+        'Chat and image generation spend credits. New signups get 100 free credits.'
       )}
     />
 
-    {/* 当前状态 */}
+    {/* 当前积分余额 */}
     <Card className="pad-card sub-status-card">
-      <SectionLabel en={lang === 'en' ? '' : 'YOUR PLAN'}>{t('当前状态', 'Your plan')}</SectionLabel>
+      <SectionLabel en={lang === 'en' ? '' : 'BALANCE'}>{t('我的积分', 'My credits')}</SectionLabel>
       {!a.user
-        ? <Notice tone="warn">{t(
-            `尚未登录。登录后系统会为你自动开通 ${PRICING.freeTrialUses} 次免费体验；订阅会员后可享每月 ${PRICING.proMonthlyQuota} 次 AI 调用。`,
-            `You are not signed in. Signing in grants ${PRICING.freeTrialUses} free AI calls; members get ${PRICING.proMonthlyQuota} calls per month.`
-          )}</Notice>
-        : pro ? <>
-          <div className="sub-status-row"><span>{t('套餐', 'Plan')}</span><Tag tone="green">{t(`会员 · ¥${PRICING.proMonthlyPriceRMB}/月`, `Member · ¥${PRICING.proMonthlyPriceRMB}/mo`)}</Tag></div>
-          <div className="sub-status-row"><span>{t('有效期至', 'Valid until')}</span><strong>{sub.sub?.period_end ? new Date(sub.sub.period_end).toLocaleDateString() : '—'}</strong></div>
-          <div className="sub-status-row"><span>{t('本月剩余', 'Remaining this month')}</span><strong>{left} / {PRICING.proMonthlyQuota} {t('次', 'calls')}</strong></div>
-          <div className="quota-bar"><span style={{ width: `${PRICING.proMonthlyQuota ? (left / PRICING.proMonthlyQuota) * 100 : 0}%` }} /></div>
-          <Button variant="outline" size="sm" onClick={() => go('/account')}>{t('在账户页管理', 'Manage in account')}</Button>
-        </>
+        ? <Notice tone="warn">{t('登录后查看积分余额。', 'Sign in to view your credit balance.')}</Notice>
         : <>
-          <div className="sub-status-row"><span>{t('套餐', 'Plan')}</span><Tag>{t('免费体验', 'Free trial')}</Tag></div>
-          <div className="sub-status-row"><span>{t('剩余', 'Remaining')}</span><strong>{left} / {PRICING.freeTrialUses} {t('次', 'calls')}</strong></div>
-          <div className="quota-bar free"><span style={{ width: `${PRICING.freeTrialUses ? (left / PRICING.freeTrialUses) * 100 : 0}%` }} /></div>
-          <p className="acct-msg">{t(
-            `免费体验用完后可订阅会员，每月 ${PRICING.proMonthlyQuota} 次 AI 调用。`,
-            `When the trial runs out, membership gives you ${PRICING.proMonthlyQuota} AI calls a month.`
-          )}</p>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '12px 0' }}>
+            <Coin size={36} />
+            <strong style={{ fontSize: 40, lineHeight: 1 }}>{left}</strong>
+            <span style={{ color: '#888' }}>{t('积分可用', 'credits available')}</span>
+          </div>
+          <div className="quota-bar"><span style={{ width: `${Math.min(100, (left / Math.max(1, pro ? PRICING.proMonthlyQuota : PRICING.freeTrialUses)) * 100)}%` }} /></div>
+          <div style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Tag tone="green">{pro ? t(`会员 · ¥${PRICING.proMonthlyPriceRMB}/月`, `Member · ¥${PRICING.proMonthlyPriceRMB}/mo`) : t('免费版', 'Free')}</Tag>
+            {pro && sub.sub?.period_end && <Tag>{t('有效期至', 'Valid until')} {new Date(sub.sub.period_end).toLocaleDateString()}</Tag>}
+          </div>
         </>}
     </Card>
 
+    {/* 积分怎么花 */}
+    <Card className="pad-card">
+      <SectionLabel en={lang === 'en' ? '' : 'RATES'}>{t('积分单价', 'Credit rates')}</SectionLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+        <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
+          <div style={{ fontWeight: 600 }}>{t('对话', 'Chat')}</div>
+          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />{PRICING.costs.chat} {t('/轮', '/round')}</div>
+          <div style={{ color: '#999', fontSize: 12 }}>DeepSeek</div>
+        </div>
+        <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
+          <div style={{ fontWeight: 600 }}>{t('图像 · Flash', 'Image · Flash')}</div>
+          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />{PRICING.costs.imageFlash} {t('/张', '/img')}</div>
+          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Flash</div>
+        </div>
+        <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
+          <div style={{ fontWeight: 600 }}>{t('图像 · Lite', 'Image · Lite')}</div>
+          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />{PRICING.costs.imageLite} {t('/张', '/img')}</div>
+          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Lite</div>
+        </div>
+        <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
+          <div style={{ fontWeight: 600 }}>{t('图像 · Pro', 'Image · Pro')}</div>
+          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />{PRICING.costs.imagePro} {t('/张', '/img')}</div>
+          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Pro</div>
+        </div>
+      </div>
+    </Card>
 
-    {/* 套餐对比 */}
+    {/* 会员包月 */}
     <div className="plan-grid">
       <Card className="pad-card plan-card">
-        <div className="plan-name">{t('免费体验', 'Free trial')}</div>
+        <div className="plan-name">{t('免费版', 'Free')}</div>
         <div className="plan-price">¥0</div>
         <ul className="plan-feats">
-          <li>{t(`${PRICING.freeTrialUses} 次 AI 调用（新注册自动获得）`, `${PRICING.freeTrialUses} AI calls, granted at signup`)}</li>
-          <li>{t('内置确定性设计引擎（不调用大模型）', 'Built-in deterministic design engine')}</li>
-          <li>{t('本机保存项目', 'Projects saved on this device')}</li>
-          <li>{t('基础导出能力', 'Core export formats')}</li>
+          <li><Coin size={14} />{PRICING.freeTrialUses} {t('积分（注册即送）', 'credits, granted at signup')}</li>
+          <li>{t('内置设计引擎', 'Built-in design engine')}</li>
+          <li>{t('本机保存项目', 'Local projects')}</li>
         </ul>
-        <Button variant="outline" disabled={!a.user} onClick={() => go('/account')}>{a.user ? t('查看我的额度', 'View my quota') : t('登录后获得', 'Available after sign-in')}</Button>
+        <Button variant="outline" disabled={!a.user} onClick={() => go('/account')}>{a.user ? t('查看积分', 'View credits') : t('登录后获得', 'Sign in to claim')}</Button>
       </Card>
 
       <Card className="pad-card plan-card plan-card-pro">
@@ -86,104 +120,57 @@ export default function Subscribe() {
         <div className="plan-name">{t('会员', 'Member')}</div>
         <div className="plan-price">¥{PRICING.proMonthlyPriceRMB}<span>/{t('月', 'mo')}</span></div>
         <ul className="plan-feats">
-          <li>{t(`每月 ${PRICING.proMonthlyQuota} 次 AI 调用（统一额度）`, `${PRICING.proMonthlyQuota} AI calls every month`)}</li>
-          <li>{t('平台统一接入 DeepSeek（服务端持有密钥）', 'DeepSeek runs server-side, key never exposed')}</li>
-          <li>{t('云端同步与多端取回', 'Cloud sync across devices')}</li>
-          <li>{t('全部导出与印前能力', 'All export and prepress features')}</li>
-          <li>{t('优先体验新 AI 能力', 'Early access to new AI features')}</li>
+          <li><Coin size={14} />{PRICING.proMonthlyQuota} {t('积分/月', 'credits/month')}</li>
+          <li>{t('DeepSeek 对话 + Seedream 生图', 'DeepSeek chat + Seedream images')}</li>
+          <li>{t('云端同步', 'Cloud sync')}</li>
+          <li>{t('全部导出与印前能力', 'All export & prepress')}</li>
         </ul>
         {pro
           ? <Button variant="outline" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</Button>
-          : <Button variant="accent" disabled onClick={() => {}}>{t('即将开放', 'Coming soon')}</Button>}
+          : <Button variant="accent" disabled>{t('即将开放', 'Coming soon')}</Button>}
       </Card>
     </div>
 
-    {/* 开通状态：如实说明，不放任何前端开通入口 */}
-    {!pro && <Card className="pad-card activation-card">
-      <SectionLabel en={lang === 'en' ? '' : 'STATUS'}>{t('会员开通状态', 'Checkout status')}</SectionLabel>
-      <p className="acct-msg">{t(
-        '会员开通通道尚未上线：真实价格、权益与扣款将以服务端支付回调为准。当前不会扣费，也不会出现任何「已开通」的假状态。内置设计引擎、在线编辑、3D 预览、印前检查与文件导出都不依赖会员，可继续使用。',
-        'Checkout is not live yet: price, entitlements and payment will be confirmed by a server-side callback. Nothing is charged today and no fake "active" state is shown. The design engine, editor, 3D preview, prepress and exports do not require membership.'
-      )}</p>
-      <div className="activation-row">
-        <Button variant="accent" disabled>{t('即将开放', 'Coming soon')}</Button>
-        <Button variant="ghost" onClick={() => go('/account')}>{t('查看我的额度', 'View my quota')}</Button>
+    {/* 充值包 */}
+    <Card className="pad-card">
+      <SectionLabel en={lang === 'en' ? '' : 'TOP-UP'}>{t('充值积分包', 'Top-up packs')}</SectionLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+        {PRICING.recharge.map((p) => (
+          <div key={p.price} style={{ padding: 16, border: '2px solid #eee', borderRadius: 12, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: '#999' }}>{p.tag}</div>
+            <div style={{ fontSize: 28, fontWeight: 700, margin: '8px 0' }}>¥{p.price}</div>
+            <div style={{ color: '#666' }}><Coin size={16} />{p.points}</div>
+            <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>≈ {Math.round(p.points / (p.price / 100))} {t('积分/元', 'credits/yuan')}</div>
+            <Button variant="outline" size="sm" disabled style={{ marginTop: 10 }}>{t('即将开放', 'Coming soon')}</Button>
+          </div>
+        ))}
       </div>
-      {!a.user && <Notice tone="warn">{t('请先登录，登录后系统会自动记录你的真实额度。', 'Sign in first — your real quota is recorded once you do.')}</Notice>}
-    </Card>}
-    {/* 会员价值：只讲「一次多少钱、能干什么、什么时候不扣」 */}
-    <Card className="pad-card value-card">
-      <SectionLabel en={lang === 'en' ? '' : 'WHAT YOU PAY FOR'}>{t('这一次，到底值多少', 'What one call is worth')}</SectionLabel>
-
-      <div className="value-stats">
-        <div className="value-stat">
-          <strong>¥{UNIT_PRICE.toFixed(2)}</strong>
-          <span>{t('单次 AI 建议', 'per AI suggestion')}</span>
-        </div>
-        <div className="value-stat">
-          <strong>{PRICING.proMonthlyQuota}</strong>
-          <span>{t('次 / 月', 'calls / month')}</span>
-        </div>
-        <div className="value-stat">
-          <strong>{PER_DAY}</strong>
-          <span>{t('次 / 天（摊到 30 天）', 'calls a day, across 30 days')}</span>
-        </div>
-      </div>
-
-      {/* 把 600 次摊成 30 天的刻度：不是装饰，是让「600」有一个能看见的形状 */}
-      <div className="value-scale" aria-hidden>
-        {Array.from({ length: DAYS }).map((_, i) => <i key={i} />)}
-      </div>
-      <p className="value-scale-note">{t(
-        `每一格 = 一天，可以做完 ${PER_DAY} 次 AI 建议。一整月 ${PRICING.proMonthlyQuota} 次。`,
-        `Each tick is one day of ${PER_DAY} suggestions — ${PRICING.proMonthlyQuota} across a full month.`
-      )}</p>
-      <p className="value-scale-note">{t(
-        `单价是这样算出来的：¥${PRICING.proMonthlyPriceRMB} ÷ ${PRICING.proMonthlyQuota} 次 = ${(PRICING.proMonthlyPriceRMB / PRICING.proMonthlyQuota).toFixed(3)}，按分四舍五入为 ¥${UNIT_PRICE.toFixed(2)}。`,
-        `Unit price = ¥${PRICING.proMonthlyPriceRMB} ÷ ${PRICING.proMonthlyQuota} = ${(PRICING.proMonthlyPriceRMB / PRICING.proMonthlyQuota).toFixed(3)}, rounded to ¥${UNIT_PRICE.toFixed(2)}.`
-      )}</p>
-
-      <div className="value-rules">
-        <div className="value-rule">
-          <strong>{t('一次 = 一次真实的 AI 调用', 'One call = one real model run')}</strong>
-          <span>{t(
-            '在九步向导里点一次「获取建议」并成功返回，才计 1 次。失败回退到内置引擎时不计次。',
-            'One "Get suggestions" that actually returns from the model counts as one. Fallbacks to the built-in engine are not counted.'
-          )}</span>
-        </div>
-        <div className="value-rule">
-          <strong>{t('不按秒计费，也不看输入长短', 'No metering by seconds or prompt length')}</strong>
-          <span>{t(
-            '不论你上传多少 Logo、写多长的产品描述，一次建议都算 1 次——成本波动由平台承担。',
-            'Uploads and long briefs do not change the count: one suggestion is one call, whatever it carries.'
-          )}</span>
-        </div>
-        <div className="value-rule">
-          <strong>{t('设计引擎、编辑、3D、印前、导出全部不计次', 'Design engine, editing, 3D, prepress, export are free')}</strong>
-          <span>{t(
-            '这些能力是本地确定性计算，不消耗模型额度。额度只用于真的向模型提问。',
-            'Those run deterministically on your device. Quota is only spent when we actually ask the model.'
-          )}</span>
-        </div>
-        <div className="value-rule">
-          <strong>{t('按月刷新，未用完不结转', 'Resets monthly, unused calls do not roll over')}</strong>
-          <span>{t(
-            `每个计费周期开始时额度重置为 ${PRICING.proMonthlyQuota} 次，不做累积。`,
-            `At the start of each billing period the balance returns to ${PRICING.proMonthlyQuota}.`
-          )}</span>
-        </div>
-      </div>
-
-      <p className="value-foot">{t(
-        `换个角度：600 次够你把 30 个包装方向各打磨 20 轮，单次 ¥${UNIT_PRICE.toFixed(2)}。`,
-        `Put another way: ${PRICING.proMonthlyQuota} calls is 30 packaging directions, each refined 20 times, at ¥${UNIT_PRICE.toFixed(2)} a call.`
-      )}</p>
+      <p style={{ color: '#999', fontSize: 12, marginTop: 12 }}>
+        {t('支付系统接入中，充值包将以实际支付回调为准。', 'Checkout is not live yet; top-up will be confirmed by payment callback.')}
+      </p>
     </Card>
 
-
-    {!sub.metered && <Notice tone="warn">{t(
-      `当前为 GitHub Pages 镜像，无法订阅（体验版无法追加安全域名）。请在正式站点 ${CLOUD_SITE_URL} 登录并订阅。`,
-      `This is the GitHub Pages mirror, where sign-in and subscription are unavailable. Use the primary site at ${CLOUD_SITE_URL}.`
-    )}</Notice>}
+    {/* 兑换码 */}
+    <Card className="pad-card">
+      <SectionLabel en={lang === 'en' ? '' : 'REDEEM'}>{t('兑换码', 'Redeem code')}</SectionLabel>
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>
+        {t('如果你有兑换码（线下活动、邀请奖励等），在此输入兑换积分。', 'Have a code from an event or invite? Enter it here.')}
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          className="luna-input"
+          value={redeemCode}
+          onChange={(e) => setRedeemCode(e.target.value)}
+          placeholder={t('输入兑换码，如 LS-XXXX', 'Enter code, e.g. LS-XXXX')}
+          style={{ flex: 1 }}
+        />
+        <Button variant="accent" disabled={!redeemCode.trim() || redeeming} onClick={() => void redeem()}>
+          {redeeming ? t('兑换中…', 'Redeeming…') : t('兑换', 'Redeem')}
+        </Button>
+      </div>
+      {redeemMsg && (
+        <div style={{ marginTop: 12 }}><Notice tone={redeemMsg.ok ? 'success' : 'warn'}>{redeemMsg.text}</Notice></div>
+      )}
+    </Card>
   </div>;
 }

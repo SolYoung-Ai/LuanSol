@@ -1,34 +1,43 @@
 /* ============================================================
- * LunaSol 套餐 / 额度 / 成本测算（2026-11 官方价）
+ * LunaSol 积分定价（2026-11 改版）
  * ------------------------------------------------------------
- * 这是「包月 399 对应多少次 AI」的唯一权威来源。
- * 价格、token 估算、汇率都集中在这里，调价或换模型只改本文件即可，
- * 界面（套餐页、个人主页额度条、后台监控）都从这里读。
- *
- * 计量口径（已与产品确认）：
- *   - 计费单元 = 单次 AI 建议调用（九步向导里某一步点一次「获取建议」= 1 次）
- *   - 包月 ¥399；新注册用户免费体验 2 次；会员每月 600 次统一 AI 调用配额
- *   - 平台统一接入 DeepSeek（deepseek-chat 系列），用户看不到密钥、也不能自选模型
+ * 计量口径：积分（不是"次"）。
+ *   - 新注册送 100 积分
+ *   - 包月 ¥299 = 3000 积分/月
+ *   - 充值包：¥99=1000 / ¥199=2100 / ¥299=3500
+ *   - 消费单价：聊天 1 积分/轮；Seedream Flash 4 积分/张、Lite 7、Pro 10
+ *   - 毛利约束：3000 积分对应成本 ≤ 30%（约 90 元）
  * ============================================================ */
 
-/** 价格来源：OpenAI 官方（2026-11-05 核实）与 DeepSeek 官方 API 文档（2026-11 核实）。
- *  单位：美元 / 百万 token。DeepSeek 输入区分缓存命中（前缀复用）与未命中。 */
 export const PRICING = {
-  /** 包月定价（人民币） */
-  proMonthlyPriceRMB: 399,
-  /** 新注册用户免费体验次数 */
-  freeTrialUses: 2,
-  /** 会员每月统一 AI 调用配额（次） */
-  proMonthlyQuota: 600,
+  proMonthlyPriceRMB: 299,
+  /** 新注册用户赠送积分 */
+  freeTrialUses: 100,
+  /** 会员每月积分 */
+  proMonthlyQuota: 3000,
 
-  /** 单次 AI 调用平均 token 估算（仅用于成本测算，不是前端计量值）。
-   *  依据 src/ai/context.ts 的 contextText + src/ai/tasks.ts 的 system/user 拼接实测量级得出。 */
+  /** 充值包 */
+  recharge: [
+    { price: 99, points: 1000, tag: '入门' },
+    { price: 199, points: 2100, tag: '热门' },
+    { price: 299, points: 3500, tag: '超值' },
+  ] as const,
+
+  /** 每次消费扣减（积分） */
+  costs: {
+    chat: 1,             // 每轮对话
+    imageFlash: 4,       // Seedream 5.0 Flash
+    imageLite: 7,        // Seedream 5.0 Lite
+    imagePro: 10,        // Seedream 5.0 Pro
+  } as const,
+
+  /** 内部管理员邮箱（仅此邮箱可见开发者管理入口） */
+  adminEmail: 'solyoungwork@gmail.com',
+
   estTokensPerCall: { input: 1800, output: 900 },
-  /** USD → RMB 近似汇率（测算用，可按实际结算汇率调整） */
   usdToRmb: 7.1,
 
   models: {
-    /** 价格对照行：未接入调度，仅用于评估「如果换成 GPT-4o 成本会怎样」。线上通道见 deepseekV3。 */
     gpt4o: { id: 'gpt-4o', label: 'GPT-4o', inputPer1M: 2.5, cachedInputPer1M: 1.25, outputPer1M: 10 },
     deepseekV3: { id: 'deepseek-chat', label: 'DeepSeek-V3', inputPer1M: 0.28, cachedInputPer1M: 0.028, outputPer1M: 0.42 },
   },

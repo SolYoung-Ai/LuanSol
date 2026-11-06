@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from './cloud/auth';
+import { useSubscription } from './cloud/subscription';
 import { useLang } from './i18n';
 import { applyTheme, readTheme, saveTheme, type Theme } from './theme';
 
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
 export function Nav({ onLogin }: { onLogin: () => void }) {
   const hash = useHash();
   const auth = useAuth();
+  const sub = useSubscription();
   const { lang, setLang, t } = useLang();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => readTheme());
@@ -69,15 +71,17 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     { label: t('个人设置', 'Preferences'), path: '/settings' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
   ];
-  const userItems: { label: string; path?: string; action?: () => void }[] = [
+  const userItems: { label: string; path?: string; action?: () => void; adminOnly?: boolean }[] = [
     { label: t('个人资料', 'Profile'), path: '/account' },
     { label: t('我的作品', 'My work'), path: '/workspace' },
     { label: t('我的收藏', 'Favorites'), path: '/workspace?tab=favorites' },
-    { label: t('订阅状态', 'Membership'), path: '/subscribe' },
+    { label: t('积分与充值', 'Credits & Recharge'), path: '/subscribe' },
     { label: t('账号安全', 'Security'), path: '/security' },
     { label: t('设计偏好', 'Preferences'), path: '/settings' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
+    { label: t('开发者管理', 'Developer'), path: '/admin', adminOnly: true },
   ];
+  const isAdmin = auth.user?.email === 'solyoungwork@gmail.com';
 
   return <header className="v4-nav">
     <div className="v4-nav-inner">
@@ -114,6 +118,19 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
         </button>
 
         <div className="v4-nav-user">
+          {auth.user && sub.usedLeft !== null && (
+            <button
+              className="v4-credits-pill"
+              onClick={() => go('/subscribe')}
+              title={t('积分余额', 'Credit balance')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" style={{ verticalAlign: '-2px' }}>
+                <circle cx="12" cy="12" r="11" fill="#f5c451" stroke="#d4a027" strokeWidth="1.5" />
+                <text x="12" y="15.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="#7a5a10" fontFamily="Arial">LS</text>
+              </svg>
+              {sub.usedLeft}
+            </button>
+          )}
           <button className={`v4-avatar-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={t('个人中心', 'Account menu')}>
             {auth.user
               ? <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>
@@ -133,7 +150,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
                 <div className="v4-menu-user-text"><strong>{auth.user.label}</strong><span>{auth.user.account || t('已登录', 'Signed in')}</span></div>
               </div>
               <div className="v4-menu-sep" />
-              {userItems.map((m) => <button key={m.label} className="v4-menu-item" role="menuitem" onClick={() => go2(m.path!)}>{m.label}</button>)}
+              {userItems.filter((m) => !m.adminOnly || isAdmin).map((m) => <button key={m.label} className="v4-menu-item" role="menuitem" onClick={() => go2(m.path!)}>{m.label}</button>)}
               <div className="v4-menu-sep" />
               <button className="v4-menu-item v4-menu-danger" role="menuitem" onClick={async () => { setOpen(false); await auth.signOut(); }}>{t('退出登录', 'Sign out')}</button>
             </> : <>
