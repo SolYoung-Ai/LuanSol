@@ -11,8 +11,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
 import { go } from '../ui';
 import { useAuth } from '../cloud/auth';
+import { useSubscription } from '../cloud/subscription';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { CLOUD } from '../cloud/config';
+import { PRICING } from '../cloud/plans';
 import { loadAI, llmChat, llmJson } from '../engine/llm';
 import { parseSize } from '../engine/brief';
 
@@ -89,6 +91,7 @@ const FIELDS: { key: keyof Extracted; label: string }[] = [
 export default function Luna() {
   const { patchBrief, setToast, update } = useApp();
   const auth = useAuth();
+  const sub = useSubscription();
   const [loginOpen, setLoginOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -96,6 +99,8 @@ export default function Luna() {
   const [imageGenerating, setImageGenerating] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [imageTier, setImageTier] = useState<'flash' | 'lite' | 'pro'>('flash');
+  const [chatModel, setChatModel] = useState('deepseek');
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [extracted, setExtracted] = useState<Extracted>({ product: '', brand: '', style: '', material: '', size: '', audience: '', scene: '', tagline: '', colors: '' });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -150,6 +155,15 @@ export default function Luna() {
 
   const generateMockup = async () => {
     if (imageGenerating) return;
+    // 积分余额检查：不够直接拦截，不让用户点了才发现
+    const cost = imageTier === 'flash' ? PRICING.costs.imageFlash
+      : imageTier === 'lite' ? PRICING.costs.imageLite : PRICING.costs.imagePro;
+    const balance = sub.usedLeft ?? 0;
+    if (balance < cost) {
+      setToast(`积分不足：生图需要 ${cost} 积分，当前余额 ${balance}。去充值或兑换码 →`);
+      go('/subscribe');
+      return;
+    }
     setImageGenerating(true);
     try {
       const prompt = [
@@ -175,6 +189,10 @@ export default function Luna() {
   };
 
   const enterWorkspace = () => {
+    if (progress < 3) {
+      setToast(`还差 ${3 - progress} 项关键信息（产品/品牌/风格/材质/尺寸），先和 Luna 聊完再进工作台，设计会更准。`);
+      return;
+    }
     const size = parseSize(extracted.size);
     patchBrief({
       product: extracted.product,
@@ -208,7 +226,7 @@ export default function Luna() {
         {m.role === 'assistant' && <div className="luna-avatar">L</div>}
         <div className="luna-bubble">
           {m.text && <div>{m.text}</div>}
-          {m.image && <img src={m.image} alt="参考图" style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, marginTop: 8, display: 'block' }} />}
+          {m.image && <img src={m.image} alt="生成效果图" onClick={() => setLightbox(m.image!)} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, marginTop: 8, display: 'block', cursor: 'zoom-in' }} />}
         </div>
       </div>)}
       {loading && <div className="luna-msg assistant"><div className="luna-avatar">L</div><div className="luna-bubble luna-typing">正在输入…</div></div>}
@@ -234,15 +252,24 @@ export default function Luna() {
           placeholder="告诉 Luna 你的想法，或发产品图…" />
         <button className="v4-btn-line" disabled={loading} onClick={() => void send()}>{loading ? '…' : '发送'}</button>
         <button className="v4-btn-line" disabled={imageGenerating || progress < 1} onClick={() => void generateMockup()}>
-          {imageGenerating ? '生成中…' : '✨ 生成效果图'}
+          {imageGenerating ? '生成中…' : `✨ 生成效果图（${imageTier === 'flash' ? 6 : imageTier === 'lite' ? 10 : 15} 积分）`}
         </button>
-        <button className="v4-btn-dark" disabled={progress < 1} onClick={enterWorkspace}>进入工作台 →</button>
+        <button
+          className="v4-btn-dark"
+          disabled={progress >= 3}
+          onClick={enterWorkspace}
+          title={progress < 3 ? `还差 ${3 - progress} 项关键信息，先和 Luna 聊完` : ''}
+          style={progress < 3 ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+        >进入工作台 →</button>
       </div>
       <div className="luna-model-row">
         <span className="luna-model-label">对话：</span>
-        <select className="luna-model-select" value="deepseek" onChange={() => setToast('GPT 接入后可在此切换')}>
-          <option value="deepseek">DeepSeek（deepseek-chat）</option>
-          <option value="gpt" disabled>GPT（即将接入）</option>
+        <select className="luna-model-select" value={chatModel} onChange={(e) => setChatModel(e.target.value)}>
+          <option value="deepseek">DeepSeek-V3（通用）</option>
+          <option value="kimi">Kimi-K3（长文）</option>
+          <option value="doubao-seed-pro">Doubao-Seed 2.1 Pro（创意）</option>
+          <option value="doubao-seed-lite">Doubao-Seed 2.1 Lite（快）</option>
+          <option value="doubao-seed-turbo">Doubao-Seed 2.1 Turbo</option>
         </select>
         <span className="luna-model-label" style={{ marginLeft: 16 }}>生图：</span>
         <select className="luna-model-select" value={imageTier} onChange={(e) => setImageTier(e.target.value as 'flash' | 'lite' | 'pro')}>
@@ -252,5 +279,10 @@ export default function Luna() {
         </select>
       </div>
     </div>
+
+    {/* 图片放大 lightbox */}
+    {lightbox && <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'grid', placeItems: 'center', cursor: 'zoom-out' }}>
+      <img src={lightbox} alt="放大预览" style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8 }} />
+    </div>}
   </div>;
 }

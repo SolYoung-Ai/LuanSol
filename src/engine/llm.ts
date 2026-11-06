@@ -88,7 +88,7 @@ export const aiConfigured = aiEnabled;
 export const aiStatusLabel = (s: AISettings): string => {
   if (!aiEnabled(s)) return '本地建议 · 未调用 AI';
   const m = aiMode(s);
-  if (m === 'proxy') return isDeepSeekProxy(s) ? 'AI 已接入 · DeepSeek 后台代理' : 'AI 已接入 · 后台代理';
+  if (m === 'proxy') return 'AI 已接入 · 多模型（DeepSeek / Kimi / Doubao-Seed）';
   return `AI 已接入 · ${s.textModel.trim() || '自定义模型'}`;
 };
 

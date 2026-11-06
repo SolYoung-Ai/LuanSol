@@ -22,8 +22,8 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
   const needLogin = need === 'login';
 
   const planLine = <>
-    <span>每月 {PRICING.proMonthlyQuota} 次 AI 调用</span>
-    <span>平台统一接入 DeepSeek</span>
+    <span>每月 {PRICING.proMonthlyQuota} 积分</span>
+    <span>DeepSeek / Kimi / Doubao-Seed 等多模型接入</span>
   </>;
 
   return <Modal open={open} title={needLogin ? '登录后即可使用 AI 建议' : '会员额度已用完'} onClose={onClose}>

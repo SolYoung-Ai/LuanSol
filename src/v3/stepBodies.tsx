@@ -389,7 +389,11 @@ export function StepStyle(p: StepProps) {
       </div>
       <div className="v3-style-grid">
         {list.map((s) => <div key={s.style_id} className={`v3-style-card ${p.d.style_id === s.style_id ? 'on' : ''}`}>
-          <button className="v3-style-thumb" onClick={() => setBig(s.style_id)} aria-label={`放大预览 ${s.style_name}`}><img src={s.reference_thumbnail} alt={s.style_name} /></button>
+          <button className="v3-style-thumb" onClick={() => setBig(s.style_id)} aria-label={`查看介绍 ${s.style_name}`}>
+            <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: '#f5f5f3' }}>
+              <div style={{ display: 'flex', gap: 6 }}>{s.dominant_colors.slice(0, 4).map((c) => <i key={c} style={{ width: 18, height: 18, borderRadius: 2, background: c, display: 'inline-block' }} />)}</div>
+            </div>
+          </button>
           <button className={`v3-fav ${p.d.style_favorites.includes(s.style_id) ? 'on' : ''}`} onClick={() => fav(s.style_id)} aria-label="收藏">★</button>
           <div className="v3-style-info">
             <span className="v3-style-era">{s.era}</span><strong>{s.style_name}</strong>
