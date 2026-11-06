@@ -100,7 +100,7 @@ input, textarea, select { border-radius: 2px; }
   background: var(--v4-ink); color: #fff;
   font-size: 12px; font-weight: 500; letter-spacing: .04em;
 }
-.v4-avatar-guest { background: transparent; border: 1px solid var(--v4-line-strong); color: var(--v4-ink-3); }
+.v4-avatar-guest { background: transparent; border: 1px solid var(--v4-line-strong); color: var(--v4-ink-2); }
 .v4-avatar-guest svg { display: block; }
 .v4-avatar-sm { width: 28px; height: 28px; font-size: 11px; }
 
