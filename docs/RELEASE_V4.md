@@ -149,3 +149,56 @@ git add -A && git commit -m "deploy: ..." && git push origin HEAD:gh-pages
   逐页 `scrollWidth === innerWidth`（home 390/390、wizard 390/390、subscribe 390/390、market 390/390、workspace 390/390；360 同）——
   即无横向溢出、无裁切；会员页 30 格刻度实测 30 个，窄屏为单列。
 - 会员页数字：`UNIT_PRICE = 399/600 = 0.665 → ¥0.67`、`PER_DAY = 20`、刻度 30，均与 `plans.ts` 一致。
+
+## 7. 第三轮：登录接入勘察 + 微信入口下线 + 深色实底控件
+
+### 7.1 结论先说：登录不需要证书，也不需要迁托管
+
+- SSL 证书只解决「HTTPS 能不能访问」，和「能不能登录」无关。登录能力来自 CloudBase 身份认证 + 浏览器安全域名白名单。
+- 实测证据（线上 `luna.solyoung.top`，真实请求，不是推断）：
+  - 打开登录弹窗，用不存在的账号提交，返回 **「用户名或密码不正确。」** —— 说明 SDK 初始化、跨域白名单、身份服务都通了，请求真到了服务端（否则应是 CORS / 网络错误）。
+  - `queryAppAuth(getLoginConfig)`：`usernamePassword=true`、`email=true`、`phone=true`、`anonymous=false`。
+  - `queryEnv(domains)`：`luna.solyoung.top`（2026-11-06 12:35:08）、`luna.solyoung.com`、默认 `*.tcloudbaseapp.com` 均 `ENABLE`。
+  - PG 表 `lunasol_projects` / `lunasol_subscriptions` 已存在，且有 4 条 RLS 策略（`owner_id = auth.uid()` 覆盖 select/insert/update/delete）；库里已有真实项目行，owner 是已登录 uid。
+- 没有 `localhost` / `127.0.0.1` 条目：本地 `:4173` 走真实登录会被拦，验证要在正式域名上做。
+
+### 7.2 微信登录入口先下线
+
+- 环境 provider 列表只有 `email` 与 `custom`，**没有微信** → 原先的「💬 微信安全登录」按钮点了必然失败（等于假按钮）。
+- 处理：`LoginDialog` 移除该按钮与说明，只留密码登录 / 注册 / 验证码三条真实路径；`auth.signInWithWechat` 保留在代码里，等控制台开通后一行恢复。
+
+### 7.3 深色下的「实底 + 白字」控件
+
+- 根因同 6.5：`.seg button.active`、`.btn-dark`、`.chip.active`、`.step.current .step-num`、`.toast`、
+  `.face-tabs button.active`、`.mini-msg.user`、`.chat-msg.user .chat-text`、`.chat-avatar` 都是 `background: var(--ink)` + `#fff`。
+  深色下 `--ink` 变浅 → 白字压浅底，登录弹窗的分段标签首当其冲（截图为证）。
+- 修法：上述选择器在 `[data-theme="dark"]` 下统一走 `--v4-solid-bg / --v4-solid-fg`；
+  `styles.css` 里的 `.seg button.active`、`.switch.on`、`.tag-dark` 直接把底色换成带 fallback 的语义令牌
+  （`var(--v4-solid-bg, var(--ink))`），浅色主题行为不变。
+
+### 7.4 CloudBase 静态托管：已部署，但域名被备案卡住
+
+- 已做：把最新 `dist` 通过 `manageApps` 云端链路上传（`getUploadUrl` → PUT zip → `deployApp`，`buildPath=dist`、`installCmd/buildCmd` 置空），
+  版本 `solyoung-003`（`index-VKEL4EXs.js`）、`solyoung-004`（`index-CB1bp61G.js`），两次构建均 `SUCCESS`；
+  `webapps.tcloudbase.com` 与默认 `*.tcloudbaseapp.com` 两个域名都实测返回同一份产物。
+- 受阻：`manageGateway(bindCustomDomain, domain=luna.solyoung.top)` 返回
+  **「[CreateHTTPServiceRoute] 域名未备案；如果域名已经完成备案，由于腾讯云与工信部数据需要同步，请在1小时后重试。」**
+  → 国内站自定义域名必须 ICP 备案，这不是证书或权限问题，补证书也绕不过去。
+- 另一个细节：`manageHosting(bindDomain)` 直接拒绝——该环境已开 HTTP 访问服务，自定义域名必须走网关（`manageGateway`），不是 COS 静态托管的绑定接口。
+- DNS 现状：`luna.solyoung.top` 的 A 记录指向 Cloudflare（172.67.146.103 / 104.21.41.95），源站是 GitHub Pages。也就是说现在的链路是
+  `Cloudflare → GitHub Pages`，不是 CloudBase。绑定成功后需要把 Cloudflare 的解析改到 CloudBase 提供的 CNAME，这一步只能在 DNS 侧做。
+
+### 7.5 用户体系容量（顺手发现）
+
+- `managePermissions(createUser)` 失败：**「超过配额限制。授权用户数超过套餐配额上限」**（个人版，当前 4 个用户）。
+- 其中 2 个是早前 QA 留的 `lunasol_smoke_01/02`（internalUser，各存过 1 条测试项目），1 个真实手机号账号，1 个内置 administrator。
+- 含义：个人版的用户数配额已经被 QA 账号占掉两个；真要给别人开账号会先撞配额。建议清掉 smoke 账号（需用户确认，涉及删用户）。
+
+### 7.6 本轮部署记录
+
+| 项 | 值 |
+| --- | --- |
+| main | `858a4f8`（微信入口下线）→ `7344c8b`（深色实底控件） |
+| gh-pages | `61a43c3` → `7c4ad27`，Pages `built` |
+| 线上产物 | `assets/index-CB1bp61G.js`（浏览器实测已加载） |
+| CloudBase 托管 | `solyoung-004` / buildId `2611226153` / `SUCCESS` |
