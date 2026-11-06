@@ -98,12 +98,15 @@ input, textarea, select { border-radius: 2px; }
 .v4-wordmark {
   font-size: 15px; font-weight: 500; letter-spacing: .01em;
   color: var(--v4-ink); white-space: nowrap;
-  transition: transform .2s ease, color .2s ease;
+  transition: all .2s ease;
   cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px 0;
 }
 .v4-wordmark:hover {
   transform: translateY(-2px);
-  color: #e8783a;
+  color: #e8783a !important;
 }
 .v4-wordmark:hover span { color: #e8783a !important; }
 /* 右上角工具区：语言 / 深浅色 / 头像。三者间距靠 gap 统一，不各自加 margin */
