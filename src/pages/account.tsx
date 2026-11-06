@@ -55,7 +55,9 @@ export default function Account() {
   useEffect(() => {
     if (!a.user) return;
     setNick(a.user.label === a.user.id ? '' : a.user.label);
-    setAvatar(a.user.avatarUrl);
+    // 头像优先从 localStorage 读（本地上传的 base64），其次用云端 avatarUrl
+    const localAvatar = (() => { try { return localStorage.getItem(`lunasol_avatar_${a.user.id}`); } catch { return null; } })();
+    setAvatar(localAvatar || a.user.avatarUrl || '');
     setBirthdayLocal(getBirthday(a.user.id));
   }, [a.user?.id, a.user?.label, a.user?.avatarUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -81,9 +83,10 @@ export default function Account() {
   const saveProfile = async () => {
     if (!a.user) return;
     setSaving(true);
+    // 头像单独存 localStorage（CloudBase API 不接受 base64 data URL）
+    try { localStorage.setItem(`lunasol_avatar_${a.user.id}`, avatar.trim()); } catch { /* */ }
     const r = await a.updateProfile({
       nickName: nick.trim() || undefined,
-      avatarUrl: avatar.trim() || undefined,
     });
     setSaving(false);
     if (!r.ok) { setToast(r.message); return; }
