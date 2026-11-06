@@ -67,6 +67,11 @@ function guard(req) {
   if (REQUIRE_ORIGIN && !allowedOrigins().includes(origin)) {
     return { status: 403, message: '来源不受信任：只能从站点页面调用' };
   }
+  // 登录态校验：必须有 CloudBase 注入的 uid，未登录直接拒绝
+  const uid = String(req.headers['x-cloudbase-uid'] || '').trim();
+  if (!uid) {
+    return { status: 401, message: '请先登录后再使用 AI 功能' };
+  }
   rollDay();
   if (dayUsed >= DAILY_LIMIT) {
     return { status: 429, message: '今日 AI 调用已达上限，请明天再试' };
