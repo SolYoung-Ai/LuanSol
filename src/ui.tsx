@@ -24,6 +24,7 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
  *  顶级导航不允许再出现重复的「登录」「订阅」按钮。 */
 const NAV_ITEMS = [
   { zh: '开始', en: 'Start', enShort: 'Start', path: '/' },
+  { zh: 'Luna 对话', en: 'Luna', enShort: 'Luna', path: '/luna' },
   { zh: '工作台', en: 'Workspace', enShort: 'Work', path: '/workspace' },
   { zh: '审美市场', en: 'Aesthetic Index', enShort: 'Index', path: '/market' },
 ];

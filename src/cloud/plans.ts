@@ -25,10 +25,10 @@ export const PRICING = {
 
   /** 每次消费扣减（积分） */
   costs: {
-    chat: 1,             // 每轮对话
-    imageFlash: 4,       // Seedream 5.0 Flash
-    imageLite: 7,        // Seedream 5.0 Lite
-    imagePro: 10,        // Seedream 5.0 Pro
+    chat: 0,             // 对话免费（吸引用户聊，靠生图变现）
+    imageFlash: 6,       // Seedream 5.0 Flash（成本约 ¥0.12，毛利约 80%）
+    imageLite: 10,       // Seedream 5.0 Lite（成本约 ¥0.22，毛利约 78%）
+    imagePro: 15,        // Seedream 5.0 Pro（成本约 ¥0.30，毛利约 80%）
   } as const,
 
   /** 内部管理员邮箱（仅此邮箱可见开发者管理入口） */

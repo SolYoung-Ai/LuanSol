@@ -81,23 +81,23 @@ export default function Subscribe() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('对话', 'Chat')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.chat} {t('/轮', '/round')}</div>
+          <div style={{ color: '#666', fontSize: 13 }}>{t('免费', 'Free')}</div>
           <div style={{ color: '#999', fontSize: 12 }}>DeepSeek / Kimi / Doubao-Seed</div>
         </div>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('图像 · Flash', 'Image · Flash')}</div>
           <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imageFlash} {t('/张', '/img')}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Flash</div>
+          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Flash · 快</div>
         </div>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('图像 · Lite', 'Image · Lite')}</div>
           <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imageLite} {t('/张', '/img')}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Lite</div>
+          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Lite · 平衡</div>
         </div>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('图像 · Pro', 'Image · Pro')}</div>
           <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imagePro} {t('/张', '/img')}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Pro</div>
+          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Pro · 精细</div>
         </div>
       </div>
       <p style={{ color: '#999', fontSize: 12, marginTop: 12 }}>
