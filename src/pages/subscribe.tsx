@@ -9,6 +9,7 @@
  * ============================================================ */
 import React, { useState } from 'react';
 import { Button, Card, Notice, PageHead, SectionLabel, Tag, go } from '../ui';
+import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription } from '../cloud/subscription';
 import { PRICING } from '../cloud/plans';
@@ -27,6 +28,7 @@ export default function Subscribe() {
   const a = useAuth();
   const sub = useSubscription();
   const { lang, t } = useLang();
+  const { setToast } = useApp();
   const [redeemCode, setRedeemCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
   const [redeemMsg, setRedeemMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -50,7 +52,7 @@ export default function Subscribe() {
     localStorage.setItem('lunasol_checkin', JSON.stringify(next));
     setCheckin(next);
     sub.addLocalCredits(reward);
-    alert(`签到成功！今日 +${reward} 积分${bonus ? `（连续 ${newStreak} 天额外 +${bonus}）` : ''}。已加到你的积分余额。`);
+    setToast(`签到成功！+${reward} 积分${bonus ? `（连续 ${newStreak} 天额外 +${bonus}）` : ''}`);
   };
 
   const left = sub.usedLeft ?? PRICING.freeTrialUses;
