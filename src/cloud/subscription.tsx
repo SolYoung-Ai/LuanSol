@@ -15,7 +15,7 @@ import { registerAIGate, registerAIReporter, type GateResult } from '../ai/gate'
 import { PRICING } from './plans';
 import { useAuth } from './auth';
 import { useApp } from '../store';
-import { PaywallModal } from '../components/PaywallModal';
+import { PaywallModal, type PaywallNeed } from '../components/PaywallModal';
 
 export type Plan = 'free' | 'pro_monthly';
 export type SubStatus = 'none' | 'active';
@@ -54,6 +54,35 @@ export function defaultFree(uid: string): Subscription {
   return { id: uid, owner_id: uid, plan: 'free', status: 'none', quota_total: FREE_TRIAL, quota_used: 0, period_start: null, period_end: null };
 }
 
+/** AI 闸门的判定结果（纯函数，便于回归测试）。
+ *  登录与额度是两件事：未登录 → need='login'（引导登录，有 2 次免费体验）；
+ *  已登录但额度用完 / 会员过期 → need='subscribe'（引导订阅）。 */
+export type GateDecision = { ok: boolean; reason: string; need: PaywallNeed };
+
+export function decideGate(input: {
+  loggedIn: boolean;
+  /** 剩余次数；null 表示订阅信息尚未加载完成，此时不拦截 */
+  remaining: number | null;
+  proActive: boolean;
+  freeTrial?: number;
+  quota?: number;
+}): GateDecision {
+  const trial = input.freeTrial ?? FREE_TRIAL;
+  const quota = input.quota ?? PRO_QUOTA;
+  if (!input.loggedIn) {
+    return { ok: false, reason: `登录后即可使用平台 AI；新注册用户有 ${trial} 次免费体验`, need: 'login' };
+  }
+  if (input.remaining === null) return { ok: true, reason: '', need: 'subscribe' };
+  if (input.remaining > 0) return { ok: true, reason: '', need: 'subscribe' };
+  return {
+    ok: false,
+    reason: input.proActive
+      ? '会员额度已用完或已过期，请续费后继续'
+      : `免费体验已用完（${trial} 次），订阅会员即可每月使用 ${quota} 次 AI`,
+    need: 'subscribe',
+  };
+}
+
 export async function getSubscription(uid: string): Promise<CloudResult<Subscription>> {
   const d = await db(); if (!d) return fail('云服务未配置');
   try {
@@ -85,7 +114,9 @@ export async function recordUsage(uid: string, n = 1): Promise<number> {
       const r = await d.rpc('lunasol_consume_quota', { p_uid: uid, p_n: n });
       if (!r.error) {
         const v = typeof r.data === 'number' ? r.data : (r.data as { value?: number } | null)?.value;
-        if (typeof v === 'number') return v;
+        // -1 表示该用户还没有订阅行（新注册用户），必须继续走兜底逻辑建行并计数，
+        // 否则第一次 AI 调用会白白丢掉这一次额度。
+        if (typeof v === 'number' && v >= 0) return v;
       }
     }
   } catch { /* 落到兜底实现 */ }
@@ -136,6 +167,8 @@ interface SubCtx {
   activate: (code: string) => Promise<{ ok: boolean; message: string }>;
   paywallOpen: boolean;
   paywallReason: string;
+  /** 当前拦截原因：匿名（需登录）还是额度不足（需订阅） */
+  paywallNeed: PaywallNeed;
   setPaywall: (open: boolean, reason?: string) => void;
 }
 
@@ -153,6 +186,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   const [loading, setLoading] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [paywallReason, setPaywallReason] = useState<string>('');
+  const [paywallNeed, setPaywallNeed] = useState<PaywallNeed>('subscribe');
   const subRef = useRef<Subscription | null>(null);
   const userRef = useRef(auth.user);
   subRef.current = sub;
@@ -189,17 +223,21 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       // 非登录能力来源（GitHub Pages 镜像 / 未配置云）无法订阅，放行且不计量
       if (!metered) return { ok: true };
       const u = userRef.current;
-      if (!u) { requestLogin?.(); return { ok: false, reason: '请先登录后再使用 AI 功能', need: 'login' }; }
       // 订阅还没加载出来就先等它加载完，否则会在计量窗口内白送调用
       if (!subRef.current && loadPromiseRef.current) { try { await loadPromiseRef.current; } catch { /* 忽略 */ } }
       const s = subRef.current;
-      if (!s) return { ok: true }; // 确实没有订阅信息时放行，加载后开始计量
-      if (remainingOf(s) > 0) return { ok: true };
-      const reason = isProActive(s)
-        ? '会员额度已用完或已过期，请续费后继续'
-        : `免费体验已用完（${FREE_TRIAL} 次），订阅会员即可每月使用 ${PRO_QUOTA} 次 AI`;
-      setPaywallReason(reason); setPaywallOpen(true);
-      return { ok: false, reason, need: 'subscribe' };
+      const d = decideGate({
+        loggedIn: !!u,
+        // 还没有订阅行 = 新注册用户，免费体验一次都没用过，按满额放行；
+        // 订阅信息尚未加载完成时传 null，同样放行，避免在计量窗口内白送调用。
+        remaining: s ? remainingOf(s) : (u ? FREE_TRIAL : null),
+        proActive: isProActive(s),
+      });
+      if (d.ok) return { ok: true };
+      // 匿名用户不要直接抛登录框——那会打断正在填的表单。改为弹付费墙，
+      // 由用户在弹窗里主动选择「立即登录」，未登录只是不计量，不影响继续用内置引擎。
+      setPaywallReason(d.reason); setPaywallNeed(d.need); setPaywallOpen(true);
+      return { ok: false, reason: d.reason, need: d.need };
     });
     registerAIReporter(() => {
       const u = userRef.current; if (!u) return;
@@ -226,11 +264,11 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   const isPro = isProActive(sub);
 
   const value = useMemo<SubCtx>(() => ({
-    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, setPaywall,
-  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, setPaywall]);
+    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall,
+  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall]);
 
   return <Ctx.Provider value={value}>
     {children}
-    <PaywallModal open={paywallOpen} reason={paywallReason} onClose={() => setPaywall(false)} onActivate={activate} />
+    <PaywallModal open={paywallOpen} reason={paywallReason} need={paywallNeed} onClose={() => setPaywall(false)} onActivate={activate} onLogin={requestLogin} />
   </Ctx.Provider>;
 }

@@ -472,6 +472,14 @@ export const styleById = (id: string) => STYLES.find((s) => s.style_id === id);
 export const styleByName = (name: string) => STYLES.find((s) => s.style_name === name);
 export const TRADITION_COUNT = new Set(TRADITION.map((s) => s.eraIndex)).size; // = 14
 
+/** 风格自带的推荐主色（该风格 dominant_colors 的第一色）。
+ *  选定风格时直接写进草稿，保证「界面上看到的颜色」就是「真正生效的颜色」，
+ *  不会再出现取色器显示有颜色、草稿却是空的、然后被「请先选择主颜色」拦住的情况。 */
+export function stylePrimaryColor(styleId: string): string {
+  const c = styleById(styleId)?.dominant_colors?.[0] || '';
+  return /^#[0-9a-f]{6}$/i.test(c) ? c : '';
+}
+
 /** 依据品类 / 人群 / 形态推荐风格（确定性规则，不冒充 AI） */
 export function recommendStyles(input: { category?: string; audience?: string; form?: string }): StyleConfig[] {
   const c = `${input.category || ''} ${input.audience || ''} ${input.form || ''}`;

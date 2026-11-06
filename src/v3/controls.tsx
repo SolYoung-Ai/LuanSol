@@ -74,12 +74,14 @@ export function ColorInput({ value, onChange, label }: { value: string; onChange
       onChange('#' + h);
     } else setDraft(value);
   };
+  // 没选颜色时不要拿一个默认色假装「已经选好了」——那会让用户以为填了、实际草稿却是空的。
+  const valid = /^#[0-9a-f]{6}$/i.test(value);
   return <div className="v3-colorinput">
     {label && <FieldLabel>{label}</FieldLabel>}
     <div className="v3-colorinput-row">
-      <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#20463a'} onChange={(e) => onChange(e.target.value)} aria-label="选择颜色" />
+      <input type="color" value={valid ? value : '#e6e4df'} onChange={(e) => onChange(e.target.value)} aria-label={valid ? '选择颜色' : '选择颜色（尚未选择）'} />
       <input className="mono" value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => commit(draft)}
-        onKeyDown={(e) => { if (e.key === 'Enter') commit(draft); }} placeholder="#20463a" />
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(draft); }} placeholder="#20463a" aria-invalid={draft !== '' && !/^#?[0-9a-f]{3,6}$/i.test(draft)} />
     </div>
   </div>;
 }

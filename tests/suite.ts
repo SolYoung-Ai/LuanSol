@@ -1,16 +1,18 @@
 /* LunaSol 真实功能测试套件（Node + 浏览器共用同一套断言）
  * 浏览器部分覆盖 PDF 生成与字节级预检、SVG 位图渲染等依赖 DOM 的能力。 */
 import { createEmptyBrief, nextQuestion, parseSize, parseUtterance } from '../src/engine/brief';
-import { buildDieline, dielineStats, faceSizes, STRUCTURES } from '../src/engine/structure';
+import { buildDieline, dielineStats, faceSizes, STRUCTURES, structureById } from '../src/engine/structure';
 import { buildSchemes, cloneDesign, faceSvg, fitText, makeText, textOverflow } from '../src/engine/design';
 import { applyPatch, localIntent } from '../src/engine/modify';
 import { autoFix, runPrepress } from '../src/engine/prepress';
 import { buildBundle, buildDxf, buildPdf, spreadSvg, svgToCanvas, verifyPdf } from '../src/engine/export';
 import type { DesignBrief, DesignDoc, StructureId, TextLayer } from '../src/types';
-import { STYLES, TRADITION_COUNT, styleById, buildStylePrompt } from '../src/v3/styles';
+import { STYLES, TRADITION_COUNT, styleById, stylePrimaryColor, buildStylePrompt } from '../src/v3/styles';
 import { createEmptyDraft, draftToBrief, dimensionComplete, structureReady } from '../src/v3/draft';
 import { generatePalettes } from '../src/v3/colors';
 import { accountKey, otpTarget, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
+import { decideGate } from '../src/cloud/subscription';
+import { toastTone } from '../src/store';
 import { CLOUD, cloudConfigured, deepSeekReady } from '../src/cloud/config';
 import { validateBarcode, encodeBarcode, decodeEan, verifyBarcode } from '../src/v3/barcode';
 import { DEFAULT_AI, aiEnabled, aiMode, aiStatusLabel } from '../src/engine/llm';
@@ -182,6 +184,57 @@ export async function runTests(): Promise<Result[]> {
     const without = buildDieline(b.structure, b.size, 3, 5);
     A(withExtra.sheets[0].width !== without.sheets[0].width, 'brief 的补充参数没有影响刀模');
     return `粘合位 22 / 插舌 26 → 展开宽 ${without.sheets[0].width} → ${withExtra.sheets[0].width} mm`;
+  });
+
+  await t('风格 → 主色 · 选定风格即带出真实主色，界面所见即草稿值', () => {
+    // 回归点：取色器一直显示 #20463a（占位默认值）但草稿里 primary_color 是空的，
+    // 用户以为选好了却会被「请先选择主颜色」拦住。
+    const c = stylePrimaryColor('yangshao');
+    A(/^#[0-9a-f]{6}$/i.test(c), '风格主色不是合法 HEX');
+    A(c === styleById('yangshao')!.dominant_colors[0], '风格主色与风格库不一致');
+    A(stylePrimaryColor('not-a-style') === '', '未知风格应返回空主色而不是兜底假色');
+    // 每个风格都必须能给出主色，否则选风格后仍会被拦
+    for (const s of STYLES) A(stylePrimaryColor(s.style_id) !== '', `风格「${s.style_name}」没有可用的主色`);
+    return `${STYLES.length} 个风格全部带出主色，示例 ${c}`;
+  });
+
+  await t('轻提示语气 · 拦截类提示不再显示成功对勾', () => {
+    A(toastTone('请先选择主颜色') === 'warn', '拦截提示被判为成功语气');
+    A(toastTone('还需要完善：包装结构') === 'warn', '缺项提示被判为成功语气');
+    A(toastTone('请至少填写品牌名称或产品名称') === 'warn', '文案校验提示被判为成功语气');
+    A(toastTone('连接失败：接口不可用') === 'warn', '失败提示被判为成功语气');
+    A(toastTone('已使用「现代极简」，主色已带出为 #f7f6f2，可继续调整') === 'ok', '成功提示被误判为警示');
+    A(toastTone('项目已暂存到「我的作品」，浏览器自动保存') === 'ok', '中性提示被误判为警示');
+    A(toastTone('已生成 6 套配色方案') === 'ok', '生成提示被误判为警示');
+    return '拦截→警示，其余→成功';
+  });
+
+  await t('需求汇总 · 包装结构显示中文名而不是内部 ID', () => {
+    A(structureById('topBottom').name === '天地盖盒', '结构中文名错误');
+    A(!/^[a-zA-Z]+$/.test(structureById('topBottom').name), '结构名仍是内部 ID');
+    for (const s of STRUCTURES) A(/[一-龥]/.test(s.name), `结构「${s.id}」没有中文名`);
+    return STRUCTURES.map((s) => s.name).join(' / ');
+  });
+
+  await t('AI 闸门 · 未登录引导登录、额度用完引导订阅，互不混淆', () => {
+    const anon = decideGate({ loggedIn: false, remaining: null, proActive: false });
+    A(!anon.ok && anon.need === 'login', '未登录时应引导登录');
+    A(/2 次免费体验/.test(anon.reason), '未登录提示没有说明免费体验次数');
+
+    const freeLeft = decideGate({ loggedIn: true, remaining: 2, proActive: false });
+    A(freeLeft.ok, '还有免费额度时不应拦截');
+
+    const freeUsed = decideGate({ loggedIn: true, remaining: 0, proActive: false });
+    A(!freeUsed.ok && freeUsed.need === 'subscribe', '免费额度用完应引导订阅');
+    A(/免费体验已用完/.test(freeUsed.reason), '订阅提示没有说明原因');
+
+    const proUsed = decideGate({ loggedIn: true, remaining: 0, proActive: true });
+    A(!proUsed.ok && proUsed.need === 'subscribe', '会员额度用完应引导订阅');
+    A(/续费/.test(proUsed.reason), '会员提示没有提到续费');
+
+    const unknown = decideGate({ loggedIn: true, remaining: null, proActive: false });
+    A(unknown.ok, '订阅信息未加载时不应拦截');
+    return '登录 / 免费 / 会员 / 未知 四种状态判定正确';
   });
 
   let design: DesignDoc;

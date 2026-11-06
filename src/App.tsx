@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
-import { useApp } from './store';
+import { useApp, toastTone } from './store';
 import { Button, Logo, Nav, go, useHash } from './ui';
 import Home from './pages/home';
 import { useAuth } from './cloud/auth';
@@ -83,7 +83,7 @@ export default function App() {
       <Nav onLogin={requestLogin} accountLabel={auth.user ? auth.user.label : null} />
       <main className="main"><Suspense fallback={<PageFallback />}>{page}</Suspense></main>
       <Footer />
-      {toast && <div className="toast" onClick={() => setToast(null)}><span>✓</span>{toast}</div>}
+      {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
       <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
       {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
     </div>

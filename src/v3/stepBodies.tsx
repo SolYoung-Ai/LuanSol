@@ -8,7 +8,7 @@ import {
 import { STRUCTURES, structureById } from '../engine/structure';
 import { OptionCard, MultiChips, NumField, Note, Why, FieldLabel, TextField, ColorInput, Swatch, StepSection } from './controls';
 import {
-  STYLES, STYLE_GROUPS, recommendStyles, styleById, buildStylePrompt, TRADITION_COUNT,
+  STYLES, STYLE_GROUPS, recommendStyles, styleById, stylePrimaryColor, buildStylePrompt, TRADITION_COUNT,
 } from './styles';
 import { generatePalettes, extractLogoColors, isHex, hexToRgb, rgbToHex, recommendPrimary, withColor, nameOfColor } from './colors';
 import { generateLogoOptions, adjustLogoSvg, readLogoFile, fileToDataUrl, svgDataUrl, LOGO_STYLES, LOGO_INDUSTRIES, LOGO_POSITIONS, TRADEMARK_NOTE } from './logo';
@@ -374,8 +374,11 @@ export function StepStyle(p: StepProps) {
   const use = (id: string) => {
     const s = styleById(id);
     if (!s) return;
-    p.set({ style_id: id, style_parameters: JSON.stringify(s), primary_color: '', color_palette: null, color_palettes: [], color_palette_id: '' });
-    p.toast(`已使用「${s.style_name}」，主色与配色将按该风格重新推荐`);
+    // 选风格时直接带出该风格的主色：既符合「风格决定配色」的直觉，
+    // 也避免用户下一步看到取色器里已有颜色、却因为草稿里没写进去而被「请先选择主颜色」拦住。
+    const main = stylePrimaryColor(id);
+    p.set({ style_id: id, style_parameters: JSON.stringify(s), primary_color: main, color_palette: null, color_palettes: [], color_palette_id: '' });
+    p.toast(main ? `已使用「${s.style_name}」，主色已带出为 ${main}，可继续调整` : `已使用「${s.style_name}」，主色与配色将按该风格重新推荐`);
   };
   return <>
     <StepSection title="风格库" aside={<span className="v3-aside">{STYLES.length} 个风格 · 其中 {TRADITION_COUNT} 组传统艺术风格</span>}>
@@ -441,7 +444,8 @@ export function StepColor(p: StepProps) {
   };
   return <>
     <StepSection title="选择主颜色">
-      <ColorInput label="颜色选择器 / HEX" value={p.d.primary_color || '#20463a'} onChange={choose} />
+      <ColorInput label="颜色选择器 / HEX" value={p.d.primary_color} onChange={choose} />
+      {!p.d.primary_color && <p className="v3-hint-warn">还没有确定主色：从取色器挑一个、填 HEX，或用下方任一方式获取。</p>}
       <div className="v3-inline"><label className="v3-textfield"><FieldLabel hint="例如 32, 70, 58">RGB 输入</FieldLabel>
         <div className="v3-rgb"><input className="mono" value={rgbIn} placeholder="32, 70, 58" onChange={(e) => setRgbIn(e.target.value)} /><button className="v3-link" onClick={applyRgb}>应用</button></div></label></div>
       {p.d.primary_color && <div className="v3-current"><Swatch color={p.d.primary_color} size={54} /><div><strong>当前主色 {p.d.primary_color}</strong><span>{nameOfColor(p.d.primary_color)} · RGB {hexToRgb(p.d.primary_color).join(' / ')}</span></div></div>}

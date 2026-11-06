@@ -14,7 +14,8 @@ import { buildAIContext } from '../ai/context';
 import { PackagePreview } from './Preview';
 import { Note, Swatch } from './controls';
 import { verifyBarcode, encodeBarcode } from './barcode';
-import type { AISettings, DesignDoc } from '../types';
+import type { AISettings, DesignDoc, StructureId } from '../types';
+import { structureById } from '../engine/structure';
 
 interface Plan { title: string; focus: string }
 
@@ -48,7 +49,7 @@ export default function Review() {
   const configured = aiEnabled(s.ai);
 
   const rows: { label: string; value: React.ReactNode; step: number }[] = [
-    { label: '包装尺寸', step: 0, value: `${FORM_META[d.package_type].label} · ${size.l} × ${size.w}${size.h ? ` × ${size.h}` : ''} mm · ${d.package_dimensions.structureId ? (FORM_META[d.package_type].structures.includes(d.package_dimensions.structureId as never) ? d.package_dimensions.structureId : '—') : '未选结构'}` },
+    { label: '包装尺寸', step: 0, value: `${FORM_META[d.package_type].label} · ${size.l} × ${size.w}${size.h ? ` × ${size.h}` : ''} mm · ${d.package_dimensions.structureId ? (FORM_META[d.package_type].structures.includes(d.package_dimensions.structureId as never) ? structureById(d.package_dimensions.structureId as StructureId).name : '—') : '未选结构'}` },
     { label: 'Logo', step: 1, value: d.brand_logo ? `已上传 ${d.brand_logo.name}` : d.logo_svg ? 'AI 制作 SVG Logo（独立矢量素材）' : '暂时不需要 / 跳过' },
     { label: '目标消费群体', step: 2, value: [...d.target_audience.ages, ...d.target_audience.groups, ...d.target_audience.tiers].join('、') || '未指定（按大众群体）' },
     { label: '产品类型', step: 3, value: `${d.product_category.group ? d.product_category.group + ' · ' : ''}${d.product_category.type || d.product_category.custom || '未填写'}` },

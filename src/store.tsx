@@ -97,6 +97,15 @@ interface AppCtx {
 const Ctx = createContext<AppCtx | null>(null);
 export const useApp = () => { const c = useContext(Ctx); if (!c) throw new Error('AppContext missing'); return c; };
 
+/** 轻提示的语气判定。
+ *  之前所有提示都用 ✓ 对勾图标，包括「请先选择主颜色」这类拦截原因——
+ *  对勾会让用户以为操作成功了。这里按文案把「需要用户处理」的提示识别为警示语气。 */
+export function toastTone(text: string): 'ok' | 'warn' {
+  if (!text) return 'ok';
+  const warn = /请先|请选择|请填|请至少|请把|请输入|还需要|无法|不能|失败|不完整|不足|过期|未登录|未从|登录后|额度|受限|暂不支持|需要订阅|未设置|没有可用/;
+  return warn.test(text) ? 'warn' : 'ok';
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [s, setS] = useState<Persisted>(initial);
   const [toast, setToast] = useState<string | null>(null);

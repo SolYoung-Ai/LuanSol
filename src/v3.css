@@ -105,6 +105,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans
 .v3-confirm.ok .v3-confirm-mark { background: #3f8f5f; color: #fff; }
 .v3-confirm.warn { background: #fdf6ec; border: 1px solid #ecd6b0; color: #8a5a1c; }
 .v3-confirm.warn .v3-confirm-mark { background: #c08a4a; color: #fff; }
+.v3-hint-warn { margin: 10px 0 0; padding: 8px 12px; border-radius: 6px; background: #fdf6ec; border: 1px solid #ecd6b0; color: #8a5a1c; font-size: 12.5px; line-height: 1.7; }
 .v3-colorinput { min-width: 190px; }
 .v3-colorinput-row { display: flex; gap: 10px; align-items: center; }
 .v3-colorinput-row input[type="color"] { width: 46px; height: 40px; padding: 3px; border: 1px solid var(--line-2); background: #fff; cursor: pointer; }

@@ -108,7 +108,7 @@ export function ModelConfig() {
       <Toggle label="启用平台 AI" hint="开启后十步向导由平台大模型提供建议；关闭后改用内置确定性设计引擎（不调用大模型）" checked={enabled} onChange={(v) => setMode(v ? 'proxy' : 'off')} />
       {!deepSeekReady && enabled && <Notice tone="warn">当前构建未配置平台代理地址，开启后也无法实际调用；请在正式站点使用。</Notice>}
       <div className="model-actions"><Button disabled={!enabled || !deepSeekReady} onClick={test}>{testing ? '测试中…' : '测试连接'}</Button></div>
-      <Notice tone="info">DeepSeek 目前只提供文本模型，不提供图像生成；开启「AI 图像生成」会如实报错并回退，不会伪造插画。代理网关按来源域名与令牌校验，并设有 QPS 限制。</Notice>
+      <Notice tone="info">当前平台只接入文本模型，不提供图像生成；涉及插画的步骤会使用内置矢量模板，并明确标注「非 AI 图像生成」，不会伪造插画。代理网关按来源域名与令牌校验，并设有 QPS 限制。</Notice>
     </Card>
 
     <Card className="pad-card"><SectionLabel en="AI IN THE FLOW">AI 已融入哪些环节</SectionLabel>
