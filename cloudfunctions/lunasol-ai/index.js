@@ -243,8 +243,16 @@ async function handleImage(req, res, body) {
   const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, 2000) : '';
   if (!prompt) return sendJson(res, 400, { error: { message: '缺少 prompt' } });
 
+  // 前端传 flash/lite/pro，映射到方舟具体模型 ID；缺省走环境变量
+  const TIER_MODEL = {
+    flash: 'doubao-seedream-5-0-flash-260915',
+    lite: 'doubao-seedream-4-5-251128',
+    pro: 'doubao-seedream-5-0-pro-260628',
+  };
+  const tier = typeof body.model === 'string' && TIER_MODEL[body.model] ? body.model : null;
+
   const payload = {
-    model: process.env.SEEDREAM_MODEL || 'doubao-seedream-3-0-t2i-250415',
+    model: tier ? TIER_MODEL[tier] : (process.env.SEEDREAM_MODEL || 'doubao-seedream-5-0-flash-260915'),
     prompt,
     size: typeof body.size === 'string' ? body.size : '1024x1024',
     response_format: 'url',

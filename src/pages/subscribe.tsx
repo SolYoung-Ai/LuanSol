@@ -81,25 +81,28 @@ export default function Subscribe() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('对话', 'Chat')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />{PRICING.costs.chat} {t('/轮', '/round')}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>DeepSeek</div>
+          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.chat} {t('/轮', '/round')}</div>
+          <div style={{ color: '#999', fontSize: 12 }}>DeepSeek / Kimi / Doubao-Seed</div>
         </div>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('图像 · Flash', 'Image · Flash')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />{PRICING.costs.imageFlash} {t('/张', '/img')}</div>
+          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imageFlash} {t('/张', '/img')}</div>
           <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Flash</div>
         </div>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('图像 · Lite', 'Image · Lite')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />{PRICING.costs.imageLite} {t('/张', '/img')}</div>
+          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imageLite} {t('/张', '/img')}</div>
           <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Lite</div>
         </div>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('图像 · Pro', 'Image · Pro')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />{PRICING.costs.imagePro} {t('/张', '/img')}</div>
+          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imagePro} {t('/张', '/img')}</div>
           <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Pro</div>
         </div>
       </div>
+      <p style={{ color: '#999', fontSize: 12, marginTop: 12 }}>
+        {t('实际消耗以模型调用为准；不同文本/图像模型成本略有差异，按上限扣减。', 'Actual usage depends on the model; rates are approximate upper bounds.')}
+      </p>
     </Card>
 
     {/* 会员包月 */}
@@ -112,7 +115,6 @@ export default function Subscribe() {
           <li>{t('内置设计引擎', 'Built-in design engine')}</li>
           <li>{t('本机保存项目', 'Local projects')}</li>
         </ul>
-        <Button variant="outline" disabled={!a.user} onClick={() => go('/account')}>{a.user ? t('查看积分', 'View credits') : t('登录后获得', 'Sign in to claim')}</Button>
       </Card>
 
       <Card className="pad-card plan-card plan-card-pro">

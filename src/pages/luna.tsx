@@ -19,7 +19,7 @@ import { parseSize } from '../engine/brief';
 type Msg = { role: 'user' | 'assistant'; text: string; image?: string };
 
 /** 调用云函数 Seedream 图像路由 */
-async function callSeedream(prompt: string, referenceImage?: string): Promise<string> {
+async function callSeedream(prompt: string, referenceImage?: string, model?: string): Promise<string> {
   if (!CLOUD.aiBaseUrl || !CLOUD.aiToken) throw new Error('图像服务未配置');
   const r = await fetch(`${CLOUD.aiBaseUrl}/images/generations`, {
     method: 'POST',
@@ -27,6 +27,7 @@ async function callSeedream(prompt: string, referenceImage?: string): Promise<st
     body: JSON.stringify({
       prompt,
       size: '1024x1024',
+      ...(model ? { model } : {}),
       ...(referenceImage ? { image: referenceImage } : {}),
     }),
   });
@@ -83,6 +84,7 @@ export default function Luna() {
   const [loading, setLoading] = useState(false);
   const [imageGenerating, setImageGenerating] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [imageTier, setImageTier] = useState<'flash' | 'lite' | 'pro'>('flash');
   const fileRef = useRef<HTMLInputElement>(null);
   const [extracted, setExtracted] = useState<Extracted>({ product: '', brand: '', style: '', material: '', size: '', audience: '', scene: '', tagline: '', colors: '' });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -150,7 +152,7 @@ export default function Luna() {
         '真实感，高清，专业包装样机，正面视角，影棚灯光。',
       ].filter(Boolean).join('');
       const lastUserImage = [...messages].reverse().find((m) => m.role === 'user' && m.image)?.image;
-      const url = await callSeedream(prompt, lastUserImage);
+      const url = await callSeedream(prompt, lastUserImage, imageTier);
       setMessages((prev) => [...prev, {
         role: 'assistant',
         text: '根据我们聊的内容，生成了一张效果图（可基于此方向继续调整，或进入工作台细化）：',
@@ -226,10 +228,16 @@ export default function Luna() {
         <button className="v4-btn-dark" disabled={progress < 1} onClick={enterWorkspace}>进入工作台 →</button>
       </div>
       <div className="luna-model-row">
-        <span className="luna-model-label">模型：</span>
+        <span className="luna-model-label">对话：</span>
         <select className="luna-model-select" value="deepseek" onChange={() => setToast('GPT 接入后可在此切换')}>
           <option value="deepseek">DeepSeek（deepseek-chat）</option>
           <option value="gpt" disabled>GPT（即将接入）</option>
+        </select>
+        <span className="luna-model-label" style={{ marginLeft: 16 }}>生图：</span>
+        <select className="luna-model-select" value={imageTier} onChange={(e) => setImageTier(e.target.value as 'flash' | 'lite' | 'pro')}>
+          <option value="flash">Flash（≈4 积分/张，快）</option>
+          <option value="lite">Lite（≈7 积分/张，平衡）</option>
+          <option value="pro">Pro（≈10 积分/张，精细）</option>
         </select>
       </div>
     </div>

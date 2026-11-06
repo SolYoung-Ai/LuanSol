@@ -705,7 +705,13 @@ img, svg, video, canvas { max-width: 100%; }
   .v4-chip { font-size: 11.5px; padding: 6px 9px; }
 }
 
-/* 积分余额 pill（导航栏头像旁） */
+/* 积分余额 pill（导航栏头像旁，与头像并排） */
+.v4-nav-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
 .v4-credits-pill {
   display: inline-flex;
   align-items: center;
@@ -718,7 +724,7 @@ img, svg, video, canvas { max-width: 100%; }
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  margin-right: 8px;
   transition: background 0.15s;
+  white-space: nowrap;
 }
 .v4-credits-pill:hover { background: #ffecb3; }
