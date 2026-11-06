@@ -222,11 +222,17 @@ export default function Luna() {
 
   return <div className="luna-page">
     <div className="luna-chat" ref={scrollRef}>
+      {messages.length === 0 && !loading && !imageGenerating && (
+        <div className="luna-empty">
+          <h1>今天想做什么包装？</h1>
+          <p>告诉我你的产品、品牌或想法，我来帮你从零设计到成品。</p>
+        </div>
+      )}
       {messages.map((m, i) => <div key={i} className={`luna-msg ${m.role}`}>
         {m.role === 'assistant' && <div className="luna-avatar">L</div>}
         <div className="luna-bubble">
           {m.text && <div>{m.text}</div>}
-          {m.image && <img src={m.image} alt="生成效果图" onClick={() => setLightbox(m.image!)} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, marginTop: 8, display: 'block', cursor: 'zoom-in' }} />}
+          {m.image && <img src={m.image} alt="生成效果图" onClick={() => setLightbox(m.image!)} />}
         </div>
       </div>)}
       {loading && <div className="luna-msg assistant"><div className="luna-avatar">L</div><div className="luna-bubble luna-typing">正在输入…</div></div>}
@@ -244,22 +250,26 @@ export default function Luna() {
         <span style={{ fontSize: 12, color: '#888' }}>已选图，发送后作为参考</span>
         <button className="v4-btn-line" onClick={() => setPendingImage(null)}>移除</button>
       </div>}
-      <div className="luna-input-row">
+      <div className="luna-input-wrapper">
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
-        <button className="v4-btn-line" title="上传产品图 / 对标图" onClick={() => fileRef.current?.click()}>📎</button>
-        <input className="luna-input" value={input} onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void send(); }}
-          placeholder="告诉 Luna 你的想法，或发产品图…" />
-        <button className="v4-btn-line" disabled={loading} onClick={() => void send()}>{loading ? '…' : '发送'}</button>
-        <button className="v4-btn-line" disabled={imageGenerating || progress < 1} onClick={() => void generateMockup()}>
-          {imageGenerating ? '生成中…' : `✨ 生成效果图（${imageTier === 'flash' ? 6 : imageTier === 'lite' ? 10 : 15} 积分）`}
+        <div className="luna-input-row">
+          <button className="luna-input-btn" title="上传产品图 / 对标图" onClick={() => fileRef.current?.click()}>+</button>
+          <input className="luna-input" value={input} onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
+            placeholder="告诉 Luna 你的想法…" />
+          <button className="luna-send-btn" disabled={loading || !input.trim()} onClick={() => void send()}>↑</button>
+        </div>
+      </div>
+      <div className="luna-quick-actions">
+        <button className="luna-quick-btn" disabled={imageGenerating || progress < 1} onClick={() => void generateMockup()}>
+          ✨ 生成效果图（{imageTier === 'flash' ? 6 : imageTier === 'lite' ? 10 : 15} 积分）
         </button>
         <button
-          className="v4-btn-dark"
+          className="luna-quick-btn"
           disabled={progress >= 3}
           onClick={enterWorkspace}
           title={progress < 3 ? `还差 ${3 - progress} 项关键信息，先和 Luna 聊完` : ''}
-          style={progress < 3 ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+          style={progress < 3 ? { opacity: 0.4, cursor: 'not-allowed' } : { background: '#1d1d1b', color: '#fff', borderColor: '#1d1d1b' }}
         >进入工作台 →</button>
       </div>
       <div className="luna-model-row">
@@ -273,7 +283,7 @@ export default function Luna() {
           <option value="glm-5.3">GLM-5.3-Flash（智谱）</option>
           <option value="gpt" disabled>GPT 系列（即将接入）</option>
         </select>
-        <span className="luna-model-label" style={{ marginLeft: 16 }}>生图：</span>
+        <span className="luna-model-label">生图：</span>
         <select className="luna-model-select" value={imageTier} onChange={(e) => setImageTier(e.target.value as 'flash' | 'lite' | 'pro')}>
           <option value="flash">Flash（≈6 积分/张，快）</option>
           <option value="lite">Lite（≈10 积分/张，平衡）</option>
