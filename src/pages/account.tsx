@@ -5,7 +5,7 @@
  * 技术信息（用户 ID、环境、登录账号）、订阅额度、云同步操作
  * 都已经挪到别处：订阅看 /subscribe，云同步在工作台。
  * ============================================================ */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
 import { Button, Card, Empty, Notice, PageHead, SectionLabel, go } from '../ui';
 import { useAuth, getBirthday, setBirthday } from '../cloud/auth';
@@ -28,6 +28,29 @@ export default function Account() {
   const [avatar, setAvatar] = useState('');
   const [birthday, setBirthdayLocal] = useState('');
   const [saving, setSaving] = useState(false);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
+
+  const onPickAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        // 压缩到 128x128，转 base64
+        const canvas = document.createElement('canvas');
+        const size = 128;
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2, sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        setAvatar(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (!a.user) return;
@@ -94,18 +117,19 @@ export default function Account() {
         <Card className="pad-card">
           <SectionLabel en="PROFILE">个人资料</SectionLabel>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-            {avatar.trim()
-              ? <img src={avatar.trim()} alt="头像" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover' }} />
-              : <div className="v4-avatar" style={{ width: 56, height: 56, fontSize: 22 }}>{(a.user.label || '?').slice(0, 1).toUpperCase()}</div>}
+            <input ref={avatarFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickAvatar} />
+            <button onClick={() => avatarFileRef.current?.click()} title="点击上传头像" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%', overflow: 'hidden' }}>
+              {avatar.trim()
+                ? <img src={avatar.trim()} alt="头像" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover' }} />
+                : <div className="v4-avatar" style={{ width: 56, height: 56, fontSize: 22 }}>{(a.user.label || '?').slice(0, 1).toUpperCase()}</div>}
+            </button>
             <div>
               <div style={{ fontWeight: 600 }}>{a.user.label}</div>
               <div style={{ fontSize: 12, color: 'var(--v4-ink-3, #888)' }}>{a.user.account || '本地账号'}</div>
+              <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>点击头像更换照片</div>
             </div>
           </div>
 
-          <label className="field"><span className="field-label">头像图片链接</span>
-            <input className="input" value={avatar} onChange={(e) => setAvatar(e.target.value)}
-              placeholder="粘贴图片 URL（可空，空则显示首字母）" /></label>
           <label className="field"><span className="field-label">称呼</span>
             <input className="input" value={nick} onChange={(e) => setNick(e.target.value)}
               placeholder="例如：Sol Young" /></label>
