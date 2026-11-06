@@ -682,8 +682,8 @@ img { display: block; max-width: 100%; }
 .global-back:hover { border-color: var(--ink, #222); background: var(--soft, #f6f6f4); }
 
 /* Luna 对话页 */
-.luna-page { display: flex; flex-direction: column; height: calc(100vh - 60px); max-width: 880px; margin: 0 auto; padding: 0 16px 16px; }
-.luna-chat { flex: 1; overflow-y: auto; padding: 24px 0; display: flex; flex-direction: column; gap: 20px; }
+.luna-page { display: flex; flex-direction: column; height: calc(100vh - 60px - 60px); max-width: 880px; margin: 0 auto; padding: 0 16px 12px; }
+.luna-chat { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 20px; }
 .luna-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px 0; }
 .luna-empty h1 { font-size: 28px; font-weight: 600; color: #1d1d1b; margin: 0; text-align: center; }
 .luna-empty p { color: #888; font-size: 14px; margin: 0; text-align: center; }
