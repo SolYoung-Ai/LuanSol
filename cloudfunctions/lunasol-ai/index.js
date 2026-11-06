@@ -35,6 +35,56 @@ function corsHeaders(req) {
   return {};
 }
 
+/* ---------- 滥用防护（2026-11-06 追加） ----------
+ * 代理令牌随前端 JS 公开，任何人都能提取后直连本函数，所以令牌不是唯一门槛：
+ *  1) 来源校验：只接受 Origin 落在白名单内的浏览器请求（LUNASOL_REQUIRE_ORIGIN=0 可关）；
+ *  2) 单 IP 频率限制：LUNASOL_RATE_PER_MINUTE，默认 30 次/分钟；
+ *  3) 每日全局上限：LUNASOL_DAILY_LIMIT，默认 2000 次/日，作为成本熔断。
+ * 计数只存在于进程内存，用于挡滥用与兜底；精确的会员额度仍由前端订阅表在服务端扣减。
+ */
+const RATE_PER_MINUTE = Math.max(1, Number(process.env.LUNASOL_RATE_PER_MINUTE || 30));
+const DAILY_LIMIT = Math.max(1, Number(process.env.LUNASOL_DAILY_LIMIT || 2000));
+const REQUIRE_ORIGIN = String(process.env.LUNASOL_REQUIRE_ORIGIN ?? '1') !== '0';
+
+const rateBuckets = new Map();
+let dayStamp = new Date().toISOString().slice(0, 10);
+let dayUsed = 0;
+
+function clientIp(req) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return fwd || String(req.headers['x-real-ip'] || '').trim() || (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+
+function rollDay() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== dayStamp) { dayStamp = today; dayUsed = 0; }
+}
+
+function guard(req) {
+  const origin = String(req.headers.origin || '').trim().replace(/\/+$/, '');
+  if (REQUIRE_ORIGIN && !allowedOrigins().includes(origin)) {
+    return { status: 403, message: '来源不受信任：只能从站点页面调用' };
+  }
+  rollDay();
+  if (dayUsed >= DAILY_LIMIT) {
+    return { status: 429, message: '今日 AI 调用已达上限，请明天再试' };
+  }
+  const ip = clientIp(req);
+  const now = Date.now();
+  const b = rateBuckets.get(ip) || { start: now, count: 0 };
+  if (now - b.start >= 60000) { b.start = now; b.count = 0; }
+  if (b.count >= RATE_PER_MINUTE) {
+    rateBuckets.set(ip, b);
+    return { status: 429, message: '请求太频繁，请稍后再试' };
+  }
+  b.count += 1;
+  rateBuckets.set(ip, b);
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) { if (now - v.start >= 120000) rateBuckets.delete(k); }
+  }
+  return { ok: true };
+}
+
 const ALLOWED_MODELS = new Set([
   'deepseek-chat',
   'deepseek-reasoner',
@@ -159,6 +209,9 @@ async function handleChat(req, res, body) {
   if (given !== token) {
     return sendJson(res, 401, { error: { message: '代理令牌无效' } });
   }
+  const verdict = guard(req);
+  if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
+
   const withJsonFormat = !!(body.response_format && body.response_format.type === 'json_object');
   let payload = buildUpstreamPayload(body, withJsonFormat);
   if (!payload.messages.length) {
@@ -166,6 +219,7 @@ async function handleChat(req, res, body) {
   }
 
   try {
+    dayUsed += 1;
     let r = await callDeepSeek(payload);
     // 部分模型不接受 response_format：去掉该字段重试一次，不做结果伪装
     if (r.status === 400 && withJsonFormat && /response_format/i.test(r.raw)) {
@@ -213,6 +267,7 @@ const server = http.createServer(async (req, res) => {
       keyConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
       tokenRequired: Boolean(process.env.LUNASOL_PROXY_TOKEN),
       imageGeneration: false,
+      limits: { ratePerMinute: RATE_PER_MINUTE, dailyLimit: DAILY_LIMIT, dailyUsed: dayUsed, requireOrigin: REQUIRE_ORIGIN },
     });
   }
 

@@ -101,8 +101,8 @@ export function ModelConfig() {
     </div>
 
     <Card className="pad-card"><SectionLabel en="PLATFORM MODELS">平台模型（托管）</SectionLabel>
-      <p className="ai-caps-intro">LunaSol 已在腾讯云开发 CloudBase 国内站部署后台代理，<strong>GPT / DeepSeek 密钥只保存在云函数环境变量</strong>，前端不接触任何厂商 API Key，也不允许自行接入模型。文本模型由平台在 GPT-4o 与 DeepSeek-V3 之间自动调度。</p>
-      <div className="kv"><span>文本模型</span><strong>GPT-4o / DeepSeek-V3（平台自动调度）</strong></div>
+      <p className="ai-caps-intro">LunaSol 已在腾讯云开发 CloudBase 国内站部署后台代理，<strong>DeepSeek 密钥只保存在云函数环境变量</strong>，前端不接触任何厂商 API Key，也不允许自行接入模型。文本能力由平台统一调用 DeepSeek（deepseek-chat 系列），不做多模型切换。</p>
+      <div className="kv"><span>文本模型</span><strong>DeepSeek（deepseek-chat 系列 · 服务端代理）</strong></div>
       <div className="kv"><span>后台</span><strong>CloudBase HTTP 云函数 · {CLOUD.region}</strong></div>
       <div className="kv"><span>当前状态</span><strong>{enabled ? '已启用平台 AI' : '已关闭，使用内置设计引擎'}</strong></div>
       <Toggle label="启用平台 AI" hint="开启后九步向导由平台大模型提供建议；关闭后改用内置确定性设计引擎（不调用大模型）" checked={enabled} onChange={(v) => setMode(v ? 'proxy' : 'off')} />
@@ -138,7 +138,7 @@ export function ModelConfig() {
 
     <Modal open={docOpen} title="后台接入契约" onClose={() => setDocOpen(false)} wide>
       <div className="doc-body">
-        <h4>一、平台统一接入（用户无需配置）</h4><p>模型由 LunaSol 平台在云端代理中托管，文本模型在 <strong>GPT-4o</strong> 与 <strong>DeepSeek-V3</strong> 之间自动调度。<strong>前端不暴露、也不允许用户配置任何厂商 API Key 或自定义模型。</strong></p>
+        <h4>一、平台统一接入（用户无需配置）</h4><p>模型由 LunaSol 平台在云端代理中托管，文本能力统一走 <strong>DeepSeek</strong>，由后台决定具体模型。<strong>前端不暴露、也不允许用户配置任何厂商 API Key 或自定义模型。</strong>图像生成不由 DeepSeek 提供，因此图像能力走站内插画与素材，不伪装成 AI 出图。</p>
         <h4>二、文字接口</h4><p>POST <code>{CLOUD.aiBaseUrl || '（平台代理地址）'}/chat/completions</code>。请求体是标准 OpenAI 兼容格式 <code>messages / temperature / response_format</code>，<code>model</code> 由平台决定。返回 <code>choices[0].message.content</code>，内容为一个 JSON 对象。</p>
         <h4>三、输出结构与合规校验</h4><p>所有流程节点统一返回 <code>&#123;"suggestions":[&#123;"title","detail","value"&#125;]&#125;</code>，每个节点的 <code>value</code> 结构不同，详见 <code>src/ai/tasks.ts</code>。模型输出会先经过结构校验与合规校验：编造配料 / 功效 / 认证、生成商品条码数字、发明不存在的风格、在「不需要插画」时添加图案，都会被拦截并回退本地建议。</p>
         <h4>四、替换 / 扩展传输实现</h4><p>若后续要在代理中新增模型或换厂商，只需在云函数 <code>lunasol-ai</code> 中调整模型白名单与路由，前端流程与界面代码不用改；如需替换前端传输实现，可调用一次 <code>registerAITransport(fn)</code>。</p>

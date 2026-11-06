@@ -8,7 +8,7 @@
  * 计量口径（已与产品确认）：
  *   - 计费单元 = 单次 AI 建议调用（九步向导里某一步点一次「获取建议」= 1 次）
  *   - 包月 ¥399；新注册用户免费体验 2 次；会员每月 600 次统一 AI 调用配额
- *   - 平台统一接入 GPT-4o 与 DeepSeek-V3，用户看不到密钥、也不能自选模型
+ *   - 平台统一接入 DeepSeek（deepseek-chat 系列），用户看不到密钥、也不能自选模型
  * ============================================================ */
 
 /** 价格来源：OpenAI 官方（2026-11-05 核实）与 DeepSeek 官方 API 文档（2026-11 核实）。
@@ -28,6 +28,7 @@ export const PRICING = {
   usdToRmb: 7.1,
 
   models: {
+    /** 价格对照行：未接入调度，仅用于评估「如果换成 GPT-4o 成本会怎样」。线上通道见 deepseekV3。 */
     gpt4o: { id: 'gpt-4o', label: 'GPT-4o', inputPer1M: 2.5, cachedInputPer1M: 1.25, outputPer1M: 10 },
     deepseekV3: { id: 'deepseek-chat', label: 'DeepSeek-V3', inputPer1M: 0.28, cachedInputPer1M: 0.028, outputPer1M: 0.42 },
   },
@@ -90,14 +91,11 @@ export function buildPlanCalc(): { price: number; freeTrial: number; quota: numb
  *  返回人类可读的结论，避免界面里写死数字。 */
 export function planSummaryText(): string {
   const c = buildPlanCalc();
-  const g = c.rows.find((r) => r.model === 'gpt-4o');
   const d = c.rows.find((r) => r.model === 'deepseek-chat');
-  const gMax = g ? g.maxCalls.toLocaleString('zh-CN') : '—';
-  const dMax = d ? d.maxCalls.toLocaleString('zh-CN') : '—';
+  if (!d) return `包月 ¥${c.price}：会员每月 ${c.quota} 次 AI 调用。`;
   return [
-    `包月 ¥${c.price}：会员每月 ${c.quota} 次 AI 调用（统一额度，可走 GPT-4o 或 DeepSeek-V3）。`,
-    `按当前官方价测算：若全月 ¥${c.price} 都用于 GPT-4o，理论上限约 ${gMax} 次；用于 DeepSeek-V3 约 ${dMax} 次。`,
-    `我们给会员的 ${c.quota} 次配额即便全部走最贵的 GPT-4o，月度推理成本也仅约 ¥${(g ? g.quotaCost : 0).toFixed(0)}，约占 ¥${c.price} 的 ${g ? Math.round(g.quotaRatio * 100) : 0}%，留有充足毛利与扩容空间。`,
+    `包月 ¥${c.price}：会员每月 ${c.quota} 次 AI 调用（统一额度，全部走 DeepSeek）。`,
+    `按 DeepSeek 官方价测算：单次调用成本约 ¥${d.costPerCall.toFixed(3)}，${c.quota} 次合计约 ¥${d.quotaCost.toFixed(0)}，约占 ¥${c.price} 的 ${Math.round(d.quotaRatio * 100)}%。`,
     `新注册用户可免费体验 ${c.freeTrial} 次，之后需订阅会员。`,
   ].join('\n');
 }

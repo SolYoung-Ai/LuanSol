@@ -122,7 +122,7 @@ export function Create() {
           <Button onClick={() => send(input)} disabled={!input.trim() || busy}>发送 <span aria-hidden>↗</span></Button>
         </div>
         <div className="chat-foot">
-          <span>{configured ? '已连接平台 AI（GPT-4o / DeepSeek-V3 自动调度）' : '当前为内置解析（未启用平台 AI），不会伪装成 AI 生成'}</span>
+          <span>{configured ? '已连接平台 AI（DeepSeek · 服务端代理）' : '当前为内置解析（未启用平台 AI），不会伪装成 AI 生成'}</span>
           <button className="link-btn" onClick={enhance}>{busy ? <Spinner label="AI 整理中" /> : configured ? '让 AI 深度理解' : '启用平台 AI →'}</button>
         </div>
       </div>

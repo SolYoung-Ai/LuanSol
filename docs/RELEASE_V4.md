@@ -250,3 +250,52 @@ git add -A && git commit -m "deploy: ..." && git push origin HEAD:gh-pages
 | 筛选 | 分组=品牌识别 → 15 条；叠加需海外网络 → 1 条；清空 → 107 条（CDP 实测） |
 | 视口 | 1440 / 390 / 360 均 `scrollWidth == innerWidth`，无横向溢出；390 下索引面板单列、搜索框占满 |
 | 深浅色 | 深色下 chip 选中态为浅底深字，访问说明块保持可读 |
+
+---
+
+## 9. AI 接入核查与网关加固（2026-11-06）
+
+### 9.1 核查结论
+
+线上 AI 确实接入了 DeepSeek，链路为：前端 `src/engine/llm.ts`（默认 `mode=proxy`）→ CloudBase HTTP 云函数 `lunasol-ai`（ap-shanghai，Nodejs18.15，端口 9000）→ `https://api.deepseek.com/v1/chat/completions`。
+
+实测（非只读代码）：
+
+| 请求 | 返回 |
+| --- | --- |
+| `GET /lunasol-ai/health` | `provider=deepseek`、`keyConfigured=true`、`tokenRequired=true`、`imageGeneration=false` |
+| `POST /lunasol-ai/chat/completions`（最小请求） | 200，`model=deepseek-flash`，正文「在线」，`usage` 正常 |
+
+说明：`/health` 报的 `deepseek-chat` 来自云函数默认模型名，上游返回体的 `model` 是 `deepseek-flash`，属 DeepSeek 侧的模型命名映射，不是两套模型在切换。图像生成固定 501，前端 `imageEnabled=false`，没有伪造成 AI 出图。
+
+### 9.2 修正的对外文案（原来写的是「GPT-4o / DeepSeek-V3 自动调度」，与实际不符）
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/pages/settings.tsx` | 能力说明、`文本模型` KV、平台接入段落统一改为「DeepSeek（deepseek-chat 系列 · 服务端代理）」，并写明不做多模型切换、图像不由 DeepSeek 提供 |
+| `src/pages/flow.tsx` | 「已连接平台 AI（DeepSeek · 服务端代理）」 |
+| `src/cloud/plans.ts` | 顶部注释改为单走 DeepSeek；`planSummaryText()` 改为按 DeepSeek 官方价测算；`gpt4o` 定价行保留但注释为「价格对照，未接入调度」 |
+
+### 9.3 网关加固（`cloudfunctions/lunasol-ai/index.js`）
+
+代理令牌 `VITE_LUNASOL_AI_TOKEN` 会随前端 JS 公开，原先只校验这一个静态常量，拿到令牌即可直连刷额度。新增三层防护：
+
+| 层 | 规则 | 环境变量 |
+| --- | --- | --- |
+| 来源校验 | 只接受 `Origin` 在白名单内的请求，其余 403 | `LUNASOL_REQUIRE_ORIGIN`（默认开，`0` 关闭） |
+| 单 IP 频率 | 默认 30 次/分钟，超出 429 | `LUNASOL_RATE_PER_MINUTE` |
+| 每日全局 | 默认 2000 次/日，作为成本熔断，超出 429 | `LUNASOL_DAILY_LIMIT` |
+
+计数在进程内存，只做滥用防护与成本兜底；精确会员额度仍由 `lunasol_subscriptions` 在服务端扣减。
+
+### 9.4 验收
+
+| 项 | 结果 |
+| --- | --- |
+| 本地 `node index.js`（阈值设 5/min） | 无 Origin → 403；带 Origin → 打到上游；连打第 6 次起 429 |
+| `node --check` | 通过 |
+| 部署方式 | MCP `manageFunctions(updateFunctionCode)` 在 cloud mode 拒绝本地目录上传；改用 `callCloudApi(service=scf, action=UpdateFunctionCode, ZipFile=base64 zip)` 成功（含 `index.js` / `package.json` / `scf_bootstrap`） |
+| 线上 `/health` | 已返回 `limits:{ratePerMinute:30,dailyLimit:2000,dailyUsed:0,requireOrigin:true}` |
+| 线上直连（无 Origin） | 403「来源不受信任：只能从站点页面调用」 |
+| 线上带站点 Origin | 200，`model=deepseek-flash`，正文「在线」 |
+| 浏览器内实测 | 页面上下文 `fetch` 该代理 200，正文正常，说明加固未影响前端 |
