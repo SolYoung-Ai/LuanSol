@@ -3,7 +3,9 @@
 > 让每个人都能轻松完成专业包装设计。
 > **LunaSol AI Packaging Studio** — 为没有设计经验的人打造的 AI 包装设计工作流。
 
-线上地址：<https://solyoung-ai.github.io/LuanSol/>
+线上地址：<https://luna.solyoung.top/>（GitHub Pages 承载；`solyoung-ai.github.io/LuanSol/` 会 301 跳到这里）
+
+> **接手开发请先读 [docs/HANDOVER.md](docs/HANDOVER.md)** —— 资产清单、机制原理、部署手册、已知问题、决策记录都在那一份里。本文只讲产品能力。
 
 仓库名按指令使用 `LuanSol`；产品品牌名为 `LunaSol`。
 
@@ -35,7 +37,7 @@ LunaSol 把这些全部放进后台：
 | 印前检查 Agent | 尺寸、展开尺寸、出血、安全区、文字裁切、占位文字、图片有效 DPI、颜色 CMYK 近似值、字体可用性、刀模完整性；报告用普通人能懂的话 |
 | 文件输出 Agent | 毫米级 PDF（逐图层绘制 + 独立刀模页）、可编辑 SVG、DXF 刀模、300DPI PNG、JPG 效果图、ZIP 文件包；**PDF 导出做真实字节级预检** |
 
-另有：首页、灵感库（12 个原创虚构品牌方向）、结构库、我的作品、项目详情、个人设置、AI 模型配置中心，共 14 个页面；项目用 IndexedDB（localStorage 兜底）本地保存，支持导入导出、复制、删除、历史版本恢复。
+另有：首页、九步向导、需求汇总、灵感库（12 个原创虚构品牌方向）、结构库、我的工作台、项目详情、个人设置、AI 模型状态页，共 18 条路由；项目用 IndexedDB（localStorage 兜底）本地保存，支持导入导出、复制、删除、历史版本恢复。
 
 ## 快速开始
 
@@ -43,7 +45,7 @@ LunaSol 把这些全部放进后台：
 npm install
 npm run dev        # 本地开发
 npm run build      # 类型检查 + 生产构建，输出 dist/
-npm test           # 13 项引擎测试（同时生成浏览器测试包）
+npm test           # 34 项引擎/AI/订阅测试（同时生成浏览器测试包）
 ```
 
 浏览器测试（需本机 Chrome）：

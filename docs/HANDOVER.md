@@ -64,13 +64,13 @@ LunaSol 是**给完全不懂设计的人用的包装设计工具**。用户不�
 | 项 | 值 |
 | --- | --- |
 | 仓库 | `https://github.com/SolYoung-Ai/LuanSol` |
-| 默认分支 | `main`（源码，最新提交 `12261bb`，2026-11-06 12:46 UTC） |
+| 默认分支 | `main`（源码，最新提交 `41944e1`，2026-11-06 13:0x UTC，即本文档所在提交） |
 | 发布分支 | `gh-pages`（**构建产物**，最新提交 `1052d64`） |
 | 历史遗留分支 | 本地有一个 `ghpages-deploy`，内容等于旧 gh-pages，**可以删** |
 | 构建产物是否入库 | 否。`dist/` 在 `.gitignore`，只存在于 `gh-pages` 分支 |
 | 文件数 | 82 个受版本控制文件 |
 
-⚠️ 你 clone 下来后 `git log --oneline` 会看到本地 `origin/main` 指向 `d46ab89`，而远端实际是 `12261bb`。原因见 10.9（上一次推送走的是 GitHub REST API）。**先 `git fetch origin` 再判断**。
+⚠️ 交接时的 `main` 是 `41944e1`（交接书提交）。历史上曾有一次通过 GitHub REST API 推送（`12261bb`），导致本地与远端 sha 不一致；已在本次交接时对齐（`git fetch` + `reset --soft` 重建提交），**现在本地与远端一致**。若你看到 `git push` 被拒并提示 "remote contains work that you do not have"，先 `git fetch origin` 再对齐，不要强推覆盖。
 
 ### 3.2 三个线上入口（都在线，刚实测）
 
@@ -563,9 +563,11 @@ luna（GitHub Pages）和 CloudBase 是两份独立文件。发版只更新一�
 
 见 6.5。CloudBase 侧那条域名白名单/绑定现在没人维护，但它是生产登录能用的前提。**交接时务必确认你有 CloudBase 控制台权限**，并知道一旦误删会怎样。
 
-### 9.9 P3 · 本机 git 引用可能是旧的
+### 9.9 P3 · 历史上有过"本地与远端 sha 不一致"
 
-`origin/main` 可能是 `d46ab89`，实际远端 `12261bb`（上次走 REST API 推送，没更新引用）。先 `git fetch` 再看。
+上一次执行环境里 `git push` 会被 SIGTERM，所以改走 GitHub REST API 推送，导致远端 commit 与本地内容相同但 sha 不同。**本次交接时已对齐**（`git fetch` 后 `reset --soft` 重建提交，`main = 41944e1`）。
+
+留这条是提醒：如果你以后又用 API 推，记得回头 `git fetch`，否则下次 `git push` 会因为 "remote contains work that you do not have" 被拒。
 
 ---
 
