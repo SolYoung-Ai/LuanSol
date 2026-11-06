@@ -636,3 +636,71 @@ img, svg, video, canvas { max-width: 100%; }
   border-radius: 2px; font-size: 11px; letter-spacing: .08em;
   padding: 3px 8px;
 }
+
+/* ============================================================
+   审美市场 · 索引面板（分组 / 地区 / 国家 / 风格 / 访问条件）
+   ------------------------------------------------------------
+   目的：107 个站点不可能靠翻页找。索引做成「可交叉的多维筛选」，
+   任何一维点一下就收窄，再点一下取消——不做隐藏状态，用户随时能看见自己被筛在哪。
+   ============================================================ */
+.v4-index {
+  margin-top: var(--v4-s7);
+  border-top: 1px solid var(--v4-line);
+}
+.v4-index-row {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr);
+  gap: 14px; padding: 12px 0;
+  border-bottom: 1px solid var(--v4-line);
+  align-items: start; min-width: 0;
+}
+.v4-index-label {
+  font-size: 10.5px; letter-spacing: .16em; color: var(--v4-ink-3);
+  padding-top: 8px; white-space: nowrap;
+}
+.v4-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.v4-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; font-size: 12px; line-height: 1.2;
+  color: var(--v4-ink-2); border: 1px solid var(--v4-line);
+  background: transparent; transition: color .16s, border-color .16s, background .16s;
+  max-width: 100%; text-align: left;
+}
+.v4-chip:hover { color: var(--v4-ink); border-color: var(--v4-ink-3); }
+.v4-chip.active {
+  background: var(--v4-solid-bg); color: var(--v4-solid-fg); border-color: var(--v4-solid-bg);
+}
+.v4-chip i { font-style: normal; font-size: 10px; opacity: .6; letter-spacing: 0; }
+.v4-index-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.v4-index-tools .v4-search { width: 260px; max-width: 100%; }
+
+/* 卡片上的分组/访问标记：只是索引信息，不承担「能不能打开」的承诺 */
+.v4-tag-group { background: var(--v4-surface); color: var(--v4-ink); }
+.v4-tag-access { border-style: dashed; color: var(--v4-ink-3); }
+
+/* 详情页的访问说明：把「国内可能打不开」讲清楚，而不是让按钮默默失败 */
+.v4-access {
+  margin-top: var(--v4-s6);
+  border: 1px solid var(--v4-line);
+  border-left: 3px solid var(--v4-ink-3);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--v4-surface);
+}
+.v4-access.overseas { border-left-color: #a2763a; }
+.v4-access.paywall { border-left-color: #6b7a86; }
+.v4-access-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.v4-access-head strong { font-size: 12.5px; font-weight: 500; letter-spacing: .04em; }
+.v4-access-dot { width: 6px; height: 6px; background: var(--v4-ink-3); flex: none; }
+.v4-access.overseas .v4-access-dot { background: #a2763a; }
+.v4-access.paywall .v4-access-dot { background: #6b7a86; }
+.v4-access-en { font-size: 10.5px; letter-spacing: .14em; color: var(--v4-ink-3); margin-left: auto; }
+.v4-access-note { font-size: 12.5px; line-height: 1.85; color: var(--v4-ink-2); }
+.v4-access-hint { font-size: 11.5px; line-height: 1.7; color: var(--v4-ink-3); }
+
+@media (max-width: 720px) {
+  .v4-index-row { grid-template-columns: 1fr; gap: 8px; padding: 10px 0; }
+  .v4-index-label { padding-top: 0; }
+  .v4-index-tools { width: 100%; }
+  .v4-index-tools .v4-search { width: 100%; order: -1; }
+  .v4-chip { font-size: 11.5px; padding: 6px 9px; }
+}

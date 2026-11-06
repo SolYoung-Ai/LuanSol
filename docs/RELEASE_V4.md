@@ -202,3 +202,51 @@ git add -A && git commit -m "deploy: ..." && git push origin HEAD:gh-pages
 | gh-pages | `61a43c3` → `7c4ad27`，Pages `built` |
 | 线上产物 | `assets/index-CB1bp61G.js`（浏览器实测已加载） |
 | CloudBase 托管 | `solyoung-004` / buildId `2611226153` / `SUCCESS` |
+
+---
+
+## 8. 审美市场重做（107 站点多维索引）
+
+### 8.1 为什么重做
+
+原来的审美市场是 16 个站点的平铺列表，每张卡片带一个「访问官网 ↗」，点开就跳到外站。
+问题有两个：一是量太少、没有分类，用户没法按「国家 / 风格 / 分组」找；二是国内用户点开部分站点会直接打不开，
+页面上没有任何交代，看起来像站坏了。用户给的 100 个站点清单成了新的数据基础。
+
+### 8.2 数据层
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/data/market-sites.ts`（新） | 107 个站点：`id / title / domain / officialUrl / group / country / styles / access / accessNote / description / designNotes / why`；派生出 `MARKET_GROUPS`(10) / `MARKET_REGIONS`(5) / `MARKET_COUNTRIES`(14) / `MARKET_STYLES`(26) / `MARKET_SITE_COUNT`，全部由数据算出，不手工维护计数。 |
+| `src/data/aesthetic-market.ts` | 只保留 `MarketWork` + 34 条作品 + `MARKET_CATEGORIES` + `MARKET_VERIFIED_AT`；旧 `MarketSite` 接口与 16 条站点数组移出。 |
+
+10 个分组：视觉灵感 12 / 数字艺术 10 / 品牌识别 15 / 字体排版 10 / 摄影影像 10 / 建筑空间 10 / 艺术馆藏 10 / 时尚奢侈 10 / 动态影视 10 / 独立工作室 10 = 107。
+
+### 8.3 访问条件：从经验标注改成实测
+
+第一版是我按经验标 `access`，不够硬。改成 2026-11-06 从中国大陆（杭州）对 107 个域名逐站发起请求（9s 超时、浏览器 UA、不跟随重定向）：
+
+- **92 站直连连通**（含 403/429：TCP+TLS 通，只是反爬，站点在线）→ `global`「国内外可访问」；
+- **13 站超时或被拒连** → `overseas`「需海外网络」，详情页写明「这是网络可达性问题，不是站点下线」；
+- **2 站** `paywall`「完整内容需订阅」（例：Shotdeck）；
+- 个别站点点名处理：`archives.design` 403 反爬、`vogue.com/photovogue` 404 路径失效（改指 `vogue.com`）、
+  `gtn9.com` / `experimentaljetset.nl` / `manvsmachine.co.uk` 域名无法解析或拒连（标注可能已迁移/停用）、
+  `topys.cn` 脚本请求被拒连（中文站，标为限流而非墙）。
+
+实现方式：`RAW_SITES` 保持原始标注，`REACH_PATCH` 只覆盖 `access / accessNote / officialUrl` 三列，`MARKET_SITES` 为合并结果——改一条实测结论不用翻 700 行数据。
+
+### 8.4 界面
+
+- **一级列表**：删除卡片上的「访问官网 ↗」，只留「看它值得看什么」+「收藏」。索引面板常驻「分组」和「检索」，「更多筛选」折叠「地区 / 国家 / 风格 / 访问」，每个 chip 带计数，可叠加、可清空，标题实时显示「站点索引 · n / 107」。
+- **二级详情**：`访问官方网站 ↗` 只在这里出现；新增访问说明块（`需海外网络` 用暖色左边线、`需订阅` 用灰蓝），文案分「实测结论 / 海外可访问 / 国内需自备合规网络环境」三层；另加「若按钮打不开，是网络可达性问题」的兜底提示。
+- **详情侧栏**：国家（含地区）、域名、索引分组、设计风格、访问条件、核实日期、来源，全部来自数据字段，不现编。
+- **收藏**：本机 `localStorage`，未登录也能用，不伪装云同步。
+
+### 8.5 验收
+
+| 项 | 结果 |
+| --- | --- |
+| `npm run build` | 通过（`tsc --noEmit` + vite，market chunk 62.5 kB / gzip 30.1 kB） |
+| 筛选 | 分组=品牌识别 → 15 条；叠加需海外网络 → 1 条；清空 → 107 条（CDP 实测） |
+| 视口 | 1440 / 390 / 360 均 `scrollWidth == innerWidth`，无横向溢出；390 下索引面板单列、搜索框占满 |
+| 深浅色 | 深色下 chip 选中态为浅底深字，访问说明块保持可读 |
