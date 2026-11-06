@@ -592,8 +592,25 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
   .v4-nav-item { font-size: 12px; }
 }
 
-/* 任何页面都不允许横向溢出：宁可换行，也不要出现被裁掉的功能 */
-html, body { overflow-x: hidden; }
+/* 汉堡按钮：默认隐藏（桌面端），手机端显示 */
+.v4-burger { display: none; background: none; border: none; cursor: pointer; padding: 6px; }
+.v4-mobile-nav { display: none; }
+
+@media (max-width: 640px) {
+  .v4-burger { display: inline-flex; }
+  .v4-nav-center { display: none; }
+  .v4-mobile-nav {
+    display: flex; flex-direction: column; position: fixed; top: var(--v4-nav-h, 64px); left: 0; right: 0;
+    background: #fff; border-bottom: 1px solid #e5e5e5; box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    padding: 8px 16px; z-index: 99;
+  }
+  .v4-mobile-nav-item {
+    padding: 12px 8px; text-align: left; background: none; border: none;
+    font-size: 15px; cursor: pointer; border-bottom: 1px solid #f0f0f0;
+  }
+  .v4-mobile-nav-item:last-child { border-bottom: none; }
+  .v4-mobile-nav-item.active { color: #2f5d4a; font-weight: 600; }
+}
 img, svg, video, canvas { max-width: 100%; }
 
 /* 深色下的提示条：浅色底 + 浅色字 = 看不见，必须单独给一档 */

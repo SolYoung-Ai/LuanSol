@@ -35,8 +35,10 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   const sub = useSubscription();
   const { lang, setLang, t } = useLang();
   const [open, setOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => readTheme());
   const menuRef = useRef<HTMLDivElement>(null);
+  const mobileNavRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -86,7 +88,29 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     <div className="v4-nav-inner">
       <div className="v4-nav-brand">
         <button className="v4-wordmark" onClick={() => go('/')} aria-label="LunaSol">LunaSol</button>
+        <button
+          className="v4-burger"
+          onClick={() => setMobileNavOpen((o) => !o)}
+          aria-label="菜单"
+          aria-expanded={mobileNavOpen}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <line x1="4" y1="7" x2="20" y2="7" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="17" x2="20" y2="17" />
+          </svg>
+        </button>
       </div>
+
+      {mobileNavOpen && (
+        <div className="v4-mobile-nav" ref={mobileNavRef}>
+          {NAV_ITEMS.map((n) => (
+            <button key={n.path} className={`v4-mobile-nav-item ${active(n.path) ? 'active' : ''}`} onClick={() => { setMobileNavOpen(false); go(n.path); }}>
+              {lang === 'en' ? n.en : n.zh}
+            </button>
+          ))}
+        </div>
+      )}
 
       <nav className="v4-nav-center" aria-label="Primary">
         {NAV_ITEMS.map((n) => <button key={n.path} className={`v4-nav-item ${active(n.path) ? 'active' : ''}`} onClick={() => go(n.path)} aria-current={active(n.path) ? 'page' : undefined}>
