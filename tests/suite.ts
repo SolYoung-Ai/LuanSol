@@ -8,7 +8,7 @@ import { autoFix, runPrepress } from '../src/engine/prepress';
 import { buildBundle, buildDxf, buildPdf, spreadSvg, svgToCanvas, verifyPdf } from '../src/engine/export';
 import type { DesignBrief, DesignDoc, StructureId, TextLayer } from '../src/types';
 import { STYLES, TRADITION_COUNT, styleById, buildStylePrompt } from '../src/v3/styles';
-import { createEmptyDraft, draftToBrief } from '../src/v3/draft';
+import { createEmptyDraft, draftToBrief, dimensionComplete, structureReady } from '../src/v3/draft';
 import { generatePalettes } from '../src/v3/colors';
 import { accountKey, otpTarget, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
 import { CLOUD, cloudConfigured, deepSeekReady } from '../src/cloud/config';
@@ -100,6 +100,88 @@ export async function runTests(): Promise<Result[]> {
     const fs = faceSizes('tuck', { l: 200, w: 150, h: 80 });
     A(fs.front.w === 200 && fs.front.h === 80 && fs.left!.w === 150, '面尺寸计算错误');
     return `${a.sheets[0].width}×${a.sheets[0].height} → ${b.sheets[0].width}×${b.sheets[0].height} mm`;
+  });
+
+  await t('结构补充参数 · 用户确认的数值真实参与刀模几何', () => {
+    const size = { l: 200, w: 150, h: 80 };
+    const dims = (d: ReturnType<typeof buildDieline>) => d.sheets.map((s) => `${s.width}x${s.height}`).join('|');
+
+    // 天地盖：盒盖高度决定底盒高度，套合间隙决定盖盒每边宽出多少
+    const tbDefault = buildDieline('topBottom', size, 3, 5);
+    const tbUser = buildDieline('topBottom', size, 3, 5, { wall: 25, gap: 1.5 });
+    const tbOther = buildDieline('topBottom', size, 3, 5, { wall: 50, gap: 3 });
+    A(dims(tbUser) !== dims(tbDefault), '天地盖的盒盖高度/套合间隙没有影响展开图');
+    A(dims(tbOther) !== dims(tbUser), '天地盖换参数后展开图没有变化');
+
+    // 插舌盒：粘合位宽度与插舌长度
+    const tuckA = buildDieline('tuck', size, 3, 5, { glue: 14, tuckLen: 18 });
+    const tuckB = buildDieline('tuck', size, 3, 5, { glue: 24, tuckLen: 30 });
+    A(dims(tuckA) !== dims(tuckB), '粘合位宽度/插舌长度没有影响展开图');
+
+    // 自立袋：顶部封口边
+    const pouchA = buildDieline('pouch', size, 3, 5, { seal: 12 });
+    const pouchB = buildDieline('pouch', size, 3, 5, { seal: 25 });
+    A(pouchB.sheets[0].height > pouchA.sheets[0].height, '顶部封口边没有影响展开高度');
+
+    // 飞机盒：侧翼长度；抽屉盒：内盒壁厚
+    const mailA = buildDieline('mailer', size, 3, 5, { flap: 40 });
+    const mailB = buildDieline('mailer', size, 3, 5, { flap: 70 });
+    A(mailB.sheets[0].height > mailA.sheets[0].height, '侧翼长度没有影响展开高度');
+    const drawA = buildDieline('drawer', size, 3, 5, { wall: 22 });
+    const drawB = buildDieline('drawer', size, 3, 5, { wall: 45 });
+    A(dims(drawA) !== dims(drawB), '内盒壁厚没有影响展开图');
+
+    // 矩形标签：圆角半径 > 0 时裁切线应多于直角矩形
+    const square = buildDieline('labelRect', size, 3, 5, { radius: 0 });
+    const round = buildDieline('labelRect', size, 3, 5, { radius: 8 });
+    const cuts = round.sheets[0].segments.filter((s) => s.kind === 'cut').length;
+    A(cuts > square.sheets[0].segments.filter((s) => s.kind === 'cut').length, '圆角半径没有生成圆角裁切线');
+    A(round.sheets[0].segments.some((s) => s.kind === 'bleed'), '圆角标签缺少出血线');
+
+    // 超出常规区间的参数必须给出可读的提示
+    const warn = buildDieline('tuck', size, 3, 5, { glue: 28, tuckLen: 38 });
+    A(warn.warnings.length > 0, '异常结构参数没有产生任何提示');
+
+    return `天地盖 ${dims(tbDefault)} → ${dims(tbUser)}；圆角裁切线 ${cuts} 段`;
+  });
+
+  await t('向导尺寸校验 · 参数填齐即算通过，不被隐藏的「确认」按钮卡住', () => {
+    const d = createEmptyDraft();
+    d.package_dimensions.known = true;
+    d.package_dimensions.values = { l: 200, w: 150, h: 80 };
+    d.package_dimensions.structureId = 'topBottom' as never;
+    d.package_dimensions.extra = { wall: 25, gap: 1.5 };
+
+    // 关键回归点：structureConfirmed 仍是旧草稿里的 false（用户没多点一次「确认」），
+    // 但只要补充参数齐全就必须判定为通过，否则会出现「都填好了却还是被拦住」。
+    d.package_dimensions.structureConfirmed = false;
+    A(structureReady(d), '补充参数齐全却判定为未就绪');
+    A(dimensionComplete(d).ok, '尺寸校验没有通过');
+
+    // 真正缺参数时必须拦得住
+    const bad = createEmptyDraft();
+    bad.package_dimensions.known = true;
+    bad.package_dimensions.values = { l: 200, w: 150, h: 80 };
+    bad.package_dimensions.structureId = 'topBottom' as never;
+    A(!structureReady(bad), '缺少补充参数时仍判定为就绪');
+    A(!dimensionComplete(bad).ok, '缺少补充参数时尺寸校验竟然通过');
+    A(dimensionComplete(bad).missing.length > 0, '缺少的参数没有列出');
+    return `缺 ${dimensionComplete(bad).missing.length} 项会被拦截，齐全时直接放行`;
+  });
+
+  await t('十步数据 → DesignBrief · 结构补充参数随 brief 传到下游', () => {
+    const d = createEmptyDraft();
+    d.package_dimensions.known = true;
+    d.package_dimensions.values = { l: 200, w: 150, h: 80 };
+    d.package_dimensions.structureId = 'tuck' as never;
+    d.package_dimensions.extra = { glue: 22, tuckLen: 26 };
+    const b = draftToBrief(d);
+    A(b.structureExtra && b.structureExtra.glue === 22 && b.structureExtra.tuckLen === 26, '补充参数没有进入 brief');
+    // brief 里的补充参数必须真的改变刀模
+    const withExtra = buildDieline(b.structure, b.size, 3, 5, b.structureExtra);
+    const without = buildDieline(b.structure, b.size, 3, 5);
+    A(withExtra.sheets[0].width !== without.sheets[0].width, 'brief 的补充参数没有影响刀模');
+    return `粘合位 22 / 插舌 26 → 展开宽 ${without.sheets[0].width} → ${withExtra.sheets[0].width} mm`;
   });
 
   let design: DesignDoc;

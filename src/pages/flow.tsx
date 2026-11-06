@@ -122,8 +122,8 @@ export function Create() {
           <Button onClick={() => send(input)} disabled={!input.trim() || busy}>发送 <span aria-hidden>↗</span></Button>
         </div>
         <div className="chat-foot">
-          <span>{configured ? `已连接 AI 模型 ${s.ai.textModel}` : '当前为内置解析（未配置 AI），不会伪装成 AI 生成'}</span>
-          <button className="link-btn" onClick={enhance}>{busy ? <Spinner label="AI 整理中" /> : configured ? '让 AI 深度理解' : '配置 AI 模型 →'}</button>
+          <span>{configured ? '已连接平台 AI（GPT-4o / DeepSeek-V3 自动调度）' : '当前为内置解析（未启用平台 AI），不会伪装成 AI 生成'}</span>
+          <button className="link-btn" onClick={enhance}>{busy ? <Spinner label="AI 整理中" /> : configured ? '让 AI 深度理解' : '启用平台 AI →'}</button>
         </div>
       </div>
 
@@ -136,7 +136,7 @@ export function Create() {
           <Button variant="outline" onClick={() => setRefOpen(true)}>上传参考图</Button>
           <Button variant="ghost" onClick={fillDefaults}>AI 帮我补齐</Button>
         </div>
-        <Notice tone="info">配置自己的模型接口后，AI 会直接理解整段对话；未配置时使用内置中文解析，功能同样可用。</Notice>
+        <Notice tone="info">启用平台 AI 后，AI 会直接理解整段对话；未启用时使用内置中文解析，功能同样可用。</Notice>
         <div className="req-bottom">
           <Button size="lg" disabled={!!q} onClick={() => { saveProject(); go('/brief'); }}>查看需求分析 <span aria-hidden>→</span></Button>
           {q && <p>{q.hint}</p>}
@@ -249,7 +249,7 @@ export function Schemes() {
   };
   const regenerate = () => { update({ schemes: buildSchemes(s.brief, styleById(s.draft?.style_id || '') || styleByName(s.brief.style)) }); setToast('已按当前风格配置重新生成三套方向'); };
   const genImage = async (i: number) => {
-    if (!s.ai.imageEnabled || !configured) { setToast('请先在「AI 模型配置」启用图像模型'); go('/models'); return; }
+    if (!s.ai.imageEnabled || !configured) { setToast('请先在「平台模型」里启用图像生成'); go('/models'); return; }
     setBusyIdx(i);
     try {
       const b = s.brief;
@@ -280,7 +280,7 @@ export function Schemes() {
             <Button variant="ghost" onClick={() => setDetail(i)}>看展开稿</Button>
           </div>
           <button className="scheme-ai" onClick={() => genImage(i)} disabled={busyIdx === i}>
-            {busyIdx === i ? <Spinner label="AI 生成插画中" /> : configured && s.ai.imageEnabled ? '✦ 用 AI 生成真实插画素材' : '✦ 配置图像模型后可生成真实素材'}
+            {busyIdx === i ? <Spinner label="AI 生成插画中" /> : configured && s.ai.imageEnabled ? '✦ 用 AI 生成真实插画素材' : '✦ 启用图像生成后可生成真实素材'}
           </button>
         </div>
       </Card>)}
@@ -409,7 +409,7 @@ export function Editor() {
           onMove={mode === 'advanced' ? (id, x, y) => mutateLayer(id, { x, y }) : undefined}
           showSafe={s.settings.advancedMode} safe={5} />}
           <div className="canvas-shadow" /></div>
-        <div className="canvas-foot"><span>文字均为独立可编辑图层 · 平面稿修改会同步到 3D 预览</span><Button variant="ghost" onClick={() => { const svg = spreadSvg(design, buildDieline(s.brief.structure, s.brief.size, s.settings.bleed), 0, false); downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${design.name}-展开稿.svg`); }}>下载当前展开稿 SVG</Button></div>
+        <div className="canvas-foot"><span>文字均为独立可编辑图层 · 平面稿修改会同步到 3D 预览</span><Button variant="ghost" onClick={() => { const svg = spreadSvg(design, buildDieline(s.brief.structure, s.brief.size, s.settings.bleed, 5, s.brief.structureExtra), 0, false); downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${design.name}-展开稿.svg`); }}>下载当前展开稿 SVG</Button></div>
       </main>
 
       <aside className="editor-right">
@@ -420,7 +420,7 @@ export function Editor() {
           <div className="quick-prompts">{quickPrompts.map((p) => <button key={p} onClick={() => doModify(p)}>{p}</button>)}</div>
           <div className="mini-input"><textarea rows={2} value={chatText} placeholder="描述你想改的地方…" onChange={(e) => setChatText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doModify(chatText); } }} />
             <Button onClick={() => doModify(chatText)} disabled={!chatText.trim() || busy}>{busy ? <Spinner label="修改中" /> : '修改'}</Button></div>
-          <Notice tone="info">{aiConfigured(s.ai) ? `已连接 ${s.ai.textModel}，AI 会输出局部修改补丁。` : '当前使用内置规则解析修改意图；配置模型后由 AI 生成修改补丁。'}</Notice>
+          <Notice tone="info">{aiConfigured(s.ai) ? '已连接平台 AI，AI 会输出局部修改补丁。' : '当前使用内置规则解析修改意图；启用平台 AI 后由 AI 生成修改补丁。'}</Notice>
           <div className="lock-summary">已锁定 {allLayers(design).filter((l) => l.locked).length} 个元素 · 锁定的品牌名、产品名与图案不会被修改</div>
         </> : <>
           <div className="panel-title">元素属性</div>

@@ -9,6 +9,7 @@
  * ============================================================ */
 import { llmJson, aiEnabled, aiMode, aiStatusLabel } from '../engine/llm';
 import { AI_TASKS, TASK_LIST } from './tasks';
+import { getAIGate, reportAIUsage } from './gate';
 import type { AISettings } from '../types';
 import type {
   AIContext, AIRequest, AISource, AITaskId, AITaskResult, AITransport, AIRunRecord,
@@ -58,6 +59,17 @@ export async function runAITask(id: AITaskId, ctx: AIContext, ai: AISettings): P
       def.local(ctx), started, ai);
   }
 
+  // 1.5) 订阅 / 登录闸门：AI 真正调用前校验额度（由 SubscriptionProvider 注入）
+  const gate = getAIGate();
+  if (gate) {
+    const g = await gate(id);
+    if (!g.ok) {
+      return result(id, 'paywall',
+        g.reason || '需要订阅后使用 AI 功能。',
+        def.local(ctx), started, ai);
+    }
+  }
+
   // 2) 调用统一传输层
   try {
     const raw = await transport({
@@ -78,9 +90,11 @@ export async function runAITask(id: AITaskId, ctx: AIContext, ai: AISettings): P
     if (!suggestions.length) {
       return result(id, 'fallback', '模型没有给出可用建议，已回退本地建议。', def.local(ctx), started, ai);
     }
-    return result(id, 'ai',
+    const r = result(id, 'ai',
       `${aiStatusLabel(ai)} 已给出建议。采纳后才会写入项目，你已确认的内容不会被自动改写。`,
       suggestions, started, ai, aiMode(ai) === 'proxy' ? '后台代理' : ai.textModel);
+    reportAIUsage(id);
+    return r;
   } catch (e) {
     const msg = e instanceof Error ? e.message.slice(0, 90) : String(e).slice(0, 90);
     return result(id, 'fallback',
@@ -89,8 +103,17 @@ export async function runAITask(id: AITaskId, ctx: AIContext, ai: AISettings): P
   }
 }
 
-/** 给设置页展示：接好后台之后到底有哪些能力会生效 */
-export const aiCapabilitySummary = () => ({
+/** 统一的 AI 结果提示语。
+ *  必须区分三种情况：真的调用了 AI / 回退到本地引擎 / 被订阅规则拦截。
+ *  把「被额度拦下」说成「本地生成」是误导——用户会以为模型坏了。
+ *  被拦截时直接用闸门给出的真实原因（未登录 / 额度用完 / 会员过期），不做二次臆测。 */
+export function aiResultToast(r: { source: AISource; note?: string }, aiMsg: string, localMsg: string): string {
+  if (r.source === 'ai') return aiMsg;
+  if (r.source === 'paywall') return r.note || '需要订阅后才能使用 AI 功能';
+  return localMsg;
+}
+
+/** 给设置页展示：接好后台之后到底有哪些能力会生效 */export const aiCapabilitySummary = () => ({
   total: TASK_LIST.length,
   steps: TASK_LIST.filter((t) => typeof t.step === 'number').length,
   global: TASK_LIST.filter((t) => typeof t.step !== 'number').length,

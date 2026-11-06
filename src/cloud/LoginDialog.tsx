@@ -86,6 +86,14 @@ export function LoginDialog({ open, onClose, onDone }: {
           <Button disabled={a.busy || code.length < 4} onClick={verify}>{a.busy ? '校验中…' : '验证并登录'}</Button>
         </div>
       </> : <>
+        <div className="wechat-login">
+          <button className="btn btn-wechat btn-md" disabled={a.busy} onClick={async () => { const r = await a.signInWithWechat(); if (r.message) setMsg({ ok: r.ok, text: r.message }); }}>
+            <span className="wechat-ico" aria-hidden>💬</span> 微信安全登录
+          </button>
+          <p className="modal-hint">使用微信授权一键登录。需先在 CloudBase 控制台「登录授权」启用微信，并配置好公众号 / 开放平台的授权回调域名为本站点。</p>
+        </div>
+        <div className="divider"><span>或用以下方式</span></div>
+
         <div className="seg login-tabs">{TABS.map((t) => <button key={t.id} className={tab === t.id ? 'active' : ''}
           onClick={() => { setTab(t.id); setMsg(null); }}>{t.label}</button>)}</div>
 

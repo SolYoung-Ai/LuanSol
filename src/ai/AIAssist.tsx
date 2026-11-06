@@ -4,7 +4,7 @@
 import React, { useMemo, useState } from 'react';
 import { aiEnabled, aiStatusLabel } from '../engine/llm';
 import { buildAIContext } from './context';
-import { runAITask } from './provider';
+import { runAITask, aiResultToast } from './provider';
 import { AI_TASKS, TASK_FOR_STEP } from './tasks';
 import type { AISettings } from '../types';
 import type { AISuggestion, AITaskResult, DraftPatch } from './types';
@@ -28,7 +28,7 @@ export function AIAssist({ step, d, set, ai, toast }: {
     setBusy(true); setAdopted(null);
     const r = await runAITask(task.id, buildAIContext(d, note), ai);
     setResult(r); setBusy(false);
-    toast(r.source === 'ai' ? 'AI 建议已生成，采纳后才会写入项目' : '已生成建议（本地设计引擎）');
+    toast(aiResultToast(r, 'AI 建议已生成，采纳后才会写入项目', '已生成建议（本地设计引擎）'));
   };
 
   const adopt = (s: AISuggestion) => {
@@ -40,7 +40,8 @@ export function AIAssist({ step, d, set, ai, toast }: {
   const stateText = busy ? '正在生成建议…'
     : result?.source === 'ai' ? 'AI 已接入 · 建议已生成'
       : result?.source === 'fallback' ? 'AI 未通过 · 已回退本地建议'
-        : aiStatusLabel(ai);
+        : result?.source === 'paywall' ? '额度不足 · 已暂停 AI 调用'
+          : aiStatusLabel(ai);
 
   return <section className={`ai-assist ${configured ? 'ai-assist-on' : ''}`} aria-label="本步骤 AI 助手">
     <div className="ai-assist-head">

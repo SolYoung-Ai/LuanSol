@@ -99,6 +99,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans
 .v3-mini input[type="range"] { accent-color: var(--ink); }
 .v3-mini select { border: 1px solid var(--line-2); padding: 5px 8px; font-size: 12px; background: #fff; }
 .v3-extra { border: 1px solid var(--line); padding: 18px; margin-top: 18px; background: #fdfdfc; }
+.v3-confirm { display: flex; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 11px 14px; border-radius: 8px; font-size: 13px; line-height: 1.7; }
+.v3-confirm-mark { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; margin-top: 1px; }
+.v3-confirm.ok { background: #f4faf6; border: 1px solid #cfe6d7; color: #2f6b45; }
+.v3-confirm.ok .v3-confirm-mark { background: #3f8f5f; color: #fff; }
+.v3-confirm.warn { background: #fdf6ec; border: 1px solid #ecd6b0; color: #8a5a1c; }
+.v3-confirm.warn .v3-confirm-mark { background: #c08a4a; color: #fff; }
 .v3-colorinput { min-width: 190px; }
 .v3-colorinput-row { display: flex; gap: 10px; align-items: center; }
 .v3-colorinput-row input[type="color"] { width: 46px; height: 40px; padding: 3px; border: 1px solid var(--line-2); background: #fff; cursor: pointer; }
@@ -294,6 +300,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans
 .ai-assist-note { margin-top: 14px; padding: 9px 11px; font-size: 11.5px; line-height: 1.7; background: var(--soft); border-left: 2px solid var(--line-2); color: var(--ink-2); }
 .ai-assist-note-ai { border-left-color: #2f6b4f; }
 .ai-assist-note-fallback { border-left-color: var(--red); }
+.ai-assist-note-paywall { border-left-color: #c08a4a; background: #fdf6ec; color: #8a5a1c; }
 .ai-suggestions { margin-top: 12px; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
 .ai-sug { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; background: #fff; padding: 13px 14px; }
 .ai-sug.adopted { background: #f6f8f5; }
@@ -321,6 +328,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans
 .ai-run-src { font-size: 9.5px; padding: 2px 6px; border: 1px solid var(--line-2); color: var(--muted); }
 .ai-run-ai { color: #2f6b4f; border-color: #9db8a6; }
 .ai-run-fallback { color: var(--red); border-color: #d9b0aa; }
+.ai-run-paywall { color: #8a5a1c; border-color: #ecd6b0; }
 .ai-run strong { font-size: 11.5px; font-weight: 500; font-family: ui-monospace, Menlo, monospace; }
 .ai-run em { font-size: 10px; color: var(--muted); font-style: normal; }
 .ai-run p { grid-column: 1 / -1; font-size: 11px; color: var(--muted); line-height: 1.6; margin: 2px 0 0; }

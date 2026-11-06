@@ -43,6 +43,7 @@ interface AuthCtx {
   signInWithPassword: (account: string, password: string) => Promise<ActionResult>;
   startSignup: (target: string, password: string) => Promise<ActionResult>;
   startCodeLogin: (target: string) => Promise<ActionResult>;
+  signInWithWechat: () => Promise<ActionResult>;
   verifyCode: (token: string) => Promise<ActionResult>;
   cancelCode: () => void;
   signOut: () => Promise<ActionResult>;
@@ -188,6 +189,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const cancelCode = useCallback(() => { setPending(null); verifyRef.current = null; setError(null); }, []);
 
+  const signInWithWechat = useCallback(async (): Promise<ActionResult> => {
+    const auth = await authApi();
+    if (!auth) return { ok: false, message: unavailable('微信登录') };
+    setBusy(true); setError(null);
+    try {
+      // 重定向到微信授权页；成功后会跳回本站，CloudBase 自动用 URL 里的 code 建立会话。
+      // redirectTo 只取 origin+pathname，避免 hash 路由把 ?code= 塞进 hash 导致 SDK 读不到。
+      const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+      const r = await (auth as unknown as {
+        signInWithOAuth(p: { provider: string; redirectTo?: string }): Promise<{ data?: unknown; error?: { message?: string } | null }>;
+      }).signInWithOAuth({ provider: 'wechat', redirectTo });
+      if (r?.error) { const m = (r.error as { message?: string })?.message || '微信登录发起失败'; setError(m); return { ok: false, message: m }; }
+      // 正常情况下这里不会执行——页面已经被重定向到微信；返回这条仅作兜底提示。
+      return { ok: true, message: '正在跳转到微信授权…' };
+    } catch (e) {
+      const m = errorMessage(e, '微信登录发起失败，请确认已在 CloudBase 控制台启用微信登录'); setError(m); return { ok: false, message: m };
+    } finally { setBusy(false); }
+  }, []);
+
   const signOut = useCallback(async (): Promise<ActionResult> => {
     const auth = await authApi();
     if (!auth) return { ok: false, message: unavailable('退出登录') };
@@ -204,9 +224,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AuthCtx>(() => ({
     ready, configured, originOk, user, session, pending, busy, error,
-    signInWithPassword, startSignup, startCodeLogin, verifyCode, cancelCode, signOut,
+    signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut,
     clearError: () => setError(null),
-  }), [ready, configured, originOk, user, session, pending, busy, error, signInWithPassword, startSignup, startCodeLogin, verifyCode, cancelCode, signOut]);
+  }), [ready, configured, originOk, user, session, pending, busy, error, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

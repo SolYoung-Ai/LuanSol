@@ -15,7 +15,7 @@ import { generateLogoOptions, adjustLogoSvg, readLogoFile, fileToDataUrl, svgDat
 import { validateBarcode, encodeBarcode, verifyBarcode, barcodeSvg, PREVIEW_CODE, RETAIL_WARNING } from './barcode';
 import type { AISettings } from '../types';
 import { aiEnabled } from '../engine/llm';
-import { runAITask } from '../ai/provider';
+import { runAITask, aiResultToast } from '../ai/provider';
 import { buildAIContext } from '../ai/context';
 import type { PaletteDraft } from './draft';
 
@@ -30,15 +30,30 @@ const dim = (d: ProjectDraft, key: string, def = 0) => d.package_dimensions.valu
 const setDim = (p: StepProps, key: string, v: number) => p.set((d) => ({
   package_dimensions: { ...d.package_dimensions, values: { ...d.package_dimensions.values, [key]: v } },
 }));
-const setExtra = (p: StepProps, key: string, v: number) => p.set((d) => ({
-  package_dimensions: { ...d.package_dimensions, extra: { ...d.package_dimensions.extra, [key]: v } },
-}));
-const setStruct = (p: StepProps, id: string) => p.set((d) => ({
-  package_dimensions: {
-    ...d.package_dimensions, structureId: id as never, structureConfirmed: false,
-    extra: Object.fromEntries((STRUCTURE_EXTRA[id as keyof typeof STRUCTURE_EXTRA] || []).map((e) => [e.key, e.def])),
-  },
-}));
+/** 补充参数是否齐全（决定「结构参数已确认」状态，避免再要求用户多点一次） */
+const extrasComplete = (structureId: string, extra: Record<string, number>) =>
+  (STRUCTURE_EXTRA[structureId as keyof typeof STRUCTURE_EXTRA] || [])
+    .every((e) => extra[e.key] !== undefined && extra[e.key] !== null && !Number.isNaN(Number(extra[e.key])));
+const setExtra = (p: StepProps, key: string, v: number) => p.set((d) => {
+  const extra = { ...d.package_dimensions.extra, [key]: v };
+  return {
+    package_dimensions: {
+      ...d.package_dimensions, extra,
+      structureConfirmed: extrasComplete(d.package_dimensions.structureId, extra),
+    },
+  };
+});
+const setStruct = (p: StepProps, id: string) => p.set((d) => {
+  const extra = Object.fromEntries((STRUCTURE_EXTRA[id as keyof typeof STRUCTURE_EXTRA] || []).map((e) => [e.key, e.def]));
+  return {
+    package_dimensions: {
+      ...d.package_dimensions, structureId: id as never,
+      // 选结构即自动带入该结构的默认补充参数，参数齐全即视为已确认
+      structureConfirmed: extrasComplete(id, extra),
+      extra,
+    },
+  };
+});
 
 const AGE_OPTIONS = ['儿童', '年轻人', '成年人', '中老年人', '全年龄段'];
 const GROUP_OPTIONS = ['女性消费者', '男性消费者', '家庭用户', '商务人士', '年轻潮流人群', '高端消费群体', '大众消费群体'];
@@ -112,6 +127,7 @@ export function StepSize(p: StepProps) {
   });
   const structs = meta.structures.map(structureById);
   const extras = dm.structureId ? STRUCTURE_EXTRA[dm.structureId] || [] : [];
+  const extrasReady = dm.structureId ? extrasComplete(dm.structureId, dm.extra) : false;
   return <>
     <StepSection title="首先选择包装形态">
       <div className="v3-grid v3-grid-3">
@@ -138,7 +154,15 @@ export function StepSize(p: StepProps) {
             hint={f.hint} placeholder="留空自动计算" onChange={(v) => setDim(p, f.key, v)} />)}
           {meta.choice && <div className="v3-fieldlabel">{meta.choice.label}</div>}
           {meta.choice && <div className="v3-chips">{meta.choice.options.map((o) => <button key={o} className={`v3-chip ${dm.choice === o ? 'on' : ''}`}
-            onClick={() => p.set((x) => ({ package_dimensions: { ...x.package_dimensions, choice: o, structureId: o === '圆形' || o === '椭圆' ? 'labelRound' : 'labelRect' } }))}>{o}</button>)}</div>}
+            onClick={() => {
+              // 选形状会连带决定结构（圆形→贴标圆角，矩形→贴标直角），
+              // 必须同时带出该结构的默认补充参数，否则 extra 为空会让下一步永远提示「待完善」。
+              const sid = o === '圆形' || o === '椭圆' ? 'labelRound' : 'labelRect';
+              const extra = Object.fromEntries((STRUCTURE_EXTRA[sid as keyof typeof STRUCTURE_EXTRA] || []).map((e) => [e.key, e.def]));
+              p.set((x) => ({
+                package_dimensions: { ...x.package_dimensions, choice: o, structureId: sid as never, structureConfirmed: extrasComplete(sid, extra), extra },
+              }));
+            }}>{o}</button>)}</div>}
         </div>
         <div className="v3-diagram-wrap"><DimensionDiagram form={d.package_type} /><span>尺寸示意图 · {meta.en}</span></div>
       </div>
@@ -149,19 +173,25 @@ export function StepSize(p: StepProps) {
       const id = (r.suggestions[0]?.value as { structureId?: string } | undefined)?.structureId;
       if (!id || !meta.structures.includes(id as never)) return;
       setStruct(p, id);
-      p.toast(`已推荐「${structureById(id as never).name}」，仍需确认下方结构参数`);
+      p.toast(`已推荐「${structureById(id as never).name}」，下方已按该结构填好默认参数，可直接修改`);
     }}>让 AI 帮我推荐</button>}>
       <div className="v3-grid v3-grid-3">
         {structs.map((st) => <OptionCard key={st.id} active={dm.structureId === st.id} title={st.name} desc={st.use} onClick={() => setStruct(p, st.id)} />)}
       </div>
-      {dm.structureId && <div className="v3-extra">
+      {dm.structureId ? <div className="v3-extra">
         <FieldLabel hint="这些参数决定粘合位、插舌、盖高等真实几何，不能用三个外形尺寸代替">结构补充参数（mm）</FieldLabel>
         <div className="v3-size-fields v3-size-fields-inline">
           {extras.map((e) => <NumField key={e.key} label={e.label} value={dm.extra[e.key] ?? e.def} min={e.min} max={e.max} hint={e.hint} onChange={(v) => setExtra(p, e.key, v)} />)}
         </div>
-        <button className="v3-link" onClick={() => p.set((x) => ({ package_dimensions: { ...x.package_dimensions, structureConfirmed: true } }))}>
-          {dm.structureConfirmed ? '✓ 结构参数已确认' : '确认结构参数'}
-        </button>
+        <div className={`v3-confirm ${extrasReady ? 'ok' : 'warn'}`}>
+          <span className="v3-confirm-mark" aria-hidden>{extrasReady ? '✓' : '!'}</span>
+          <span>{extrasReady
+            ? '结构参数已确认：下方数值会直接用于生成刀模与展开图，可随时修改。'
+            : '请把上面的结构补充参数填完整（清空的项需要填一个数值），确认后即可继续下一步。'}</span>
+        </div>
+      </div> : <div className="v3-confirm warn">
+        <span className="v3-confirm-mark" aria-hidden>!</span>
+        <span>请先选择一个包装结构；选定后会自动带出该结构的补充参数，再确认即可继续。</span>
       </div>}
       <Note tone="warn">结构由实际几何参数生成展开刀模，不是把矩形图片当作刀模。尺寸或结构参数不完整时，后续导出会被印前检查拦截。</Note>
     </StepSection>
@@ -198,7 +228,7 @@ export function StepLogo(p: StepProps) {
     setAdvice(suggestions); setAiUsed(r.source === 'ai');
     const opts = generateLogoOptions(spec);
     p.set({ logo_options: opts, logo_creation_mode: 'ai', brand_logo: null, logo_selected: '', logo_svg: '' });
-    p.toast(r.source === 'ai' ? 'AI 已给出三个 Logo 方向，矢量草图由本地引擎绘制' : '内置矢量模板生成三个方向（未调用 AI）');
+    p.toast(aiResultToast(r, 'AI 已给出三个 Logo 方向，矢量草图由本地引擎绘制', '内置矢量模板生成三个方向（未调用 AI）'));
     setBusy(false);
   };
 
@@ -294,7 +324,7 @@ export function StepAudience(p: StepProps) {
     const v = (first.value || {}) as { advice?: string };
     const advice = v.advice || first.detail;
     p.set((d) => ({ target_audience: { ...d.target_audience, aiRecommend: true, advice } }));
-    p.toast(r.source === 'ai' ? 'AI 已按产品与风格给出视觉表达建议' : '已按当前人群与品类给出视觉表达建议（本地引擎）');
+    p.toast(aiResultToast(r, 'AI 已按产品与风格给出视觉表达建议', '已按当前人群与品类给出视觉表达建议（本地引擎）'));
   };
   return <>
     <StepSection title="年龄群体"><MultiChips options={AGE_OPTIONS} value={a.ages} onChange={(v) => setA('ages', v)} /></StepSection>
@@ -423,7 +453,7 @@ export function StepColor(p: StepProps) {
         const r = await runAITask('color.primary', buildAIContext(p.d), p.ai);
         const c = (r.suggestions[0]?.value as { color?: string } | undefined)?.color || recommendPrimary(st);
         choose(c);
-        p.toast(r.source === 'ai' ? `AI 已按风格推荐主色 ${c}` : `已按「${st?.style_name || '当前配置'}」推荐 ${c}（本地引擎）`);
+        p.toast(aiResultToast(r, `AI 已按风格推荐主色 ${c}`, `已按「${st?.style_name || '当前配置'}」推荐 ${c}（本地引擎）`));
       }}>AI 根据风格推荐主色</button>
     </div></StepSection>
     <Why text="主色是整套配色的锚点，下一步的方案都会以它为基础展开，改主色后可重新生成配色。" />
@@ -532,7 +562,7 @@ export function StepCopy(p: StepProps) {
     }).filter(Boolean);
     // 一次写入：连续两次基于旧快照的 setC 会互相覆盖
     p.set({ copy_content: { ...c, aiSuggestion: `「${c.productName}」\n${lines.join('\n')}`, confirmed: false } });
-    p.toast(r.source === 'ai' ? 'AI 已给出文案建议，确认后才会写入设计' : '已生成文案建议，确认后才会写入设计（本地引擎）');
+    p.toast(aiResultToast(r, 'AI 已给出文案建议，确认后才会写入设计', '已生成文案建议，确认后才会写入设计（本地引擎）'));
   };
   const apply = () => {
     const lines = c.aiSuggestion.split('\n');

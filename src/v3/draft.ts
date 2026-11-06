@@ -315,6 +315,19 @@ export function dimensionComplete(d: ProjectDraft): { ok: boolean; missing: stri
   return { ok: missing.length === 0, missing };
 }
 
+/** 结构补充参数是否已齐全（选定了结构，且每个补充参数都有合法数值）。
+ *  刻意不依赖 structureConfirmed 标志：那个标志需要用户额外点一次「确认」，
+ *  很容易在「参数都填好了」的情况下仍然拦住流程，所以这里按真实数据判定。 */
+export function structureReady(d: ProjectDraft): boolean {
+  const dm = d.package_dimensions;
+  if (!dm.structureId) return false;
+  for (const e of STRUCTURE_EXTRA[dm.structureId] || []) {
+    const v = dm.extra[e.key];
+    if (v === undefined || v === null || Number.isNaN(Number(v))) return false;
+  }
+  return true;
+}
+
 /** 十步数据 → 旧 DesignBrief（下游 buildSchemes / 结构 / 印前 / 导出全部复用） */
 export function draftToBrief(d: ProjectDraft, styleName = ''): DesignBrief {
   const b = createEmptyBrief();
@@ -351,6 +364,7 @@ export function draftToBrief(d: ProjectDraft, styleName = ''): DesignBrief {
     material: '',
     structure: struct,
     size,
+    structureExtra: { ...d.package_dimensions.extra },
     extraText: extra.filter(Boolean),
     raw: [],
     referenceImage: d.brand_logo?.src || '',

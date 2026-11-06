@@ -125,9 +125,9 @@ function assemble(
   };
 }
 
-function tuckNet(l: number, w: number, h: number): PanelRect[] {
-  const glue = round(Math.min(16, Math.max(9, w * 0.18)), 2);
-  const tuck = round(Math.min(20, Math.max(11, w * 0.32)), 2);
+function tuckNet(l: number, w: number, h: number, glueW: number, tuckLen: number): PanelRect[] {
+  const glue = round(glueW, 2);
+  const tuck = round(tuckLen, 2);
   const dust = round(w * 0.55, 2);
   const y = tuck + w;
   const xF = 0, xR = l, xB = l + w, xL = l * 2 + w;
@@ -195,34 +195,111 @@ function sleeveNet(l: number, w: number, h: number): PanelRect[] {
   ];
 }
 
+/** 结构补充参数（mm）：用户在向导 STEP 01 确认的真实几何值。
+ *  key 与 src/v3/draft.ts 的 STRUCTURE_EXTRA 一致。 */
+export type StructureExtra = Record<string, number>;
+
+/** 读取补充参数：缺失或非法时退回引擎默认值，并夹到物理可用的区间内。 */
+const extraNum = (extra: StructureExtra | undefined, key: string, fallback: number, min: number, max: number) => {
+  const n = Number(extra?.[key]);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(max, Math.max(min, n));
+};
+
+/** 圆角矩形轮廓（用短直线段逼近圆弧：现有 Segment 只有直线类型）。
+ *  顺时针返回闭合点列，坐标为展开稿毫米坐标。 */
+function roundedRectPoints(x: number, y: number, w: number, h: number, r: number, perCorner = 6): [number, number][] {
+  const rr = Math.min(r, w / 2, h / 2);
+  if (rr <= 0.01) return [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]];
+  const corners: [number, number, number][] = [
+    [x + w - rr, y + rr, -Math.PI / 2],       // 右上：-90° → 0°
+    [x + w - rr, y + h - rr, 0],             // 右下：0° → 90°
+    [x + rr, y + h - rr, Math.PI / 2],       // 左下：90° → 180°
+    [x + rr, y + rr, Math.PI],               // 左上：180° → 270°
+  ];
+  const pts: [number, number][] = [];
+  for (const [cx, cy, a0] of corners) {
+    for (let i = 0; i <= perCorner; i++) {
+      const a = a0 + (Math.PI / 2) * (i / perCorner);
+      pts.push([round(cx + rr * Math.cos(a), 3), round(cy + rr * Math.sin(a), 3)]);
+    }
+  }
+  pts.push(pts[0]);
+  return pts;
+}
+
+const polylineSegments = (pts: [number, number][], kind: Segment['kind']): Segment[] => {
+  const out: Segment[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    out.push({ x1: pts[i][0], y1: pts[i][1], x2: pts[i + 1][0], y2: pts[i + 1][1], kind });
+  }
+  return out;
+};
+
+/** 圆角矩形标签展开图：裁切线与出血线都按圆角生成（直角标签仍走通用矩形逻辑）。 */
+function roundedLabelSheet(l: number, w: number, radius: number, bleed: number, safe: number): Sheet {
+  const cutPts = roundedRectPoints(0, 0, l, w, radius);
+  const bleedPts = roundedRectPoints(-bleed, -bleed, l + bleed * 2, w + bleed * 2, radius + bleed);
+  const shift = (pts: [number, number][]) => pts.map((p) => [p[0] + bleed, p[1] + bleed] as [number, number]);
+  return {
+    id: 'label-rect', name: '矩形标签',
+    width: round(l + bleed * 2, 2), height: round(w + bleed * 2, 2),
+    rects: [{ x: bleed, y: bleed, w: l, h: w, face: 'front', label: '标签', artwork: true }],
+    segments: [
+      ...polylineSegments(shift(cutPts), 'cut'),
+      ...polylineSegments(shift(bleedPts), 'bleed'),
+    ],
+    circles: [],
+    safeRects: [{ x: bleed + safe, y: bleed + safe, w: Math.max(0, l - safe * 2), h: Math.max(0, w - safe * 2) }],
+  };
+}
+
 export function buildDieline(
   structure: StructureId,
   size: { l: number; w: number; h: number },
   bleed = 3,
   safe = 5,
+  extra?: StructureExtra,
 ): Dieline {
   const l = Math.max(20, size.l), w = Math.max(15, size.w), h = Math.max(8, size.h);
   const warnings: string[] = [];
   let sheets: Sheet[] = [];
 
   if (structure === 'tuck') {
-    sheets = [assemble('tuck-main', '插舌盒展开图', tuckNet(l, w, h), bleed, safe)];
+    // 粘合位宽度 / 插舌长度：优先用用户确认的值，否则用按宽度推导的默认值
+    const glue = extraNum(extra, 'glue', round(Math.min(16, Math.max(9, w * 0.18)), 2), 5, 30);
+    const tuckLen = extraNum(extra, 'tuckLen', round(Math.min(20, Math.max(11, w * 0.32)), 2), 8, 45);
+    sheets = [assemble('tuck-main', '插舌盒展开图', tuckNet(l, w, h, glue, tuckLen), bleed, safe)];
+    if (glue < 9 || glue > 20) warnings.push(`粘合位宽度 ${glue}mm 偏离常见 9–20mm 区间，请与印厂确认。`);
+    if (tuckLen > 25) warnings.push(`插舌长度 ${tuckLen}mm 偏大，过长的插舌会影响成品挺度。`);
   } else if (structure === 'topBottom') {
+    // 盒盖高度 = 盖盒侧壁高；套合间隙 = 盖盒每边比底盒宽出的配合余量
+    const lidWall = extraNum(extra, 'wall', Math.max(12, h * 0.3), 8, 120);
+    const gap = extraNum(extra, 'gap', 1.2, 0.3, 5);
+    const baseWall = Math.max(10, h - lidWall);
     sheets = [
-      assemble('tb-base', '底盒展开图', trayNet(l, w, Math.max(14, h * 0.72), '底盒'), bleed, safe),
-      assemble('tb-lid', '盖盒展开图', trayNet(l + 2.4, w + 2.4, Math.max(12, h * 0.3), '盖盒', 'top'), bleed, safe),
+      assemble('tb-base', '底盒展开图', trayNet(l, w, baseWall, '底盒'), bleed, safe),
+      assemble('tb-lid', '盖盒展开图', trayNet(l + gap * 2, w + gap * 2, lidWall, '盖盒', 'top'), bleed, safe),
     ];
+    if (baseWall < 10) warnings.push('盒盖高度接近成品总高，底盒高度不足，请复核结构参数。');
+    if (gap < 0.5) warnings.push('套合间隙小于 0.5mm，盖盒可能难以套合。');
   } else if (structure === 'drawer') {
+    // 内盒壁厚 = 内盒侧壁高度
+    const wall = extraNum(extra, 'wall', Math.max(14, h * 0.85), 8, 100);
+    const innerWall = Math.min(wall, Math.max(10, h - 5));
     sheets = [
-      assemble('dw-tray', '内盒展开图', trayNet(l - 3, w - 3, Math.max(14, h * 0.85), '内盒'), bleed, safe),
+      assemble('dw-tray', '内盒展开图', trayNet(l - 3, w - 3, innerWall, '内盒'), bleed, safe),
       assemble('dw-sleeve', '外套展开图', sleeveNet(l, w, h), bleed, safe),
     ];
   } else if (structure === 'mailer') {
-    const flap = round(Math.min(120, Math.max(15, w * 0.28)), 2);
+    // 侧翼长度
+    const flap = extraNum(extra, 'flap', round(Math.min(120, Math.max(15, w * 0.28)), 2), 15, 120);
     sheets = [assemble('mailer-main', '飞机盒展开图', mailerNet(l, w, h, flap), bleed, safe)];
+    if (flap > w * 0.6) warnings.push(`侧翼长度 ${flap}mm 已超过盒宽的 60%，折叠后容易干涉。`);
   } else if (structure === 'pouch') {
     const gusset = round(Math.min(60, Math.max(20, w * 0.5)), 2);
-    const seal = 12;
+    // 顶部封口边
+    const seal = extraNum(extra, 'seal', 12, 5, 40);
     sheets = [assemble('pouch', '自立袋展开图', [
       { x: 0, y: 0, w: l, h: seal, label: '顶部封口边' },
       { x: 0, y: seal, w: l, h, label: '正面', face: 'front', artwork: true },
@@ -231,9 +308,13 @@ export function buildDieline(
       { x: l, y: seal + h, w: l, h: gusset, label: '底部折角' },
     ], bleed, safe)];
   } else if (structure === 'labelRect') {
-    sheets = [assemble('label-rect', '矩形标签', [
-      { x: 0, y: 0, w: l, h: w, face: 'front', label: '标签', artwork: true },
-    ], bleed, safe)];
+    // 圆角半径：>0 时按圆角生成裁切与出血线，0 为直角
+    const radius = extraNum(extra, 'radius', 0, 0, 30);
+    sheets = radius > 0.05
+      ? [roundedLabelSheet(l, w, radius, bleed, safe)]
+      : [assemble('label-rect', '矩形标签', [
+        { x: 0, y: 0, w: l, h: w, face: 'front', label: '标签', artwork: true },
+      ], bleed, safe)];
   } else {
     const r = Math.min(l, w) / 2;
     const cx = l / 2, cy = w / 2;

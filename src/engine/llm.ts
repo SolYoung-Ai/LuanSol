@@ -4,6 +4,7 @@
  * 「浏览器直连」模式仅用于个人本机：Key 存在用户自己浏览器的 localStorage。 */
 import type { AISettings } from '../types';
 import { CLOUD, deepSeekPreset, deepSeekReady } from '../cloud/config';
+import { getAIGate, reportAIUsage } from '../ai/gate';
 
 const preset = deepSeekReady ? deepSeekPreset() : null;
 
@@ -159,6 +160,12 @@ export async function llmJson<T>(messages: LLMMessage[], s: AISettings): Promise
 
 export async function llmImage(prompt: string, s: AISettings): Promise<{ src: string; naturalW: number; naturalH: number }> {
   if (!aiEnabled(s)) throw new Error('尚未启用 AI 接入');
+  // 订阅 / 登录闸门：图像生成同样消耗额度
+  const gate = getAIGate();
+  if (gate) {
+    const g = await gate('image');
+    if (!g.ok) throw new Error(g.reason || '需要订阅后使用 AI 功能');
+  }
   return withRetry(async () => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 120000);
@@ -184,6 +191,7 @@ export async function llmImage(prompt: string, s: AISettings): Promise<{ src: st
       if (!src) throw new Error('图像接口未返回图片');
       const img = new Image();
       await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = reject; img.src = src!; });
+      reportAIUsage('image');
       return { src, naturalW: img.naturalWidth, naturalH: img.naturalHeight };
     } finally { clearTimeout(timer); }
   }, s.retries);

@@ -98,6 +98,9 @@ export interface DesignBrief {
   material: string;
   structure: StructureId;
   size: { l: number; w: number; h: number }; // mm
+  /** 结构补充参数（mm）：粘合位宽度 / 插舌长度 / 盒盖高度 / 套合间隙 / 内盒壁厚 / 侧翼长度 / 顶部封口边 / 圆角半径。
+   *  由用户在向导 STEP 01 确认，直接参与刀模几何计算；key 与 v3/draft.ts 的 STRUCTURE_EXTRA 一致。 */
+  structureExtra?: Record<string, number>;
   targetGroup: string;
   extraText: string[];
   raw: string[];

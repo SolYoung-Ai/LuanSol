@@ -16,7 +16,7 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
 
 const NAV = [
   { label: '首页', path: '/' }, { label: '开始设计', path: '/wizard' }, { label: '灵感库', path: '/inspiration' },
-  { label: '包装类型', path: '/structures' }, { label: '我的作品', path: '/projects' },
+  { label: '包装类型', path: '/structures' }, { label: '我的作品', path: '/projects' }, { label: '订阅', path: '/subscribe' },
 ];
 
 export function Nav({ onLogin, accountLabel }: { onLogin: () => void; accountLabel?: string | null }) {

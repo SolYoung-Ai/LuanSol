@@ -77,7 +77,7 @@ const VALID_BARCODE_TYPES = ['EAN-13', 'UPC-A', 'Code 128'];
 const KNOWN_CATEGORIES = ['零食', '糕点', '糖果', '茶叶', '咖啡', '茶饮', '果汁', '酒类', '护肤品', '化妆品', '洗护用品', '香水', '身体护理', '家居用品', '清洁用品', '文具', '生活用品', '营养品', '保健食品', '节日礼品', '文创产品', '品牌周边', '定制礼盒'];
 
 export const AI_TASKS: Record<AITaskId, AITaskDef> = {
-  'size.structure': def('size.structure', 0, '尺寸与结构建议', '根据包装形态与产品类型，推荐可量产的真实结构；采纳后仍需你确认结构补充参数。',
+  'size.structure': def('size.structure', 0, '尺寸与结构建议', '根据包装形态与产品类型，推荐可量产的真实结构；采纳后会自动带出该结构的补充参数默认值，供你核对修改。',
     '结合包装形态与产品类型，推荐 1–2 种真实可量产的包装结构，说明为什么适合这个产品与销售渠道。不要建议不存在的结构，也不要假定插舌、粘合位等具体几何值。',
     '{"structureId":"tuck | topBottom | drawer | mailer | pouch | labelRect | labelRound"}',
     C(['structureId 必须来自当前包装形态允许的结构列表', '不得编造尺寸数值', '不得替用户确认结构参数']),

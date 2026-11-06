@@ -11,12 +11,15 @@ import { useAuth } from '../cloud/auth';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { useCloudSync } from '../cloud/useCloudSync';
 import { listProjects, pullProject, projectIdOf, timeLabel, type CloudMeta } from '../cloud/projects';
+import { useSubscription, remainingOf, isProActive } from '../cloud/subscription';
 import { CLOUD, cloudConfigured, cloudOriginSupported, CLOUD_SITE_URL } from '../cloud/config';
+import { PRICING } from '../cloud/plans';
 
 export default function Account() {
   const a = useAuth();
   const { s, mergeCloudProjects, loadProject, setToast } = useApp();
   const sync = useCloudSync();
+  const sub = useSubscription();
   const [loginOpen, setLoginOpen] = useState(false);
   const [rows, setRows] = useState<CloudMeta[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -87,6 +90,24 @@ export default function Account() {
             <Button size="sm" onClick={() => { void sync.syncNow(); }}>立即双向同步</Button>
             <Button size="sm" variant="outline" onClick={() => { void sync.downloadAll(); }}>取回云端项目</Button>
           </div>
+        </Card>
+
+        <Card className="pad-card"><SectionLabel en="SUBSCRIPTION">订阅与额度</SectionLabel>
+          {!sub.metered ? <Notice tone="warn">当前为 GitHub Pages 镜像，订阅计量不可用。请在正式站点登录并订阅。</Notice>
+            : isProActive(sub.sub) ? <>
+              <div className="acct-row"><span>套餐</span><Tag tone="green">会员 · ¥{PRICING.proMonthlyPriceRMB}/月</Tag></div>
+              <div className="acct-row"><span>有效期至</span><strong>{sub.sub?.period_end ? new Date(sub.sub.period_end).toLocaleDateString('zh-CN') : '—'}</strong></div>
+              <div className="acct-row"><span>本月剩余</span><strong>{sub.usedLeft ?? 0} / {PRICING.proMonthlyQuota} 次</strong></div>
+              <div className="quota-bar"><span style={{ width: `${PRICING.proMonthlyQuota ? ((sub.usedLeft ?? 0) / PRICING.proMonthlyQuota) * 100 : 0}%` }} /></div>
+              <div className="acct-actions"><Button size="sm" variant="outline" onClick={() => go('/subscribe')}>管理订阅</Button></div>
+            </>
+            : <>
+              <div className="acct-row"><span>套餐</span><Tag>免费体验</Tag></div>
+              <div className="acct-row"><span>剩余</span><strong>{sub.usedLeft ?? 0} / {PRICING.freeTrialUses} 次</strong></div>
+              <div className="quota-bar free"><span style={{ width: `${PRICING.freeTrialUses ? ((sub.usedLeft ?? 0) / PRICING.freeTrialUses) * 100 : 0}%` }} /></div>
+              <p className="acct-msg">新注册用户获 {PRICING.freeTrialUses} 次免费体验；订阅会员每月 {PRICING.proMonthlyQuota} 次 AI 调用。</p>
+              <div className="acct-actions"><Button size="sm" variant="accent" onClick={() => go('/subscribe')}>订阅会员 ¥{PRICING.proMonthlyPriceRMB}/月</Button></div>
+            </>}
         </Card>
       </div>
 

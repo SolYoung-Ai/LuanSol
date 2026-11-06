@@ -1,9 +1,10 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { useApp } from './store';
 import { Button, Logo, Nav, go, useHash } from './ui';
 import Home from './pages/home';
 import { useAuth } from './cloud/auth';
 import { LoginDialog } from './cloud/LoginDialog';
+import { SubscriptionProvider } from './cloud/subscription';
 import { cloudConfigured } from './cloud/config';
 
 // 路由级代码分割：除首页外壳外，所有页面按需加载。
@@ -26,6 +27,7 @@ const Prepress = lazy(() => import('./pages/output').then((m) => ({ default: m.P
 const ExportCenter = lazy(() => import('./pages/output').then((m) => ({ default: m.ExportCenter })));
 const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
 const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default: m.ModelConfig })));
+const Subscribe = lazy(() => import('./pages/subscribe'));
 
 function Footer() {
   return <footer className="footer"><div className="footer-inner">
@@ -35,7 +37,7 @@ function Footer() {
     <div className="footer-col"><strong>流程</strong>
       <a href="#/brief">需求分析</a><a href="#/editor">设计工作台</a><a href="#/preview">3D 预览</a><a href="#/prepress">印前检查</a><a href="#/export">文件导出</a></div>
     <div className="footer-col"><strong>账户</strong>
-      <a href="#/account">账户与云端项目</a><a href="#/models">AI 模型配置</a><a href="#/settings">个人设置</a>
+      <a href="#/account">账户与云端项目</a><a href="#/subscribe">订阅方案</a><a href="#/models">平台模型</a><a href="#/settings">个人设置</a>
       <span className="footer-note">未登录时项目保存在本机浏览器；登录后按账号同步到云端</span></div>
   </div><div className="footer-bottom"><span>© 2026 LunaSol AI Packaging Studio</span><span>Made for people who have never designed before.</span></div></footer>;
 }
@@ -49,6 +51,9 @@ export default function App() {
   const { toast, setToast } = useApp();
   const auth = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
+  // 必须稳定引用：SubscriptionProvider 会把它放进 useEffect 依赖，
+  // 每次渲染都新建函数会让闸门反复注销重注册，中间存在计量空窗。
+  const requestLogin = useCallback(() => setLoginOpen(true), []);
   useEffect(() => { window.scrollTo({ top: 0 }); }, [hash]);
 
   const path = hash.split('?')[0];
@@ -70,14 +75,17 @@ export default function App() {
   else if (path === '/account') page = <Account />;
   else if (path === '/settings') page = <Settings />;
   else if (path === '/models') page = <ModelConfig />;
+  else if (path === '/subscribe') page = <Subscribe />;
   else page = <div className="page page-narrow"><h1>页面不存在</h1><Button onClick={() => go('/')}>回到首页</Button></div>;
 
-  return <div className="app">
-    <Nav onLogin={() => setLoginOpen(true)} accountLabel={auth.user ? auth.user.label : null} />
-    <main className="main"><Suspense fallback={<PageFallback />}>{page}</Suspense></main>
-    <Footer />
-    {toast && <div className="toast" onClick={() => setToast(null)}><span>✓</span>{toast}</div>}
-    <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
-    {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
-  </div>;
+  return <SubscriptionProvider requestLogin={requestLogin}>
+    <div className="app">
+      <Nav onLogin={requestLogin} accountLabel={auth.user ? auth.user.label : null} />
+      <main className="main"><Suspense fallback={<PageFallback />}>{page}</Suspense></main>
+      <Footer />
+      {toast && <div className="toast" onClick={() => setToast(null)}><span>✓</span>{toast}</div>}
+      <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
+      {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
+    </div>
+  </SubscriptionProvider>;
 }

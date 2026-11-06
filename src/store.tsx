@@ -135,9 +135,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addChat = useCallback((m: Omit<ChatMessage, 'id' | 'at'>) => setS((prev) => ({ ...prev, chat: [...prev.chat, { ...m, id: uid('msg'), at: Date.now() }] })), []);
   const clearChat = useCallback(() => setS((prev) => ({ ...prev, chat: [] })), []);
 
-  const dieline = useMemo(() => buildDieline(s.brief.structure, s.brief.size.l ? s.brief.size : { l: 200, w: 150, h: 80 }, s.settings.bleed, 5), [s.brief.structure, s.brief.size, s.settings.bleed]);
+  const dieline = useMemo(() => buildDieline(s.brief.structure, s.brief.size.l ? s.brief.size : { l: 200, w: 150, h: 80 }, s.settings.bleed, 5, s.brief.structureExtra), [s.brief.structure, s.brief.size, s.settings.bleed, s.brief.structureExtra]);
 
-  const refreshDieline = useCallback(() => buildDieline(s.brief.structure, s.brief.size, s.settings.bleed, 5), [s.brief, s.settings.bleed]);
+  const refreshDieline = useCallback(() => buildDieline(s.brief.structure, s.brief.size, s.settings.bleed, 5, s.brief.structureExtra), [s.brief, s.settings.bleed]);
 
   const saveProject = useCallback((name?: string): Project => {
     let result!: Project;

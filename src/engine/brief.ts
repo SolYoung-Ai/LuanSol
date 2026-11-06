@@ -31,7 +31,7 @@ export function createEmptyBrief(): DesignBrief {
   return {
     product: '', category: '', packType: '', brand: '', tagline: '', spec: '', description: '',
     style: '', colors: [], motif: '', audience: '', scene: '', material: '',
-    structure: 'tuck', size: { l: 0, w: 0, h: 0 }, targetGroup: '', extraText: [], raw: [], referenceImage: '', referenceName: '',
+    structure: 'tuck', size: { l: 0, w: 0, h: 0 }, structureExtra: {}, targetGroup: '', extraText: [], raw: [], referenceImage: '', referenceName: '',
   };
 }
 

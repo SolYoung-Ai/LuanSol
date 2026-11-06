@@ -9,7 +9,7 @@
 import type { AISettings, AIProviderMode } from '../types';
 import type { ProjectDraft } from '../v3/draft';
 
-export type AISource = 'ai' | 'local' | 'fallback';
+export type AISource = 'ai' | 'local' | 'fallback' | 'paywall';
 
 /** 全部 AI 能力点。step 为向导步骤索引（0–9），其余为全局节点。 */
 export type AITaskId =

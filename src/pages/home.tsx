@@ -7,6 +7,7 @@ import { createEmptyBrief, parseUtterance } from '../engine/brief';
 import type { StructureId } from '../types';
 import { createEmptyDraft, defaultDimensions, type PackageForm } from '../v3/draft';
 import { WIZARD_STEPS } from '../v3/steps';
+import { PRICING } from '../cloud/plans';
 
 const sizeFor: Record<string, { l: number; w: number; h: number }> = {
   box: { l: 200, w: 150, h: 80 }, label: { l: 90, w: 120, h: 0 }, pouch: { l: 140, w: 60, h: 220 }, custom: { l: 200, w: 150, h: 80 },
@@ -117,6 +118,37 @@ export default function Home() {
           ['05', '印前检查', '尺寸、出血、DPI、色彩、字体与条码可读性'],
           ['06', '文件输出', '毫米级 PDF / SVG / 高清 PNG / 刀模 DXF'],
         ].map(([n, t, d]) => <div className="agent" key={n}><span>{n}</span><h4>{t}</h4><p>{d}</p></div>)}
+      </div>
+    </section>
+
+    {/* ---------------- 订阅说明 ---------------- */}
+    <section className="section section-pad section-soft" id="plans">
+      <div className="section-head row"><div>
+        <SectionLabel en="PRICING">免费开始，需要更多再订阅</SectionLabel>
+        <h2>新用户免费体验 {PRICING.freeTrialUses} 次 AI，<br />不够再订阅。</h2>
+        <p>模型由平台统一接入（GPT-4o 与 DeepSeek-V3 自动调度），你不需要、也无法自己配置 API。</p>
+      </div><Button variant="outline" onClick={() => go('/subscribe')}>查看完整方案 <span aria-hidden>→</span></Button></div>
+      <div className="plan-grid">
+        <Card className="pad-card plan-card">
+          <div className="plan-name">免费体验</div>
+          <div className="plan-price">¥0</div>
+          <ul className="plan-feats">
+            <li>{PRICING.freeTrialUses} 次 AI 调用（新注册自动获得）</li>
+            <li>内置确定性设计引擎</li>
+            <li>本机保存项目</li>
+          </ul>
+        </Card>
+        <Card className="pad-card plan-card plan-card-pro">
+          <div className="plan-badge">推荐</div>
+          <div className="plan-name">会员</div>
+          <div className="plan-price">¥{PRICING.proMonthlyPriceRMB}<span>/月</span></div>
+          <ul className="plan-feats">
+            <li>每月 {PRICING.proMonthlyQuota} 次 AI 调用</li>
+            <li>GPT-4o + DeepSeek-V3 自动调度</li>
+            <li>云端同步与全部导出能力</li>
+          </ul>
+          <Button variant="accent" onClick={() => go('/subscribe')}>订阅会员</Button>
+        </Card>
       </div>
     </section>
 

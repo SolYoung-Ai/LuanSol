@@ -64,7 +64,7 @@ export const LOCAL: Record<string, (c: AIContext) => AISuggestion[]> = {
     if (!list.length) return [sug('size-none', '按当前形态填写实测尺寸', `${c.formLabel}暂无可用结构，请先补齐外形尺寸。`)];
     return list.map((x, i) => sug(`structure-${x.id}`,
       `采用「${structureById(x.id as never).name}」${i === 0 ? '（推荐）' : ''}`,
-      `${x.why} 采纳后仍需你确认插舌、粘合位等结构补充参数，系统不会替你假定几何值。`,
+      `${x.why} 采纳后会自动带出该结构的插舌、粘合位等补充参数默认值，你可以直接改成实测值。`,
       { structureId: x.id }));
   },
 
@@ -196,11 +196,16 @@ export const ADOPT: Record<string, (s: AISuggestion, patch: DraftPatch) => void>
   'size.structure': (s, patch) => {
     const id = (s.value as { structureId?: string })?.structureId;
     if (!id) return;
+    const defs = STRUCTURE_EXTRA[id as keyof typeof STRUCTURE_EXTRA] || [];
+    const extra = Object.fromEntries(defs.map((e) => [e.key, e.def]));
+    // 采纳后直接带上该结构的默认补充参数，并按真实数据置为已确认；
+    // 否则「采纳 AI 推荐」会把用户重新卡在「请先确认结构补充参数」上。
+    const confirmed = defs.every((e) => extra[e.key] !== undefined && !Number.isNaN(Number(extra[e.key])));
     patch((d) => ({
       package_dimensions: {
         ...d.package_dimensions, structureId: id as ProjectDraft['package_dimensions']['structureId'],
-        structureConfirmed: false,
-        extra: Object.fromEntries((STRUCTURE_EXTRA[id as keyof typeof STRUCTURE_EXTRA] || []).map((e) => [e.key, e.def])),
+        structureConfirmed: confirmed,
+        extra,
       },
     }));
   },

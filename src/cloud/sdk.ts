@@ -54,6 +54,8 @@ export interface CloudAuthApi {
   signInWithPassword(p: Record<string, string>): Promise<{ data?: { user?: RawUser; session?: RawSession }; error?: Err }>;
   signUp(p: Record<string, string>): Promise<{ data?: { verifyOtp?: VerifyFn }; error?: Err }>;
   signInWithOtp(p: Record<string, string>): Promise<{ data?: { verifyOtp?: VerifyFn }; error?: Err }>;
+  /** 第三方 OAuth 登录（如微信网页授权）：调用后会被重定向到授权页，不会立即返回会话。 */
+  signInWithOAuth(p: { provider: string; redirectTo?: string }): Promise<{ data?: unknown; error?: Err }>;
   getSession(): Promise<{ data?: { session?: RawSession; user?: RawUser }; error?: Err }>;
   signOut(): Promise<{ error?: Err }>;
   onAuthStateChange(cb: (event: string, session: RawSession) => void): { data?: { subscription?: { unsubscribe?: () => void } } };
@@ -74,13 +76,15 @@ export interface DbQuery<T = unknown> extends Promise<DbResult<T>> {
 }
 export interface DbTable {
   select(columns?: string): DbQuery<unknown[]>;
-  insert(row: Record<string, unknown>): Promise<DbResult>;
-  upsert(row: Record<string, unknown>, opts?: { onConflict?: string }): Promise<DbResult>;
-  update(patch: Record<string, unknown>): { eq(column: string, value: string): Promise<DbResult> };
+  insert(row: object): Promise<DbResult>;
+  upsert(row: object, opts?: { onConflict?: string }): Promise<DbResult>;
+  update(patch: object): { eq(column: string, value: string): Promise<DbResult> };
   delete(): { eq(column: string, value: string): Promise<DbResult> };
 }
 export interface Db {
   from(table: string): DbTable;
+  /** 调用数据库函数（用于原子自增等无法用普通查询表达的操作） */
+  rpc?(name: string, params?: Record<string, unknown>): Promise<DbResult>;
 }
 
 export async function db(): Promise<Db | null> {

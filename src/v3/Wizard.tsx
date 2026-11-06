@@ -7,7 +7,7 @@ import { Button, go } from '../ui';
 import { WIZARD_STEPS, stepDone, stepProgress } from './steps';
 import { STEP_BODIES, type StepProps } from './stepBodies';
 import { PackagePreview } from './Preview';
-import { dimensionComplete, FORM_META } from './draft';
+import { dimensionComplete, structureReady, FORM_META } from './draft';
 import { Note } from './controls';
 import { AIAssist } from '../ai/AIAssist';
 import { aiEnabled, aiStatusLabel } from '../engine/llm';
@@ -38,7 +38,9 @@ export default function Wizard() {
     if (i === 0) {
       const c = dimensionComplete(d);
       if (!c.ok) { setToast(`还需要完善：${c.missing.slice(0, 3).join('、')}`); return; }
-      if (!d.package_dimensions.structureConfirmed) { setToast('请先确认结构补充参数'); return; }
+      // 结构参数按真实数据判定，不再要求用户额外点一次「确认结构参数」——
+      // 否则会出现「参数都填好了却仍然被拦住」的假死状态。
+      if (!structureReady(d)) { setToast('结构补充参数还不完整，请把「结构补充参数」里的数值填完再继续'); return; }
     }
     if (i === 3 && !(d.product_category.type || d.product_category.custom)) { setToast('请选择或填写产品类型'); return; }
     if (i === 4 && !d.style_id) { setToast('请先选择一个设计风格'); return; }

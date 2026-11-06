@@ -30,7 +30,8 @@ async function designPlan(d: ProjectDraft, ai: AISettings): Promise<{ plans: Pla
   const extra = r.source === 'ai'
     ? 'AI 已整合十步数据参与方向规划；图形与文字仍由矢量引擎输出为独立可编辑图层。'
     : r.source === 'fallback' ? 'AI 未通过校验或调用失败，已回退内置设计引擎（未伪装为 AI 结果）。'
-      : '未配置 AI：由内置设计引擎整合十步数据并生成三套矢量方案（未调用 AI）。';
+      : r.source === 'paywall' ? '本次 AI 调用被订阅规则拦截（免费额度已用完），当前方案由内置设计引擎生成。'
+        : '未配置 AI：由内置设计引擎整合十步数据并生成三套矢量方案（未调用 AI）。';
   return { plans, note: `${r.note} ${extra}`, source: r.source };
 }
 
