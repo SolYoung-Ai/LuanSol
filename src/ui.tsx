@@ -173,7 +173,12 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
           {open && <div className="v4-menu" role="menu">
             {auth.user ? <>
               <div className="v4-menu-user">
-                <span className="v4-avatar v4-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>
+                {(() => {
+                  const localAvatar = (() => { try { return localStorage.getItem(`lunasol_avatar_${auth.user.id}`); } catch { return null; } })();
+                  return localAvatar
+                    ? <img src={localAvatar} alt="头像" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+                    : <span className="v4-avatar v4-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>;
+                })()}
                 <div className="v4-menu-user-text"><strong>{auth.user.label}</strong><span>{auth.user.account || t('已登录', 'Signed in')}</span></div>
               </div>
               <div className="v4-menu-sep" />
