@@ -73,8 +73,6 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   ];
   const userItems: { label: string; path?: string; action?: () => void; adminOnly?: boolean }[] = [
     { label: t('个人资料', 'Profile'), path: '/account' },
-    { label: t('我的作品', 'My work'), path: '/workspace' },
-    { label: t('我的收藏', 'Favorites'), path: '/workspace?tab=favorites' },
     { label: t('积分与充值', 'Credits & Recharge'), path: '/subscribe' },
     { label: t('账号安全', 'Security'), path: '/security' },
     { label: t('设计偏好', 'Preferences'), path: '/settings' },
