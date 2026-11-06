@@ -191,7 +191,6 @@ export default function Subscribe() {
             <div style={{ fontSize: 12, color: '#999' }}>{p.tag}</div>
             <div style={{ fontSize: 28, fontWeight: 700, margin: '8px 0' }}>¥{p.price}</div>
             <div style={{ color: '#666' }}><Coin size={16} />{p.points}</div>
-            <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>≈ {Math.round(p.points / (p.price / 100))} {t('积分/元', 'credits/yuan')}</div>
             <Button variant="outline" size="sm" disabled style={{ marginTop: 10 }}>{t('即将开放', 'Coming soon')}</Button>
           </div>
         ))}
