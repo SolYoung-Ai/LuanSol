@@ -1,4 +1,4 @@
-/* 十步向导通用控件：简洁、轻量、无装饰 */
+/* 九步向导通用控件：简洁、轻量、无装饰 */
 import React from 'react';
 import { unitLabel, fromMm, toMm, type Unit } from './draft';
 

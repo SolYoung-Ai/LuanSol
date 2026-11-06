@@ -1,7 +1,7 @@
 /* ============================================================
  * V3 统一项目数据模型
  * ------------------------------------------------------------
- * 十步向导、AI 生成、编辑器、印前与导出共享同一份 draft。
+ * 九步向导、AI 生成、编辑器、印前与导出共享同一份 draft。
  * 字段命名对齐产品需求：project_id / package_type / style_id / …
  * 旧项目数据不会有 draft，store 载入时用 createEmptyDraft() 兜底。
  * ============================================================ */
@@ -328,7 +328,7 @@ export function structureReady(d: ProjectDraft): boolean {
   return true;
 }
 
-/** 十步数据 → 旧 DesignBrief（下游 buildSchemes / 结构 / 印前 / 导出全部复用） */
+/** 九步数据 → 旧 DesignBrief（下游 buildSchemes / 结构 / 印前 / 导出全部复用） */
 export function draftToBrief(d: ProjectDraft, styleName = ''): DesignBrief {
   const b = createEmptyBrief();
   const p = d.product_category;

@@ -60,7 +60,7 @@ interface Persisted {
   settings: UserSettings;
   ai: AISettings;
   storage: string;
-  /** V3 十步向导的统一项目数据（旧数据没有此字段，载入时兜底） */
+  /** V3 九步向导的统一项目数据（旧数据没有此字段，载入时兜底） */
   draft: ProjectDraft;
 }
 
@@ -77,7 +77,7 @@ interface AppCtx {
   setToast: (t: string | null) => void;
   update: (p: Partial<Persisted>) => void;
   patchBrief: (p: Partial<DesignBrief>) => void;
-  /** 局部更新 V3 十步向导数据（自动保存、返回上一步不丢数据） */
+  /** 局部更新 V3 九步向导数据（自动保存、返回上一步不丢数据） */
   patchDraft: (p: Partial<ProjectDraft> | ((d: ProjectDraft) => Partial<ProjectDraft>)) => void;
   addChat: (m: Omit<ChatMessage, 'id' | 'at'>) => void;
   clearChat: () => void;

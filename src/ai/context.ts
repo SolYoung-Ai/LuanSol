@@ -1,5 +1,5 @@
 /* 把统一项目数据模型转换为所有 AI 任务共享的上下文。
- * 十步向导、汇总页、编辑器看到的是同一份状态，不会出现「AI 不知道上一步填了什么」。 */
+ * 九步向导、汇总页、编辑器看到的是同一份状态，不会出现「AI 不知道上一步填了什么」。 */
 import type { ProjectDraft } from '../v3/draft';
 import { FORM_META } from '../v3/draft';
 import { styleById, buildStylePrompt } from '../v3/styles';

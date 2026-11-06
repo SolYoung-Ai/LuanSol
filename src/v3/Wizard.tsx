@@ -1,5 +1,5 @@
 /* ============================================================
- * 十步向导外壳：进度、单步聚焦、返回不丢数据、自动保存、版本快照
+ * 九步向导外壳：进度、单步聚焦、返回不丢数据、自动保存、版本快照
  * ============================================================ */
 import React, { useEffect } from 'react';
 import { useApp } from '../store';
@@ -43,8 +43,8 @@ export default function Wizard() {
       if (!structureReady(d)) { setToast('结构补充参数还不完整，请把「结构补充参数」里的数值填完再继续'); return; }
     }
     if (i === 3 && !(d.product_category.type || d.product_category.custom)) { setToast('请选择或填写产品类型'); return; }
-    if (i === 4 && !d.style_id) { setToast('请先选择一个设计风格'); return; }
-    if (i === 5 && !d.primary_color) { setToast('请先选择主颜色'); return; }
+    if (i === 4 && !d.primary_color) { setToast('请先选择主颜色'); return; }
+    if (i === 5 && !d.style_id) { setToast('请先选择一个设计风格'); return; }
     if (i === 8 && !(d.copy_content.brandName || d.copy_content.productName)) { setToast('请至少填写品牌名称或产品名称'); return; }
     if (i === WIZARD_STEPS.length - 1) { go('/review'); return; }
     navigate(i + 1);
@@ -53,7 +53,7 @@ export default function Wizard() {
   const stash = () => {
     const name = `${d.copy_content.brandName || FORM_META[d.package_type].label} · ${d.copy_content.productName || d.product_category.type || '设计草稿'}`;
     saveProject(name); syncProject();
-    setToast('项目已暂存到「我的作品」，浏览器自动保存');
+    setToast('草稿已保存到「我的工作台」，浏览器自动保存');
   };
 
   const snapshot = () => {
@@ -79,6 +79,7 @@ export default function Wizard() {
       <div className="v3-wizard-kicker"><span>{step.kicker}</span><span className="v3-wizard-kicker-right">
         <span className={`v3-ai-pill ${aiEnabled(s.ai) ? 'on' : ''}`}>{aiStatusLabel(s.ai)}</span>
         <span>{progress} / {WIZARD_STEPS.length} 已完成</span>
+        {s.settings.autoSave && <span className="v3-autosave">· 已自动保存</span>}
       </span></div>
       <div className="v3-progress">{WIZARD_STEPS.map((s, k) => <button key={s.id}
         className={`v3-progress-seg ${k === i ? 'current' : ''} ${stepDone(d, k) ? 'done' : ''} ${d.visited.includes(k) ? 'visited' : ''}`}
@@ -100,7 +101,7 @@ export default function Wizard() {
         <footer className="v3-step-foot">
           <div className="v3-foot-left">
             <Button variant="outline" disabled={i === 0} onClick={() => navigate(i - 1)}>← 上一步</Button>
-            <button className="v3-link" onClick={stash}>暂存项目</button>
+            <button className="v3-link" onClick={stash}>保存草稿</button>
             <button className="v3-link" onClick={snapshot}>保存版本</button>
           </div>
           <div className="v3-foot-right">

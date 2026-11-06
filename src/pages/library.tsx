@@ -101,7 +101,7 @@ export function Structures() {
   </div>;
 }
 
-/* ============================ 9. 我的作品 ============================ */
+/* ============================ 9. 我的工作台 ============================ */
 export function Projects() {
   const { s, newProject, loadProject, deleteProject, duplicateProject, setToast } = useApp();
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -109,7 +109,7 @@ export function Projects() {
   const sync = useCloudSync();
   const [syncing, setSyncing] = useState<string | null>(null);
   return <div className="page">
-    <PageHead kicker="MY PROJECTS / 09" title="我的作品" desc={auth.user
+    <PageHead kicker="MY WORKSPACE / 09" title="我的工作台" desc={auth.user
       ? `已登录 ${auth.user.label}：项目自动保存到本机，并同步到你的云端空间（${sync.message}）。`
       : `项目保存在本机浏览器（${s.storage}），自动保存，可随时恢复历史版本。登录后可同步到云端。`}
       right={<div className="head-actions">
@@ -118,7 +118,7 @@ export function Projects() {
         </Button>
         <Button onClick={() => { newProject(); go('/wizard'); }}>＋ 新建项目</Button>
       </div>} />
-    {s.projects.length === 0 ? <Empty title="还没有作品" desc="用十步向导整理尺寸、风格与文案，创建你的第一个包装项目。" action={<Button onClick={() => { newProject(); go('/wizard'); }}>开始十步设计</Button>} /> :
+    {s.projects.length === 0 ? <Empty title="还没有作品" desc="用九步向导整理尺寸、风格与文案，创建你的第一个包装项目。" action={<Button onClick={() => { newProject(); go('/wizard'); }}>开始九步设计</Button>} /> :
       <div className="project-grid">{s.projects.map((p) => <Card key={p.id} className="project-card">
         <button className="project-thumb" onClick={() => { loadProject(p.id); go('/project/' + p.id); }}>
           {p.design?.faces.front ? <DesignView face={p.design.faces.front} /> : <div className="project-blank">LunaSol</div>}
@@ -154,7 +154,7 @@ export function ProjectDetail() {
   const { s, loadProject, restoreVersion, duplicateProject, deleteProject, setToast } = useApp();
   const p = s.projects.find((x) => x.id === id);
   const [confirm, setConfirm] = useState(false);
-  if (!p) return <div className="page page-narrow"><Empty title="找不到这个项目" desc="它可能已被删除，或保存在另一台设备的浏览器里。" action={<Button onClick={() => go('/projects')}>返回我的作品</Button>} /></div>;
+  if (!p) return <div className="page page-narrow"><Empty title="找不到这个项目" desc="它可能已被删除，或保存在另一台设备的浏览器里。" action={<Button onClick={() => go('/projects')}>返回我的工作台</Button>} /></div>;
 
   const downloadJson = () => downloadBlob(new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' }), `${p.name}.json`);
   const shareHtml = () => {

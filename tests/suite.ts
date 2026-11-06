@@ -418,21 +418,21 @@ export async function runTests(): Promise<Result[]> {
     A(aiEnabled({ ...DEFAULT_AI, mode: 'browser', apiKey: 'sk-x' }), '浏览器直连应启用');
     A(aiEnabled(proxyAI), '后台代理模式被前端 Key 判定挡住了');
     A(aiMode(proxyAI) === 'proxy' && aiStatusLabel(proxyAI).includes('后台代理'), '代理状态标注不正确');
-    A(aiCapabilitySummary().total === 12 && aiCapabilitySummary().steps === 10, '能力点数量异常');
+    A(aiCapabilitySummary().total === 12 && aiCapabilitySummary().steps === 9, '能力点数量异常');
     return `total=${aiCapabilitySummary().total} / steps=${aiCapabilitySummary().steps}`;
   });
 
-  await t('AI 上下文 · 十步数据与完整风格配置统一传入', () => {
+  await t('AI 上下文 · 九步数据与完整风格配置统一传入', () => {
     const text = contextText(aiCtx);
-    A(text.includes('高山乌龙茶') && text.includes('茶叶') && text.includes('#2b4c7e'), '十步数据未进入统一上下文');
+    A(text.includes('高山乌龙茶') && text.includes('茶叶') && text.includes('#2b4c7e'), '九步数据未进入统一上下文');
     A(text.includes('高端消费群体') && text.includes('包装盒'), '人群 / 形态缺失');
     A(aiCtx.styleName.length > 0 && aiCtx.stylePrompt.length > 400, '完整风格配置未展开为提示词');
     A(aiCtx.userNote === '想做得更清淡', '用户补充想法丢失');
     return `context=${text.split('\n').length} 行 / stylePrompt=${aiCtx.stylePrompt.length} 字`;
   });
 
-  await t('AI 任务层 · 十步每步都有可用本地建议与合规约束', () => {
-    for (let i = 0; i < 10; i++) {
+  await t('AI 任务层 · 九步每步都有可用本地建议与合规约束', () => {
+    for (let i = 0; i < 9; i++) {
       const def = AI_TASKS[TASK_FOR_STEP(i)];
       A(def && def.local(aiCtx).length >= 1, `STEP ${i + 1} 没有本地建议`);
       A(def.system.includes('禁止') && def.constraints.length > 0, `STEP ${i + 1} 缺少合规约束`);
@@ -440,7 +440,7 @@ export async function runTests(): Promise<Result[]> {
     }
     const styles = AI_TASKS['style.recommend'].local(aiCtx);
     A(styles.every((s) => STYLES.some((x) => x.style_id === (s.value as { style_id: string }).style_id)), '本地风格推荐编造了不存在的风格');
-    return `10/10 步有建议 · 风格推荐 ${styles.length} 条均来自真实风格库`;
+    return `9/9 步有建议 · 风格推荐 ${styles.length} 条均来自真实风格库`;
   });
 
   await t('AI 合规校验 · 违规文案 / 假条码 / 假风格 / 擅自加图案全部拦截', () => {

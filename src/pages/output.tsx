@@ -122,7 +122,7 @@ export function ExportCenter() {
     catch (e) { setToast(`导出失败：${e instanceof Error ? e.message : e}`); }
     setBusy(null);
   };
-  if (!design) return <div className="page page-narrow"><Empty title="没有可导出的设计稿" desc="先完成一套包装设计，再回来做印前检查与导出。" action={<Button onClick={() => go('/wizard')}>开始十步设计</Button>} /></div>;
+  if (!design) return <div className="page page-narrow"><Empty title="没有可导出的设计稿" desc="先完成一套包装设计，再回来做印前检查与导出。" action={<Button onClick={() => go('/wizard')}>开始九步设计</Button>} /></div>;
   const blocked = !report || report.status === 'error';
   const base = safe(design.name);
 
@@ -199,7 +199,7 @@ export function ExportCenter() {
       <h3>PDF/X-4</h3><p>规范要求「通过真实标准验证后提供」。当前版本没有经过 PDF/X-4 标准符合性验证的工具链，因此不提供该选项，也不会把普通 PDF 标注成 PDF/X-4。若印厂要求，请在印前环节使用专业工具转换并验证。</p></Card>
     {files.length > 0 && <Card className="pad-card files-card"><SectionLabel en="FILES">本次已生成</SectionLabel>
       <div className="file-table">{files.map((f, i) => <div key={i}><span>✓</span><strong>{f.name}</strong><em>{f.info}</em></div>)}</div></Card>}
-    <div className="export-footer"><Button variant="ghost" onClick={() => go('/projects')}>查看我的作品</Button>
+    <div className="export-footer"><Button variant="ghost" onClick={() => go('/projects')}>查看我的工作台</Button>
       <Button variant="outline" onClick={() => go('/editor')}>← 返回继续编辑</Button></div>
   </div>;
 }

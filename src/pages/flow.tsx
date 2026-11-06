@@ -261,7 +261,7 @@ export function Schemes() {
     setBusyIdx(null);
   };
 
-  if (!s.schemes.length) return <div className="page page-narrow"><Empty title="还没有设计方案" desc="先用十步向导整理尺寸、风格与文案，再生成三个设计方向。" action={<Button onClick={() => go('/wizard')}>开始十步设计</Button>} /></div>;
+  if (!s.schemes.length) return <div className="page page-narrow"><Empty title="还没有设计方案" desc="先用九步向导整理尺寸、风格与文案，再生成三个设计方向。" action={<Button onClick={() => go('/wizard')}>开始九步设计</Button>} /></div>;
 
   return <div className="page">
     <StepBar steps={FLOW_STEPS} current={2} />

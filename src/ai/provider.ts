@@ -113,9 +113,11 @@ export function aiResultToast(r: { source: AISource; note?: string }, aiMsg: str
   return localMsg;
 }
 
-/** 给设置页展示：接好后台之后到底有哪些能力会生效 */export const aiCapabilitySummary = () => ({
+/** 给设置页展示：接好后台之后到底有哪些能力会生效 */
+export const aiCapabilitySummary = () => ({
   total: TASK_LIST.length,
-  steps: TASK_LIST.filter((t) => typeof t.step === 'number').length,
+  // 按「唯一向导步骤」计数：条码建议已并入文案步，不再单独占一步
+  steps: new Set(TASK_LIST.filter((t) => typeof t.step === 'number').map((t) => t.step)).size,
   global: TASK_LIST.filter((t) => typeof t.step !== 'number').length,
   list: TASK_LIST.map((t) => ({
     id: t.id, title: t.title, step: t.step,

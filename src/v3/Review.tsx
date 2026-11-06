@@ -1,5 +1,5 @@
 /* ============================================================
- * 需求汇总与生成：十步数据统一传给设计智能体
+ * 需求汇总与生成：九步数据统一传给设计智能体
  * ============================================================ */
 import React, { useState } from 'react';
 import { useApp } from '../store';
@@ -29,10 +29,10 @@ async function designPlan(d: ProjectDraft, ai: AISettings): Promise<{ plans: Pla
   });
   while (plans.length < 3) plans.push({ title: `方案 ${String.fromCharCode(65 + plans.length)}`, focus: '按当前需求生成的可编辑矢量方案。' });
   const extra = r.source === 'ai'
-    ? 'AI 已整合十步数据参与方向规划；图形与文字仍由矢量引擎输出为独立可编辑图层。'
+    ? 'AI 已整合九步数据参与方向规划；图形与文字仍由矢量引擎输出为独立可编辑图层。'
     : r.source === 'fallback' ? 'AI 未通过校验或调用失败，已回退内置设计引擎（未伪装为 AI 结果）。'
       : r.source === 'paywall' ? '本次 AI 调用被订阅规则拦截（免费额度已用完），当前方案由内置设计引擎生成。'
-        : '未配置 AI：由内置设计引擎整合十步数据并生成三套矢量方案（未调用 AI）。';
+        : '未配置 AI：由内置设计引擎整合九步数据并生成三套矢量方案（未调用 AI）。';
   return { plans, note: `${r.note} ${extra}`, source: r.source };
 }
 
@@ -53,12 +53,11 @@ export default function Review() {
     { label: 'Logo', step: 1, value: d.brand_logo ? `已上传 ${d.brand_logo.name}` : d.logo_svg ? 'AI 制作 SVG Logo（独立矢量素材）' : '暂时不需要 / 跳过' },
     { label: '目标消费群体', step: 2, value: [...d.target_audience.ages, ...d.target_audience.groups, ...d.target_audience.tiers].join('、') || '未指定（按大众群体）' },
     { label: '产品类型', step: 3, value: `${d.product_category.group ? d.product_category.group + ' · ' : ''}${d.product_category.type || d.product_category.custom || '未填写'}` },
-    { label: '包装风格', step: 4, value: cfg ? `${styleName}（${cfg.era}）· ${cfg.pattern_elements.slice(0, 3).join('、')}` : '未选择' },
-    { label: '主颜色', step: 5, value: d.primary_color ? <span className="v3-inline-val"><Swatch color={d.primary_color} size={16} />{d.primary_color}</span> : '未选择' },
+    { label: '包装风格', step: 5, value: cfg ? `${styleName}（${cfg.era}）· ${cfg.pattern_elements.slice(0, 3).join('、')}` : '未选择' },
+    { label: '主颜色', step: 4, value: d.primary_color ? <span className="v3-inline-val"><Swatch color={d.primary_color} size={16} />{d.primary_color}</span> : '未选择' },
     { label: '配色方案', step: 6, value: d.color_palette ? <span className="v3-inline-val">{[d.color_palette.primary, d.color_palette.secondary, d.color_palette.accent, d.color_palette.bg].map((c) => <Swatch key={c} color={c} size={16} />)}{d.color_palette.name}</span> : '未选择（将按风格推荐）' },
     { label: '插画类型', step: 7, value: d.illustration_type === 'none' ? '不需要插画（不添加装饰）' : d.illustration_type ? `${d.illustration_type === 'line' ? '线稿' : '插画'} · ${d.illustration_description || '按风格默认纹样'}` : '未选择' },
-    { label: '产品名称与文案', step: 8, value: `${d.copy_content.brandName || '未填品牌'} · ${d.copy_content.productName || '未填产品名'}${d.copy_content.tagline ? ` · ${d.copy_content.tagline}` : ''}` },
-    { label: '条形码', step: 9, value: d.barcode_asset.needed === false ? '暂时不需要' : d.barcode_asset.svg ? `${d.barcode_asset.type} · ${d.barcode_asset.value}${d.barcode_asset.previewOnly ? '（预览占位，不可零售）' : ''}` : d.barcode_asset.asset ? `已上传 ${d.barcode_asset.asset.name}` : '未添加' },
+    { label: '产品名称与文案', step: 8, value: `${d.copy_content.brandName || '未填品牌'} · ${d.copy_content.productName || '未填产品名'}${d.copy_content.tagline ? ` · ${d.copy_content.tagline}` : ''}${d.barcode_asset.needed ? ' · 含条形码' : ''}` },
   ];
 
   const generate = async () => {
@@ -68,7 +67,7 @@ export default function Review() {
     const plan = await designPlan(d, s.ai);
     setPlans(plan.plans); setPlanNote(plan.note);
 
-    // 十步数据 → 统一 DesignBrief（下游结构 / 3D / 印前 / 导出全部复用）
+    // 九步数据 → 统一 DesignBrief（下游结构 / 3D / 印前 / 导出全部复用）
     const brief = draftToBrief(d, styleName);
     let schemes: DesignDoc[] = buildSchemes(brief, cfg);
 
@@ -110,7 +109,7 @@ export default function Review() {
     });
 
     update({ brief, schemes, design: null, report: null, chat: [], activeId: null });
-    patchDraft({ design_variants: schemes.map((x) => x.id), step: 9, visited: WIZARD_STEPS.map((_, i) => i) });
+    patchDraft({ design_variants: schemes.map((x) => x.id), step: WIZARD_STEPS.length - 1, visited: WIZARD_STEPS.map((_, i) => i) });
     saveProject(`${d.copy_content.brandName || 'LunaSol'} · ${d.copy_content.productName || d.product_category.type || '包装设计'}`);
     syncProject();
     setToast(plan.note);
@@ -120,13 +119,13 @@ export default function Review() {
 
   return <div className="page v3-review">
     <div className="v3-wizard-head">
-      <div className="v3-wizard-kicker"><span>FINAL CHECK</span><span>STEP 01–10 已完成 {WIZARD_STEPS.filter((_, i) => stepDone(d, i)).length} / 10</span></div>
+      <div className="v3-wizard-kicker"><span>FINAL CHECK</span><span>STEP 01–09 已完成 {WIZARD_STEPS.filter((_, i) => stepDone(d, i)).length} / 9</span></div>
     </div>
     <header className="v3-step-head"><h1>你的包装设计需求已经准备好了。</h1>
-      <p>下面每一项都可以返回修改。确认后，系统会把十步数据一起交给设计引擎，生成三个明显不同的方向。</p></header>
+      <p>下面每一项都可以返回修改。确认后，系统会把九步数据一起交给设计引擎，生成三个明显不同的方向。</p></header>
     <div className="v3-review-ai">
       <span className={`v3-ai-pill ${configured ? 'on' : ''}`}>{aiStatusLabel(s.ai)}</span>
-      <span>十步数据作为同一份上下文交给设计智能体；接入模型后由 AI 规划方向，未接入时由内置引擎整合，图形与文字始终是可编辑图层。</span>
+      <span>九步数据作为同一份上下文交给设计智能体；接入模型后由 AI 规划方向，未接入时由内置引擎整合，图形与文字始终是可编辑图层。</span>
     </div>
 
     <div className="v3-review-grid">

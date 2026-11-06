@@ -105,7 +105,7 @@ export function ModelConfig() {
       <div className="kv"><span>文本模型</span><strong>GPT-4o / DeepSeek-V3（平台自动调度）</strong></div>
       <div className="kv"><span>后台</span><strong>CloudBase HTTP 云函数 · {CLOUD.region}</strong></div>
       <div className="kv"><span>当前状态</span><strong>{enabled ? '已启用平台 AI' : '已关闭，使用内置设计引擎'}</strong></div>
-      <Toggle label="启用平台 AI" hint="开启后十步向导由平台大模型提供建议；关闭后改用内置确定性设计引擎（不调用大模型）" checked={enabled} onChange={(v) => setMode(v ? 'proxy' : 'off')} />
+      <Toggle label="启用平台 AI" hint="开启后九步向导由平台大模型提供建议；关闭后改用内置确定性设计引擎（不调用大模型）" checked={enabled} onChange={(v) => setMode(v ? 'proxy' : 'off')} />
       {!deepSeekReady && enabled && <Notice tone="warn">当前构建未配置平台代理地址，开启后也无法实际调用；请在正式站点使用。</Notice>}
       <div className="model-actions"><Button disabled={!enabled || !deepSeekReady} onClick={test}>{testing ? '测试中…' : '测试连接'}</Button></div>
       <Notice tone="info">当前平台只接入文本模型，不提供图像生成；涉及插画的步骤会使用内置矢量模板，并明确标注「非 AI 图像生成」，不会伪造插画。代理网关按来源域名与令牌校验，并设有 QPS 限制。</Notice>
@@ -126,13 +126,13 @@ export function ModelConfig() {
           <span className={`ai-run-src ai-run-${r.source}`}>{r.source === 'ai' ? 'AI' : r.source === 'fallback' ? '回退' : r.source === 'paywall' ? '额度' : '本地'}</span>
           <strong>{r.taskId}</strong><em>{new Date(r.at).toLocaleTimeString('zh-CN')} · {r.durationMs}ms · {r.mode}</em>
           <p>{r.note}</p>
-        </div>) : <p className="ai-runlog-empty">还没有调用记录。进入十步向导，在任意一步点「获取建议」即可看到这里记录来源、耗时与回退原因。</p>}
+        </div>) : <p className="ai-runlog-empty">还没有调用记录。进入九步向导，在任意一步点「获取建议」即可看到这里记录来源、耗时与回退原因。</p>}
       </div>
       <div className="model-actions"><Button variant="ghost" onClick={() => { clearAIRunLog(); setLogTick((n) => n + 1); setToast('调用记录已清空'); }}>清空记录</Button></div>
     </Card>
 
     <Card className="pad-card"><SectionLabel en="NO KEY MODE">没有启用平台 AI 时</SectionLabel>
-      <div className="nokey-grid">{['手动创建项目', '十步本地建议', '内置配色与风格推荐', '编辑文字与上传图片', '保存与恢复项目', 'PDF / SVG / PNG / DXF 导出'].map((x) => <span key={x}>✓ {x}</span>)}</div>
+      <div className="nokey-grid">{['手动创建项目', '九步本地建议', '内置配色与风格推荐', '编辑文字与上传图片', '保存与恢复项目', 'PDF / SVG / PNG / DXF 导出'].map((x) => <span key={x}>✓ {x}</span>)}</div>
       <Notice tone="info">内置引擎是确定性的程序化设计，界面会标注「未调用 AI」；只有真正调用模型并通过合规校验后，才会显示 AI 结果。调用失败会如实回退，绝不冒充。</Notice>
     </Card>
 

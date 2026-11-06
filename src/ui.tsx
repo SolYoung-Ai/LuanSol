@@ -70,7 +70,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
               <div className="nav-menu-divider" />
               <button className="nav-menu-item" role="menuitem" onClick={() => go2('/inspiration')}>灵感库</button>
               <button className="nav-menu-item" role="menuitem" onClick={() => go2('/structures')}>包装类型</button>
-              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/projects')}>我的作品</button>
+              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/projects')}>我的工作台</button>
               <button className="nav-menu-item" role="menuitem" onClick={() => go2('/subscribe')}>订阅方案</button>
             </>}
           </div>}

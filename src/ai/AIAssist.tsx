@@ -1,4 +1,4 @@
-/* 十步流程中统一的 AI 助手卡片。
+/* 九步流程中统一的 AI 助手卡片。
  * 每一步都有：状态徽标、可补充的自然语言输入、建议列表、逐条采纳。
  * 后台接入 GPT 前后，这个组件的代码和交互完全不变。 */
 import React, { useMemo, useState } from 'react';
@@ -74,7 +74,7 @@ export function AIAssist({ step, d, set, ai, toast }: {
         </div>
         {adopted && <p className="ai-assist-foot">建议已写入本步骤字段；品牌名、产品名等你已确认的内容始终由你掌握，AI 不会自动改写。</p>}
       </>}
-      {!configured && !result && <p className="ai-assist-foot">现在由内置设计引擎给出确定性建议。你在后台接入模型后，这里会自动切换为真实 AI，十步流程与操作方式不变。</p>}
+      {!configured && !result && <p className="ai-assist-foot">现在由内置设计引擎给出确定性建议。你在后台接入模型后，这里会自动切换为真实 AI，九步流程与操作方式不变。</p>}
     </div>
   </section>;
 }

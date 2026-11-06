@@ -1,5 +1,5 @@
 /* ============================================================
-   LunaSol V3 — 现代简约设计系统 / 十步向导
+   LunaSol V3 — 现代简约设计系统 / 九步向导
    白底 + 浅灰 + 深色文字 + 细分割线，无手写字体、无涂鸦、无重阴影
    ============================================================ */
 
@@ -284,7 +284,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans
   .flow-grid { grid-template-columns: 1fr; gap: 30px; padding: 50px 22px; }
 }
 
-/* ---------- AI 助手：融入十步流程的统一卡片 ---------- */
+/* ---------- AI 助手：融入九步流程的统一卡片 ---------- */
 .ai-assist { margin: 26px 0 22px; border: 1px solid var(--line-2); background: #fff; }
 .ai-assist-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--soft); }
 .ai-assist-badge { font-size: 10px; letter-spacing: .16em; color: var(--ink); display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
@@ -315,6 +315,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans
 .v3-ai-pill { display: inline-flex; align-items: center; padding: 3px 8px; border: 1px solid var(--line-2); font-size: 10px; color: var(--muted); letter-spacing: .02em; white-space: nowrap; }
 .v3-ai-pill.on { color: #2f6b4f; border-color: #9db8a6; }
 .v3-wizard-kicker-right { display: inline-flex; align-items: center; gap: 14px; }
+.v3-autosave { color: var(--muted); letter-spacing: .02em; }
 .v3-review-ai { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--line); background: var(--soft); font-size: 11.5px; color: var(--muted); margin-bottom: 22px; line-height: 1.6; }
 
 /* 配置中心：能力清单与调用记录 */

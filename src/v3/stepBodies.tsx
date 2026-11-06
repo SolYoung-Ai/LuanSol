@@ -1,5 +1,5 @@
 /* ============================================================
- * 十步向导：每一步的具体内容
+ * 九步向导：每一步的具体内容
  * ============================================================ */
 import React, { useMemo, useRef, useState } from 'react';
 import {
@@ -355,7 +355,7 @@ export function StepProduct(p: StepProps) {
   </>;
 }
 
-/* ============================ STEP 05 风格库 ============================ */
+/* ============================ STEP 06 风格库 ============================ */
 export function StepStyle(p: StepProps) {
   const [group, setGroup] = useState('all');
   const [q, setQ] = useState('');
@@ -374,11 +374,12 @@ export function StepStyle(p: StepProps) {
   const use = (id: string) => {
     const s = styleById(id);
     if (!s) return;
-    // 选风格时直接带出该风格的主色：既符合「风格决定配色」的直觉，
-    // 也避免用户下一步看到取色器里已有颜色、却因为草稿里没写进去而被「请先选择主颜色」拦住。
-    const main = stylePrimaryColor(id);
+    // 颜色已在风格之前选定：保留用户已选主色，不被风格覆盖；未选时再带出风格主色。
+    const main = p.d.primary_color || stylePrimaryColor(id);
     p.set({ style_id: id, style_parameters: JSON.stringify(s), primary_color: main, color_palette: null, color_palettes: [], color_palette_id: '' });
-    p.toast(main ? `已使用「${s.style_name}」，主色已带出为 ${main}，可继续调整` : `已使用「${s.style_name}」，主色与配色将按该风格重新推荐`);
+    p.toast(p.d.primary_color
+      ? `已使用「${s.style_name}」，保留你已选的主色 ${p.d.primary_color}`
+      : `已使用「${s.style_name}」，主色已带出为 ${main}，可继续调整`);
   };
   return <>
     <StepSection title="风格库" aside={<span className="v3-aside">{STYLES.length} 个风格 · 其中 {TRADITION_COUNT} 组传统艺术风格</span>}>
@@ -424,7 +425,7 @@ export function StepStyle(p: StepProps) {
   </>;
 }
 
-/* ============================ STEP 06 主色 ============================ */
+/* ============================ STEP 05 主色 ============================ */
 export function StepColor(p: StepProps) {
   const st = styleById(p.d.style_id);
   const [rgbIn, setRgbIn] = useState('');
@@ -457,8 +458,9 @@ export function StepColor(p: StepProps) {
         const r = await runAITask('color.primary', buildAIContext(p.d), p.ai);
         const c = (r.suggestions[0]?.value as { color?: string } | undefined)?.color || recommendPrimary(st);
         choose(c);
-        p.toast(aiResultToast(r, `AI 已按风格推荐主色 ${c}`, `已按「${st?.style_name || '当前配置'}」推荐 ${c}（本地引擎）`));
-      }}>AI 根据风格推荐主色</button>
+        p.toast(aiResultToast(r, `AI 已推荐主色 ${c}`,
+          st ? `已按「${st.style_name}」推荐 ${c}（本地引擎）` : `已推荐 ${c}（本地引擎；选定风格后还会按风格重新建议）`));
+      }}>AI 推荐主色</button>
     </div></StepSection>
     <Why text="主色是整套配色的锚点，下一步的方案都会以它为基础展开，改主色后可重新生成配色。" />
   </>;
@@ -550,12 +552,13 @@ export function StepIllustration(p: StepProps) {
   </>;
 }
 
-/* ============================ STEP 09 文案 ============================ */
+/* ============================ STEP 09 文案（+ 条形码） ============================ */
 export function StepCopy(p: StepProps) {
   const c = p.d.copy_content;
   const setC = (k: keyof typeof c, v: string | boolean) => p.set({ copy_content: { ...c, [k]: v } as typeof c });
   const aiOrganize = async () => {
-    if (!c.productName.trim()) { p.toast('请先填写产品名称，再让 AI 整理文案'); return; }
+    const cc = p.d.copy_content;
+    const name = cc.productName.trim() || p.d.product_category.type || p.d.product_category.custom || '本产品';
     const r = await runAITask('copy.suggestion', buildAIContext(p.d), p.ai);
     const lines = r.suggestions.map((s) => {
       const v = (s.value || {}) as { tagline?: string; subtitle?: string; description?: string };
@@ -564,8 +567,8 @@ export function StepCopy(p: StepProps) {
       if (v.description) return `建议产品介绍：${v.description}`;
       return '';
     }).filter(Boolean);
-    // 一次写入：连续两次基于旧快照的 setC 会互相覆盖
-    p.set({ copy_content: { ...c, aiSuggestion: `「${c.productName}」\n${lines.join('\n')}`, confirmed: false } });
+    // 函数式更新基于最新 draft，避免与「切到 AI 模式」的 set 互相覆盖
+    p.set((d) => ({ copy_content: { ...d.copy_content, mode: 'ai', aiSuggestion: `「${name}」\n${lines.join('\n')}`, confirmed: false } }));
     p.toast(aiResultToast(r, 'AI 已给出文案建议，确认后才会写入设计', '已生成文案建议，确认后才会写入设计（本地引擎）'));
   };
   const apply = () => {
@@ -580,7 +583,7 @@ export function StepCopy(p: StepProps) {
     <StepSection title="模式">
       <div className="v3-grid v3-grid-2">
         <OptionCard active={c.mode === 'own'} title="我已经准备好了文字" desc="直接填写或粘贴完整文案。" onClick={() => setC('mode', 'own')} />
-        <OptionCard active={c.mode === 'ai'} title="帮我整理包装文案" desc="AI 根据产品与风格提出建议，确认后才写入。" onClick={() => setC('mode', 'ai')} />
+        <OptionCard active={c.mode === 'ai'} title="帮我整理包装文案" desc="AI 根据产品与风格提出建议，确认后才写入。" onClick={() => { setC('mode', 'ai'); void aiOrganize(); }} />
       </div>
     </StepSection>
     <StepSection title="包装上需要写什么" aside={<span className="v3-aside">非必要字段可留空</span>}>
@@ -596,17 +599,19 @@ export function StepCopy(p: StepProps) {
       <TextField label="其它补充文字" multiline value={c.extra} placeholder="其它需要出现在包装上的文字，一行一条" onChange={(v) => setC('extra', v)} />
     </StepSection>
     {c.mode === 'ai' && <StepSection title="AI 文案建议">
-      <div className="v3-btnrow"><button className="btn btn-outline btn-md" onClick={aiOrganize}>生成文案建议</button>
+      <div className="v3-btnrow"><button className="btn btn-outline btn-md" onClick={aiOrganize}>重新生成文案建议</button>
         {c.aiSuggestion && !c.confirmed && <button className="btn btn-dark btn-md" onClick={apply}>确认并写入</button>}</div>
       {c.aiSuggestion && <pre className="v3-suggestion">{c.aiSuggestion}</pre>}
       {c.confirmed && <Note tone="ok">建议已确认写入上方字段，仍可逐项修改。</Note>}
     </StepSection>}
+    {/* 条形码并入文案步：上传现有条码，或按有效编码生成矢量条码 */}
+    <StepBarcode {...p} />
     <Note tone="warn">所有文字都会成为独立可编辑图层，不会被绘制成不可编辑的像素。系统不会擅自修改你已确认的产品名称、商标与核心文案，也不会自行编造配料、生产日期、功效、认证和法规内容。文字过多时系统会提示空间不足并推荐优化排版。</Note>
     <Why text="品牌 Logo、产品名称与说明文字决定正面和背面的信息层级，印前检查会验证文字不超出安全边距、不重叠。" />
   </>;
 }
 
-/* ============================ STEP 10 条码 ============================ */
+/* ============================ 条形码（并入文案步） ============================ */
 export function StepBarcode(p: StepProps) {
   const bc = p.d.barcode_asset;
   // 必须用函数式更新：usePreview / applyGenerated / upload 会在同一个事件里连续调用 setB，
@@ -684,5 +689,5 @@ export function StepBarcode(p: StepProps) {
 }
 
 export const STEP_BODIES: ((p: StepProps) => React.ReactElement)[] = [
-  StepSize, StepLogo, StepAudience, StepProduct, StepStyle, StepColor, StepPalette, StepIllustration, StepCopy, StepBarcode,
+  StepSize, StepLogo, StepAudience, StepProduct, StepColor, StepStyle, StepPalette, StepIllustration, StepCopy,
 ];

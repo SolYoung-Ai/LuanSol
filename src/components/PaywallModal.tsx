@@ -34,7 +34,7 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onActi
     {reason && <Notice tone="warn">{reason}</Notice>}
     {needLogin ? <>
       <p className="modal-p">
-        登录后即可在十步向导、需求汇总与在线编辑器中使用平台 AI。
+        登录后即可在九步向导、需求汇总与在线编辑器中使用平台 AI。
         新注册用户有 <strong>{PRICING.freeTrialUses} 次免费体验</strong>，
         订阅会员后每月 <strong>{PRICING.proMonthlyQuota} 次</strong>统一 AI 调用配额。
       </p>
@@ -54,7 +54,7 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onActi
         <span>每月 {PRICING.proMonthlyQuota} 次 AI 调用</span>
         <span>GPT-4o + DeepSeek-V3 平台模型</span>
       </div>
-      <p className="modal-p">订阅后即可在十步向导、需求汇总、在线编辑器中无限制调用平台 AI，并享受云端同步与全部导出能力。</p>
+      <p className="modal-p">订阅后即可在九步向导、需求汇总、在线编辑器中无限制调用平台 AI，并享受云端同步与全部导出能力。</p>
       <div className="modal-buttons">
         {!onPlansPage && <Button variant="dark" onClick={() => { onClose(); go('/subscribe'); }}>查看订阅方案</Button>}
         <Button variant="ghost" onClick={onClose}>稍后再说</Button>

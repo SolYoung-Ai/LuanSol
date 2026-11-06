@@ -21,10 +21,10 @@ const FORBIDDEN_COPY = /成分|配料|生产日期|保质期|有效期|功效|�
 const FORBIDDEN_BARCODE = /\d{8,}/;
 
 const STEP_TASK: AITaskId[] = [
-  'size.structure', 'logo.directions', 'audience.profile', 'product.category', 'style.recommend',
-  'color.primary', 'palette.schemes', 'illustration.motif', 'copy.suggestion', 'barcode.advice',
+  'size.structure', 'logo.directions', 'audience.profile', 'product.category', 'color.primary',
+  'style.recommend', 'palette.schemes', 'illustration.motif', 'copy.suggestion',
 ];
-export const TASK_FOR_STEP = (step: number): AITaskId => STEP_TASK[Math.max(0, Math.min(9, step))];
+export const TASK_FOR_STEP = (step: number): AITaskId => STEP_TASK[Math.max(0, Math.min(STEP_TASK.length - 1, step))];
 
 const userFor = (c: AIContext, task: string) =>
   `${task}\n\n【当前项目状态】\n${contextText(c)}\n${c.stylePrompt ? `\n【已选风格的完整设计规则】\n${c.stylePrompt}\n` : ''}${c.userNote ? `\n【用户补充的想法】${c.userNote}\n` : ''}\n只输出 JSON，不要输出解释文字或 Markdown 代码块。`;
@@ -104,13 +104,13 @@ export const AI_TASKS: Record<AITaskId, AITaskDef> = {
     C(['type 必须来自已知品类库', '不得编造配料、功效、认证与法规信息', '用户已选品类时不要建议替换']),
     (raw, c) => values(raw).every((v) => !v.type || (typeof v.type === 'string' && KNOWN_CATEGORIES.includes(v.type)))),
 
-  'style.recommend': def('style.recommend', 4, '风格推荐', '结合品类、人群与包装形态，从真实风格库里推荐三个方向；传统风格会严格遵守各自时期的视觉语法。',
+  'style.recommend': def('style.recommend', 5, '风格推荐', '结合品类、人群与包装形态，从真实风格库里推荐三个方向；传统风格会严格遵守各自时期的视觉语法。',
     '从风格数据库里挑出 3 个最合适的设计风格，说明为什么匹配当前产品与人群，以及各自的视觉特征。',
     '{"style_id":"风格数据库中的 style_id"}',
     C(['style_id 必须是风格数据库中真实存在的 id', '不得混搭不同历史时期的纹样', '不得发明不在库里的风格']),
     (raw) => values(raw).every((v) => typeof v.style_id === 'string' && STYLES.some((s) => s.style_id === v.style_id))),
 
-  'color.primary': def('color.primary', 5, '主色推荐', '按所选风格的配色规则、品类与人群，推荐 1–3 个可作为锚点的主色。',
+  'color.primary': def('color.primary', 4, '主色推荐', '按品类、人群与包装形态推荐 1–3 个可作为锚点的主色；已在风格库选定风格时，还要遵守该风格的配色规则。',
     '推荐适合作为包装主锚点的颜色，给出 HEX 与理由。颜色必须能用于印刷，避免过亮或对比不足。',
     '{"color":"#20463a"}',
     C(['color 必须是 6 位 HEX 颜色', '不得输出色名而不给 HEX']),
@@ -152,14 +152,14 @@ export const AI_TASKS: Record<AITaskId, AITaskDef> = {
     (raw) => values(raw).every((v) =>
       !FORBIDDEN_COPY.test([v.tagline, v.subtitle, v.description].map((x) => String(x || '')).join(' ')))),
 
-  'barcode.advice': def('barcode.advice', 9, '条码合规建议', '说明该用哪种码、哪些数字必须自行合法取得；系统不会替你编造可零售的商品条码。',
+  'barcode.advice': def('barcode.advice', 8, '条码合规建议', '说明该用哪种码、哪些数字必须自行合法取得；系统不会替你编造可零售的商品条码。',
     '给出条码类型与合规建议，提醒零售 GTIN 必须由用户合法取得。',
     '{"type":"EAN-13 | UPC-A | Code 128"}',
     C(['绝对不能生成 8 位以上连续数字或具体商品编码', '不得声称生成的占位码可用于零售', 'type 只能是 EAN-13 / UPC-A / Code 128']),
     (raw) => values(raw).every((v) =>
       VALID_BARCODE_TYPES.includes(String(v.type)) && !FORBIDDEN_BARCODE.test(JSON.stringify(v)))),
 
-  'review.directions': def('review.directions', 'review', '三个设计方向', '整合十步数据，规划三个明显不同但都遵守同一需求的设计方向，再交给矢量设计引擎生成可编辑稿。',
+  'review.directions': def('review.directions', 'review', '三个设计方向', '整合九步数据，规划三个明显不同但都遵守同一需求的设计方向，再交给矢量设计引擎生成可编辑稿。',
     '作为包装设计总监，规划 3 个明显不同但都严格遵守同一份需求的设计方向，每个方向一句话说明视觉重点。',
     '{"title":"方案 A · 品牌与留白","focus":"视觉重点，一句话"}',
     C(['必须恰好 3 个方向', '若用户选择「不需要插画」，任何方向都不得提出添加装饰图案', '方向之间必须明显不同']),

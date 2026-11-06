@@ -115,7 +115,7 @@ export default function Account() {
         <SectionLabel en="CLOUD PROJECTS">云端项目</SectionLabel>
         {listError && <Notice tone="warn">{listError}</Notice>}
         {!rows ? (listError ? null : <p className="acct-msg">正在读取云端列表…</p>) : rows.length === 0
-          ? <p className="acct-msg">云端还没有项目。在「我的作品」里打开一个项目并保存，或在上面点「立即双向同步」把本机项目上传。</p>
+          ? <p className="acct-msg">云端还没有项目。在「我的工作台」里打开一个项目并保存，或在上面点「立即双向同步」把本机项目上传。</p>
           : <div className="cloud-list">{rows.map((r) => <div className="cloud-item" key={r.id}>
             <div className="cloud-item-main">
               <strong>{r.title || '未命名包装项目'}</strong>
