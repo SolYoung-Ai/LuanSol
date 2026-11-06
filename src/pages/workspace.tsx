@@ -162,7 +162,13 @@ export default function Workspace() {
     </>}
 
     {empty && <div className="v4-empty">
-      <div className="v4-empty-mark">□</div>
+      <div className="v4-empty-mark" aria-hidden>
+        <svg viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.2">
+          <path d="M16 4.5 27 10v12L16 27.5 5 22V10L16 4.5Z" />
+          <path d="M5 10l11 5.5L27 10" />
+          <path d="M16 15.5v12" />
+        </svg>
+      </div>
       <h3>这里还没有作品</h3>
       <p>从一个想法开始，创建你的第一个包装。</p>
       <button className="v4-btn-dark" onClick={() => go('/wizard')}>开始设计</button>

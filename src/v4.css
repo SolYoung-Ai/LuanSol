@@ -69,8 +69,10 @@ input, textarea, select { border-radius: 2px; }
    ============================================================ */
 .v4-nav {
   position: sticky; top: 0; z-index: 50;
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: saturate(180%) blur(12px);
+  /* 注意：这里不能用 backdrop-filter。带 backdrop-filter 的元素会成为 backdrop root，
+     它内部的绝对定位子元素（头像下拉菜单）会被裁到导航条自身的高度，
+     线上实测只能露出 10px 高的一条。纯白实底即可，视觉上也更克制。 */
+  background: #fff;
   border-bottom: 1px solid var(--v4-line);
 }
 .v4-nav-inner {
@@ -98,7 +100,8 @@ input, textarea, select { border-radius: 2px; }
   background: var(--v4-ink); color: #fff;
   font-size: 12px; font-weight: 500; letter-spacing: .04em;
 }
-.v4-avatar-guest { background: transparent; border: 1px solid var(--v4-line-strong); color: var(--v4-ink-3); font-size: 13px; }
+.v4-avatar-guest { background: transparent; border: 1px solid var(--v4-line-strong); color: var(--v4-ink-3); }
+.v4-avatar-guest svg { display: block; }
 .v4-avatar-sm { width: 28px; height: 28px; font-size: 11px; }
 
 .v4-nav-center { display: flex; align-items: center; gap: clamp(20px, 3vw, 44px); }
@@ -376,3 +379,32 @@ input, textarea, select { border-radius: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .v4-home-mark, .v4-home-sub, .v4-home-cta, .v4-menu { animation: none !important; }
 }
+
+/* ============================================================
+   7. 原生控件收敛：复选框 / 单选 / 滚动条
+   旧版用系统默认勾选框（黑色实心方块+白勾），在极简版面里非常突兀。
+   这里统一成 16px 细线方框 + 选中后实心，视觉上与设计系统一致。
+   ============================================================ */
+input[type="checkbox"], input[type="radio"] {
+  appearance: none; -webkit-appearance: none;
+  width: 16px; height: 16px; flex: 0 0 auto;
+  border: 1px solid var(--v4-line-strong);
+  background: #fff; cursor: pointer; position: relative;
+  transition: background .15s ease, border-color .15s ease;
+}
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:checked, input[type="radio"]:checked {
+  background: var(--v4-ink); border-color: var(--v4-ink);
+}
+input[type="checkbox"]:checked::after {
+  content: ''; position: absolute; left: 5px; top: 1px;
+  width: 4px; height: 8px; border-right: 1.5px solid #fff; border-bottom: 1.5px solid #fff;
+  transform: rotate(42deg);
+}
+input[type="radio"]:checked::after {
+  content: ''; position: absolute; inset: 3px; background: #fff; border-radius: 50%;
+}
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 1px solid var(--v4-ink); outline-offset: 2px; }
+
+/* 滚动条：Windows / Linux 上默认滚动条同样破坏极简版面 */
+* { scrollbar-width: thin; scrollbar-color: var(--v4-line-strong) transparent; }

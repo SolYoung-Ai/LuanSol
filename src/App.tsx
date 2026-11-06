@@ -57,7 +57,13 @@ export default function App() {
   // 必须稳定引用：SubscriptionProvider 会把它放进 useEffect 依赖，
   // 每次渲染都新建函数会让闸门反复注销重注册，中间存在计量空窗。
   const requestLogin = useCallback(() => setLoginOpen(true), []);
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [hash]);
+  // 路由切换后必须回到顶部：懒加载页面在 effect 之后才挂载，只调用一次 scrollTo 会被
+  // 后来的内容撑高 / 滚动锚定带偏（实测进入工作台会停在中段，标题被导航遮住），所以补一帧再归零。
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+    const t = window.setTimeout(() => window.scrollTo({ top: 0 }), 32);
+    return () => window.clearTimeout(t);
+  }, [hash]);
 
   const path = hash.split('?')[0];
   let page: React.ReactNode;

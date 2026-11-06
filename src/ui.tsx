@@ -72,7 +72,13 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
         <button className={`v4-avatar-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label="个人中心">
           {auth.user
             ? <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>
-            : <span className="v4-avatar v4-avatar-guest" aria-hidden>○</span>}
+            /* 未登录用极简人形剪影，不用「○」字符——「○」在 30px 圆里会被看成加载圈 */
+            : <span className="v4-avatar v4-avatar-guest" aria-hidden>
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <circle cx="12" cy="8.2" r="3.1" />
+                  <path d="M5.8 19.2c.7-3.5 3.2-5.2 6.2-5.2s5.5 1.7 6.2 5.2" />
+                </svg>
+              </span>}
         </button>
         {open && <div className="v4-menu" role="menu">
           {auth.user ? <>
