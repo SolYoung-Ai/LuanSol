@@ -13,7 +13,7 @@ export const go = (path: string) => { window.location.hash = path.startsWith('/'
 
 export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?: () => void }) {
   return <button className="logo" onClick={onClick || (() => go('/'))} aria-label="LunaSol 首页">
-    <span className="logo-word">LunaSol</span>
+    <span className="logo-word">Luna<span style={{ color: '#e8783a' }}>Sol</span></span>
     {!compact && <span className="logo-sub">AI PACKAGING STUDIO</span>}
   </button>;
 }
@@ -87,7 +87,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   return <header className="v4-nav">
     <div className="v4-nav-inner">
       <div className="v4-nav-brand">
-        <button className="v4-wordmark" onClick={() => go('/')} aria-label="LunaSol">LunaSol</button>
+        <button className="v4-wordmark" onClick={() => go('/')} aria-label="LunaSol">Luna<span style={{ color: '#e8783a' }}>Sol</span></button>
         <button
           className="v4-burger"
           onClick={() => setMobileNavOpen((o) => !o)}
