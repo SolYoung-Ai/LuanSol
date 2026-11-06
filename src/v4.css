@@ -96,7 +96,7 @@ input, textarea, select { border-radius: 2px; }
 }
 .v4-nav-brand { justify-self: start; display: flex; align-items: center; min-width: 0; }
 .v4-wordmark {
-  font-size: 15px; font-weight: 500; letter-spacing: .01em;
+  font-size: 18px; font-weight: 600; letter-spacing: .01em;
   color: var(--v4-ink); white-space: nowrap;
   transition: all .2s ease;
   cursor: pointer;
