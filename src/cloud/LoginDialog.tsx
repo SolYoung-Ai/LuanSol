@@ -86,13 +86,9 @@ export function LoginDialog({ open, onClose, onDone }: {
           <Button disabled={a.busy || code.length < 4} onClick={verify}>{a.busy ? '校验中…' : '验证并登录'}</Button>
         </div>
       </> : <>
-        <div className="wechat-login">
-          <button className="btn btn-wechat btn-md" disabled={a.busy} onClick={async () => { const r = await a.signInWithWechat(); if (r.message) setMsg({ ok: r.ok, text: r.message }); }}>
-            <span className="wechat-ico" aria-hidden>💬</span> 微信安全登录
-          </button>
-          <p className="modal-hint">使用微信授权一键登录。需先在 CloudBase 控制台「登录授权」启用微信，并配置好公众号 / 开放平台的授权回调域名为本站点。</p>
-        </div>
-        <div className="divider"><span>或用以下方式</span></div>
+        {/* 微信登录：当前环境未配置微信 provider，按钮会必然失败，故先不展示。
+            等控制台开通微信登录并配好回调域名后再放回来（代码见 auth.signInWithWechat）。 */}
+        <p className="modal-hint">用手机号或邮箱注册 / 登录。没有账号时先选「注册账号」，验证码通过后会自动登录。</p>
 
         <div className="seg login-tabs">{TABS.map((t) => <button key={t.id} className={tab === t.id ? 'active' : ''}
           onClick={() => { setTab(t.id); setMsg(null); }}>{t.label}</button>)}</div>
@@ -107,7 +103,7 @@ export function LoginDialog({ open, onClose, onDone }: {
             placeholder={tab === 'signup' ? '至少 8 位' : '你的登录密码'}
             onKeyDown={(e) => { if (e.key === 'Enter' && tab === 'password') void submitPassword(); }} /></label>}
 
-        {tab === 'signup' && <p className="modal-hint">注册需要手机号或邮箱：系统会通过 CloudBase 短信通道发送验证码。用户名可在注册后用于密码登录。</p>}
+        {tab === 'signup' && <p className="modal-hint">注册需要手机号或邮箱：手机号走短信验证码，邮箱走邮件验证码。用户名可在注册后用于密码登录。</p>}
         {tab === 'code' && <p className="modal-hint">已注册的手机号或邮箱可以用验证码免密登录，不需要记密码。</p>}
 
         <div className="modal-buttons">
