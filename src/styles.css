@@ -680,3 +680,26 @@ img { display: block; max-width: 100%; }
   cursor: pointer; transition: all .15s ease;
 }
 .global-back:hover { border-color: var(--ink, #222); background: var(--soft, #f6f6f4); }
+
+/* Luna 对话页 */
+.luna-page { display: flex; flex-direction: column; height: calc(100vh - 60px - 80px - 40px); max-width: 880px; margin: 0 auto; padding: 20px; }
+.luna-chat { flex: 1; overflow-y: auto; padding: 12px 0; display: flex; flex-direction: column; gap: 14px; }
+.luna-msg { display: flex; gap: 10px; align-items: flex-start; }
+.luna-msg.user { flex-direction: row-reverse; }
+.luna-avatar { width: 32px; height: 32px; border-radius: 50%; background: #1d1d1b; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.luna-msg.user .luna-avatar { background: #c8a86b; }
+.luna-bubble { max-width: 72%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.6; background: #f4f2ec; color: #222; }
+.luna-msg.user .luna-bubble { background: #1d1d1b; color: #fff; }
+.luna-typing { color: #888; font-style: italic; }
+.luna-input-bar { border-top: 1px solid #e5e5e5; padding-top: 12px; }
+.luna-progress { margin-bottom: 10px; }
+.luna-progress-label { font-size: 12px; color: #888; margin-bottom: 6px; }
+.luna-progress-track { height: 4px; background: #e8e6e0; border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+.luna-progress-fill { height: 100%; background: #c8a86b; transition: width .3s; }
+.luna-progress-fields { display: flex; gap: 10px; font-size: 11px; color: #aaa; }
+.luna-progress-fields span.done { color: #2f5d4a; font-weight: 600; }
+.luna-progress-fields span.done::before { content: '✓ '; }
+.luna-input-row { display: flex; gap: 8px; align-items: center; }
+.luna-input { flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; }
+.luna-model-row { margin-top: 8px; font-size: 12px; color: #888; display: flex; align-items: center; gap: 6px; }
+.luna-model-select { padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; }

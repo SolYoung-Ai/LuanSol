@@ -23,7 +23,7 @@ export default function Home() {
   const beginFresh = () => {
     setConfirmNew(false);
     update({ draft: createEmptyDraft(), brief: createEmptyBrief(), chat: [], schemes: [], design: null, report: null, activeId: null });
-    go('/wizard');
+    go('/luna');
   };
 
   /** 已有进度的草稿会被清空，属于不可撤销操作：先确认，别让用户误点丢数据 */
