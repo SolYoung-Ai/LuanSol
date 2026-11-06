@@ -70,11 +70,12 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
   ];
   const userItems: { label: string; path?: string; action?: () => void }[] = [
-    { label: t('账号信息', 'Account'), path: '/account' },
+    { label: t('个人资料', 'Profile'), path: '/account' },
     { label: t('我的作品', 'My work'), path: '/workspace' },
     { label: t('我的收藏', 'Favorites'), path: '/workspace?tab=favorites' },
     { label: t('订阅状态', 'Membership'), path: '/subscribe' },
-    { label: t('账户设置', 'Preferences'), path: '/settings' },
+    { label: t('账号安全', 'Security'), path: '/security' },
+    { label: t('设计偏好', 'Preferences'), path: '/settings' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
   ];
 

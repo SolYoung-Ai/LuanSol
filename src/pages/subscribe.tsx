@@ -66,6 +66,51 @@ export default function Subscribe() {
         </>}
     </Card>
 
+
+    {/* 套餐对比 */}
+    <div className="plan-grid">
+      <Card className="pad-card plan-card">
+        <div className="plan-name">{t('免费体验', 'Free trial')}</div>
+        <div className="plan-price">¥0</div>
+        <ul className="plan-feats">
+          <li>{t(`${PRICING.freeTrialUses} 次 AI 调用（新注册自动获得）`, `${PRICING.freeTrialUses} AI calls, granted at signup`)}</li>
+          <li>{t('内置确定性设计引擎（不调用大模型）', 'Built-in deterministic design engine')}</li>
+          <li>{t('本机保存项目', 'Projects saved on this device')}</li>
+          <li>{t('基础导出能力', 'Core export formats')}</li>
+        </ul>
+        <Button variant="outline" disabled={!a.user} onClick={() => go('/account')}>{a.user ? t('查看我的额度', 'View my quota') : t('登录后获得', 'Available after sign-in')}</Button>
+      </Card>
+
+      <Card className="pad-card plan-card plan-card-pro">
+        <div className="plan-badge">{t('推荐', 'Recommended')}</div>
+        <div className="plan-name">{t('会员', 'Member')}</div>
+        <div className="plan-price">¥{PRICING.proMonthlyPriceRMB}<span>/{t('月', 'mo')}</span></div>
+        <ul className="plan-feats">
+          <li>{t(`每月 ${PRICING.proMonthlyQuota} 次 AI 调用（统一额度）`, `${PRICING.proMonthlyQuota} AI calls every month`)}</li>
+          <li>{t('平台统一接入 DeepSeek（服务端持有密钥）', 'DeepSeek runs server-side, key never exposed')}</li>
+          <li>{t('云端同步与多端取回', 'Cloud sync across devices')}</li>
+          <li>{t('全部导出与印前能力', 'All export and prepress features')}</li>
+          <li>{t('优先体验新 AI 能力', 'Early access to new AI features')}</li>
+        </ul>
+        {pro
+          ? <Button variant="outline" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</Button>
+          : <Button variant="accent" disabled onClick={() => {}}>{t('即将开放', 'Coming soon')}</Button>}
+      </Card>
+    </div>
+
+    {/* 开通状态：如实说明，不放任何前端开通入口 */}
+    {!pro && <Card className="pad-card activation-card">
+      <SectionLabel en={lang === 'en' ? '' : 'STATUS'}>{t('会员开通状态', 'Checkout status')}</SectionLabel>
+      <p className="acct-msg">{t(
+        '会员开通通道尚未上线：真实价格、权益与扣款将以服务端支付回调为准。当前不会扣费，也不会出现任何「已开通」的假状态。内置设计引擎、在线编辑、3D 预览、印前检查与文件导出都不依赖会员，可继续使用。',
+        'Checkout is not live yet: price, entitlements and payment will be confirmed by a server-side callback. Nothing is charged today and no fake "active" state is shown. The design engine, editor, 3D preview, prepress and exports do not require membership.'
+      )}</p>
+      <div className="activation-row">
+        <Button variant="accent" disabled>{t('即将开放', 'Coming soon')}</Button>
+        <Button variant="ghost" onClick={() => go('/account')}>{t('查看我的额度', 'View my quota')}</Button>
+      </div>
+      {!a.user && <Notice tone="warn">{t('请先登录，登录后系统会自动记录你的真实额度。', 'Sign in first — your real quota is recorded once you do.')}</Notice>}
+    </Card>}
     {/* 会员价值：只讲「一次多少钱、能干什么、什么时候不扣」 */}
     <Card className="pad-card value-card">
       <SectionLabel en={lang === 'en' ? '' : 'WHAT YOU PAY FOR'}>{t('这一次，到底值多少', 'What one call is worth')}</SectionLabel>
@@ -135,50 +180,6 @@ export default function Subscribe() {
       )}</p>
     </Card>
 
-    {/* 套餐对比 */}
-    <div className="plan-grid">
-      <Card className="pad-card plan-card">
-        <div className="plan-name">{t('免费体验', 'Free trial')}</div>
-        <div className="plan-price">¥0</div>
-        <ul className="plan-feats">
-          <li>{t(`${PRICING.freeTrialUses} 次 AI 调用（新注册自动获得）`, `${PRICING.freeTrialUses} AI calls, granted at signup`)}</li>
-          <li>{t('内置确定性设计引擎（不调用大模型）', 'Built-in deterministic design engine')}</li>
-          <li>{t('本机保存项目', 'Projects saved on this device')}</li>
-          <li>{t('基础导出能力', 'Core export formats')}</li>
-        </ul>
-        <Button variant="outline" disabled={!a.user} onClick={() => go('/account')}>{a.user ? t('查看我的额度', 'View my quota') : t('登录后获得', 'Available after sign-in')}</Button>
-      </Card>
-
-      <Card className="pad-card plan-card plan-card-pro">
-        <div className="plan-badge">{t('推荐', 'Recommended')}</div>
-        <div className="plan-name">{t('会员', 'Member')}</div>
-        <div className="plan-price">¥{PRICING.proMonthlyPriceRMB}<span>/{t('月', 'mo')}</span></div>
-        <ul className="plan-feats">
-          <li>{t(`每月 ${PRICING.proMonthlyQuota} 次 AI 调用（统一额度）`, `${PRICING.proMonthlyQuota} AI calls every month`)}</li>
-          <li>{t('平台统一接入 DeepSeek（服务端持有密钥）', 'DeepSeek runs server-side, key never exposed')}</li>
-          <li>{t('云端同步与多端取回', 'Cloud sync across devices')}</li>
-          <li>{t('全部导出与印前能力', 'All export and prepress features')}</li>
-          <li>{t('优先体验新 AI 能力', 'Early access to new AI features')}</li>
-        </ul>
-        {pro
-          ? <Button variant="outline" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</Button>
-          : <Button variant="accent" disabled onClick={() => {}}>{t('即将开放', 'Coming soon')}</Button>}
-      </Card>
-    </div>
-
-    {/* 开通状态：如实说明，不放任何前端开通入口 */}
-    {!pro && <Card className="pad-card activation-card">
-      <SectionLabel en={lang === 'en' ? '' : 'STATUS'}>{t('会员开通状态', 'Checkout status')}</SectionLabel>
-      <p className="acct-msg">{t(
-        '会员开通通道尚未上线：真实价格、权益与扣款将以服务端支付回调为准。当前不会扣费，也不会出现任何「已开通」的假状态。内置设计引擎、在线编辑、3D 预览、印前检查与文件导出都不依赖会员，可继续使用。',
-        'Checkout is not live yet: price, entitlements and payment will be confirmed by a server-side callback. Nothing is charged today and no fake "active" state is shown. The design engine, editor, 3D preview, prepress and exports do not require membership.'
-      )}</p>
-      <div className="activation-row">
-        <Button variant="accent" disabled>{t('即将开放', 'Coming soon')}</Button>
-        <Button variant="ghost" onClick={() => go('/account')}>{t('查看我的额度', 'View my quota')}</Button>
-      </div>
-      {!a.user && <Notice tone="warn">{t('请先登录，登录后系统会自动记录你的真实额度。', 'Sign in first — your real quota is recorded once you do.')}</Notice>}
-    </Card>}
 
     {!sub.metered && <Notice tone="warn">{t(
       `当前为 GitHub Pages 镜像，无法订阅（体验版无法追加安全域名）。请在正式站点 ${CLOUD_SITE_URL} 登录并订阅。`,

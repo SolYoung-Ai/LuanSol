@@ -34,7 +34,9 @@ export function LoginDialog({ open, onClose, onDone }: {
     if (!open) { setMsg(null); setCode(''); setPassword(''); a.cancelCode(); }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const done = (text: string) => { setMsg({ ok: true, text }); onDone?.(text); };
+  // 登录/注册成功后直接关闭弹窗：不再弹「账号」面板（已登录信息页已能查看），
+  // 用户留在原地继续干活。
+  const done = (text: string) => { setMsg({ ok: true, text }); onDone?.(text); onClose(); };
 
   const submitPassword = async () => {
     const r = await a.signInWithPassword(account, password);
@@ -68,11 +70,9 @@ export function LoginDialog({ open, onClose, onDone }: {
     </Notice>}
 
     {a.user ? <div className="acct-box">
-      <div className="acct-row"><span>已登录</span><strong>{a.user.label}</strong></div>
-      <div className="acct-row"><span>用户 ID</span><code className="acct-uid">{a.user.id}</code></div>
-      {a.user.account && <div className="acct-row"><span>账号</span><strong>{a.user.account}</strong></div>}
+      <p className="modal-p">已登录为 <strong>{a.user.label}</strong>{a.user.account ? `（${a.user.account}）` : ''}</p>
       <div className="acct-actions">
-        <Button variant="outline" onClick={() => { onClose(); go('/account'); }}>云端项目与账户</Button>
+        <Button variant="outline" onClick={() => { onClose(); go('/account'); }}>查看我的账户</Button>
         <Button onClick={async () => { const r = await a.signOut(); setMsg({ ok: r.ok, text: r.message }); }}>退出登录</Button>
       </div>
     </div> : <>

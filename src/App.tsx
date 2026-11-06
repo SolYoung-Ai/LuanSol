@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { useApp, toastTone } from './store';
-import { Button, Logo, Nav, go, useHash } from './ui';
+import { Button, Logo, Nav, Notice, PageHead, go, useHash } from './ui';
 import Home from './pages/home';
 import { useAuth } from './cloud/auth';
 import { LoginDialog } from './cloud/LoginDialog';
@@ -32,6 +32,7 @@ const ExportCenter = lazy(() => import('./pages/output').then((m) => ({ default:
 const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
 const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default: m.ModelConfig })));
 const Subscribe = lazy(() => import('./pages/subscribe'));
+const Security = lazy(() => import('./pages/security'));
 
 function Footer() {
   return <footer className="footer-min"><div className="footer-min-inner">
@@ -69,7 +70,18 @@ export default function App() {
 
   const path = hash.split('?')[0];
   let page: React.ReactNode;
-  if (path === '/') page = <Home />;
+
+  // 设计链路：必须登录后才能开始。未登录访问时统一拦在门口，引导登录。
+  const DESIGN_GATE = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
+  const gated = DESIGN_GATE.some((p) => path.startsWith(p));
+  if (gated && auth.ready && !auth.user) {
+    page = <div className="page page-narrow">
+      <PageHead kicker="SIGN IN" title="先登录，再开始设计"
+        desc="包装设计会按账号保存项目、同步云端并记录 AI 额度。请先登录或注册账号。" />
+      <Notice tone="info">未登录不能进入设计向导。登录免费，新用户自动获得 2 次 AI 体验。</Notice>
+      <div style={{ marginTop: 20 }}><Button size="lg" onClick={requestLogin}>登录 / 注册</Button></div>
+    </div>;
+  } else if (path === '/') page = <Home />;
   else if (path === '/wizard') page = <Wizard />;
   else if (path === '/review') page = <Review />;
   else if (path === '/create') page = <Create />;
@@ -93,12 +105,19 @@ export default function App() {
   else if (path === '/settings') page = <Settings />;
   else if (path === '/models') page = <ModelConfig />;
   else if (path === '/subscribe') page = <Subscribe />;
+  else if (path === '/security') page = <Security />;
   else page = <div className="page page-narrow"><h1>页面不存在</h1><Button onClick={() => go('/')}>回到首页</Button></div>;
 
   return <SubscriptionProvider requestLogin={requestLogin}>
     <div className="app">
       <Nav onLogin={requestLogin} />
-      <main className="main"><Suspense fallback={<PageFallback />}>{page}</Suspense></main>
+      <main className="main">
+        {/* 全局返回：非首页都有，优先回上一页，无历史回首页 */}
+        {path !== '/' && <button className="global-back" onClick={() => {
+          if (window.history.length > 1) window.history.back(); else go('/');
+        }} aria-label="返回">← 返回</button>}
+        <Suspense fallback={<PageFallback />}>{page}</Suspense>
+      </main>
       <Footer />
       {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
       <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />

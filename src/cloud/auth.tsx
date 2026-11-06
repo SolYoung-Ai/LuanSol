@@ -10,13 +10,13 @@
  *    走 CloudBase 默认短信通道；邮件通道需要环境侧配置后才能收到信。
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { authApi, type RawSession, type RawUser, type VerifyFn } from './sdk';
+import { authApi, type Err, type RawSession, type RawUser, type VerifyFn } from './sdk';
 import { cloudConfigured, cloudOriginSupported } from './config';
 import { accountKey, otpTarget } from './keys';
 
 export { accountKey, otpTarget };
 
-export interface AuthUser { id: string; label: string; account: string }
+export interface AuthUser { id: string; label: string; account: string; avatarUrl: string; email: string; phone: string }
 
 /** 登录不可用时的真实原因。
  *  SDK 未就绪有两种完全不同的情况，不能都报「未配置环境」——那会把
@@ -47,6 +47,16 @@ interface AuthCtx {
   verifyCode: (token: string) => Promise<ActionResult>;
   cancelCode: () => void;
   signOut: () => Promise<ActionResult>;
+  /** 更新昵称 / 头像（真改 CloudBase user_metadata） */
+  updateProfile: (p: { nickName?: string; avatarUrl?: string }) => Promise<ActionResult>;
+  /** 修改密码：需要旧密码 */
+  changePassword: (oldPassword: string, newPassword: string) => Promise<ActionResult>;
+  /** 绑定/换绑邮箱或手机：第一步发验证码 */
+  startLink: (kind: 'email' | 'phone', target: string) => Promise<ActionResult>;
+  /** 绑定/换绑：校验验证码完成绑定 */
+  verifyLink: (token: string) => Promise<ActionResult>;
+  refreshUser: () => Promise<void>;
+  linkPending: { kind: 'email' | 'phone'; target: string } | null;
   clearError: () => void;
 }
 
@@ -68,9 +78,21 @@ function toUser(s?: RawSession): AuthUser | null {
   const id = String(src.id || src.sub || src.uid || '');
   if (!id) return null;
   const account = String(src.email || src.phone || src.username || '');
-  const label = src.user_metadata?.name || src.user_metadata?.username || src.username || account || id;
-  return { id, label: String(label), account };
+  const label = src.user_metadata?.name || src.user_metadata?.nickName || src.user_metadata?.username || src.username || account || id;
+  return {
+    id,
+    label: String(label),
+    account,
+    avatarUrl: String(src.user_metadata?.avatarUrl || ''),
+    email: String(src.email || ''),
+    phone: String(src.phone || ''),
+  };
 }
+
+/** 生日走本机存储（SDK 用户资料里没有生日字段）：key 按用户隔离 */
+export const birthdayKey = (uid: string) => `lunasol:birthday:${uid}`;
+export const getBirthday = (uid: string): string => { try { return localStorage.getItem(birthdayKey(uid)) || ''; } catch { return ''; } };
+export const setBirthday = (uid: string, v: string) => { try { v ? localStorage.setItem(birthdayKey(uid), v) : localStorage.removeItem(birthdayKey(uid)); } catch { /* 隐私模式 */ } };
 
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -81,6 +103,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const verifyRef = useRef<VerifyFn | null>(null);
+  const linkVerifyRef = useRef<((p: { token: string | number; messageId?: string }) => Promise<{ data?: { user?: RawUser; session?: RawSession }; error?: Err }>) | null>(null);
+  const [linkPending, setLinkPending] = useState<{ kind: 'email' | 'phone'; target: string } | null>(null);
   const configured = cloudConfigured;
   const originOk = cloudOriginSupported();
 
@@ -222,11 +246,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally { setBusy(false); }
   }, [apply]);
 
+  const updateProfile = useCallback(async (p: { nickName?: string; avatarUrl?: string }): Promise<ActionResult> => {
+    const auth = await authApi();
+    if (!auth?.updateUserBasicInfo) return { ok: false, message: unavailable('更新资料') };
+    setBusy(true); setError(null);
+    try {
+      const r = await auth.updateUserBasicInfo(p);
+      if (r.error) return { ok: false, message: r.error.message || '更新失败' };
+      // 立即拉一次最新会话，让昵称/头像在导航与账户页可见
+      const g = await auth.getUser?.();
+      if (g?.data?.user) { const cur = session; apply({ ...(cur || null), user: g.data.user } as RawSession); }
+      return { ok: true, message: '资料已保存' };
+    } catch (e) { return { ok: false, message: errorMessage(e, '更新失败') }; } finally { setBusy(false); }
+  }, [apply, session]);
+
+  const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<ActionResult> => {
+    const auth = await authApi();
+    if (!auth?.updatePassword) return { ok: false, message: unavailable('修改密码') };
+    if (newPassword.length < 8) return { ok: false, message: '新密码至少 8 位' };
+    setBusy(true); setError(null);
+    try {
+      const r = await auth.updatePassword(newPassword, oldPassword);
+      if (r.error) return { ok: false, message: r.error.message || '修改失败' };
+      return { ok: true, message: '密码已修改，下次登录请使用新密码' };
+    } catch (e) { return { ok: false, message: errorMessage(e, '修改失败') }; } finally { setBusy(false); }
+  }, []);
+
+  const startLink = useCallback(async (kind: 'email' | 'phone', target: string): Promise<ActionResult> => {
+    const auth = await authApi();
+    if (!auth?.updateUser) return { ok: false, message: unavailable('绑定') };
+    const v = target.trim();
+    if (kind === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return { ok: false, message: '请输入正确的邮箱地址' };
+    if (kind === 'phone' && !/^1\d{10}$/.test(v)) return { ok: false, message: '请输入 11 位手机号' };
+    setBusy(true); setError(null);
+    try {
+      const r = await auth.updateUser(kind === 'email' ? { email: v } : { phone: v });
+      if (r.error) return { ok: false, message: r.error.message || '验证码发送失败' };
+      if (!r.data?.verifyOtp) return { ok: false, message: '绑定服务未返回验证码入口' };
+      linkVerifyRef.current = r.data.verifyOtp;
+      setLinkPending({ kind, target: v });
+      return { ok: true, message: `验证码已发送到${kind === 'email' ? '邮箱' : '手机'}，填写后完成绑定` };
+    } catch (e) { return { ok: false, message: errorMessage(e, '验证码发送失败') }; } finally { setBusy(false); }
+  }, []);
+
+  const verifyLink = useCallback(async (token: string): Promise<ActionResult> => {
+    if (!linkPending) return { ok: false, message: '请先发送验证码' };
+    setBusy(true); setError(null);
+    try {
+      const r = await linkVerifyRef.current?.({ token: token.trim() });
+      if (!r) return { ok: false, message: '验证码已失效，请重新发送' };
+      if (r.error) return { ok: false, message: r.error.message || '绑定失败' };
+      if (r.data?.session) apply(r.data.session);
+      setLinkPending(null); linkVerifyRef.current = null;
+      return { ok: true, message: '绑定成功' };
+    } catch (e) { return { ok: false, message: errorMessage(e, '绑定失败') }; } finally { setBusy(false); }
+  }, [linkPending, apply]);
+
+  const refreshUser = useCallback(async () => {
+    const auth = await authApi();
+    const g = await auth?.getUser?.();
+    if (g?.data?.user) apply({ ...(session || null), user: g.data.user } as RawSession);
+  }, [apply, session]);
+
   const value = useMemo<AuthCtx>(() => ({
-    ready, configured, originOk, user, session, pending, busy, error,
+    ready, configured, originOk, user, session, pending, busy, error, linkPending,
     signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut,
+    updateProfile, changePassword, startLink, verifyLink, refreshUser,
     clearError: () => setError(null),
-  }), [ready, configured, originOk, user, session, pending, busy, error, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut]);
+  }), [ready, configured, originOk, user, session, pending, busy, error, linkPending, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut, updateProfile, changePassword, startLink, verifyLink, refreshUser]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

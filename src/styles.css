@@ -670,3 +670,13 @@ img { display: block; max-width: 100%; }
   .flow-min-steps { grid-template-columns: repeat(2, 1fr); }
   .footer-min-inner { flex-direction: column; align-items: flex-start; gap: 14px; }
 }
+
+/* 全局返回按钮：所有非首页左上角统一一个 */
+.global-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 18px 40px 0; padding: 7px 14px;
+  font-size: 13px; color: var(--ink, #222);
+  background: transparent; border: 1px solid var(--line, #e5e5e5); border-radius: 999px;
+  cursor: pointer; transition: all .15s ease;
+}
+.global-back:hover { border-color: var(--ink, #222); background: var(--soft, #f6f6f4); }

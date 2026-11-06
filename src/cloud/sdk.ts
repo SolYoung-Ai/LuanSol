@@ -44,7 +44,7 @@ export function ensureApp(): Promise<AnyApp | null> {
 export type Err = { message?: string } | null;
 export type RawUser = {
   id?: string; sub?: string; uid?: string; email?: string; phone?: string; username?: string;
-  user_metadata?: { name?: string; username?: string; nickName?: string };
+  user_metadata?: { name?: string; username?: string; nickName?: string; avatarUrl?: string };
 };
 export type RawSession = { access_token?: string; user?: RawUser } | null;
 export type VerifyResult = { data?: { user?: RawUser; session?: RawSession }; error?: Err };
@@ -57,6 +57,13 @@ export interface CloudAuthApi {
   /** 第三方 OAuth 登录（如微信网页授权）：调用后会被重定向到授权页，不会立即返回会话。 */
   signInWithOAuth(p: { provider: string; redirectTo?: string }): Promise<{ data?: unknown; error?: Err }>;
   getSession(): Promise<{ data?: { session?: RawSession; user?: RawUser }; error?: Err }>;
+  /** 更新昵称/头像（直接生效，不需要验证码） */
+  updateUserBasicInfo?(p: { nickName?: string; avatarUrl?: string }): Promise<{ error?: Err }>;
+  /** 更新邮箱/手机：会先要求验证码，返回 verifyOtp 回调 */
+  updateUser?(p: { email?: string; phone?: string }): Promise<{ data?: { verifyOtp?: (params: { token: string | number; messageId?: string }) => Promise<{ data?: { user?: RawUser; session?: RawSession }; error?: Err }>; messageId?: string | number }; error?: Err }>;
+  /** 修改密码：需要旧密码 */
+  updatePassword?(newPassword: string, oldPassword: string): Promise<{ error?: Err }>;
+  getUser?(): Promise<{ data?: { user?: RawUser }; error?: Err }>;
   signOut(): Promise<{ error?: Err }>;
   onAuthStateChange(cb: (event: string, session: RawSession) => void): { data?: { subscription?: { unsubscribe?: () => void } } };
 }
