@@ -87,7 +87,7 @@ export default function Subscribe() {
         <div style={{ fontSize: 12, color: '#a07020', letterSpacing: 1, marginBottom: 6 }}>限时活动 · LIMITED TIME</div>
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>每日签到送积分，连续 10 天再加码</div>
         <div style={{ color: '#6b5520', fontSize: 14, lineHeight: 1.6 }}>
-          每天签到 <Coin size={14} />10 积分，可叠加；每连续签到满 10 天，额外送 <Coin size={14} />100 积分。内测期间每天都能领。
+          每天签到 <Coin size={14} />10 积分，可叠加；每连续签到满 10 天，额外送 <Coin size={14} />100 积分。<strong>会员每天签到双倍（20 积分）</strong>，月签到最多 600 积分。
         </div>
         <div style={{ marginTop: 8, fontSize: 13, color: '#8a6d30' }}>
           已连续签到 <strong>{checkin.streak}</strong> 天
@@ -166,13 +166,14 @@ export default function Subscribe() {
 
       <Card className="pad-card plan-card plan-card-pro">
         <div className="plan-badge">{t('推荐', 'Recommended')}</div>
-        <div className="plan-name">{t('会员', 'Member')}</div>
+        <div className="plan-name">{t('会员 · 每月特权', 'Member · Monthly')}</div>
         <div className="plan-price">¥{PRICING.proMonthlyPriceRMB}<span>/{t('月', 'mo')}</span></div>
         <ul className="plan-feats">
-          <li><Coin size={14} />{PRICING.proMonthlyQuota} {t('积分/月', 'credits/month')}</li>
-          <li>{t('DeepSeek 对话 + Seedream 生图', 'DeepSeek chat + Seedream images')}</li>
-          <li>{t('云端同步', 'Cloud sync')}</li>
-          <li>{t('全部导出与印前能力', 'All export & prepress')}</li>
+          <li><Coin size={14} />{t('每日签到双倍（20 积分/天，月签到最多 600）', 'Double daily check-in (20 credits/day, up to 600/mo)')}</li>
+          <li>{t('全部对话模型解锁（DeepSeek / Kimi / Doubao-Seed / GLM）', 'All chat models unlocked')}</li>
+          <li>{t('云端同步 + 历史版本', 'Cloud sync & version history')}</li>
+          <li>{t('全部导出与印前能力（PDF / SVG / ZIP）', 'All export & prepress')}</li>
+          <li>{t('优先客服响应', 'Priority support')}</li>
         </ul>
         {pro
           ? <Button variant="outline" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</Button>

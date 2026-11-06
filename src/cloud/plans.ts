@@ -10,11 +10,11 @@
  * ============================================================ */
 
 export const PRICING = {
-  proMonthlyPriceRMB: 299,
+  proMonthlyPriceRMB: 29,
   /** 新注册用户赠送积分 */
   freeTrialUses: 100,
-  /** 会员每月积分 */
-  proMonthlyQuota: 3000,
+  /** 会员权益：签到双倍（每天 20 积分），不是固定月度积分包 */
+  proMonthlyQuota: 3000, // 保留字段兼容，文案改为"签到双倍 + 全部功能解锁"
 
   /** 充值包 */
   recharge: [
