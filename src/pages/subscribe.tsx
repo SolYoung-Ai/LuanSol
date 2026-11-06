@@ -31,6 +31,27 @@ export default function Subscribe() {
   const [redeeming, setRedeeming] = useState(false);
   const [redeemMsg, setRedeemMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // 签到状态：localStorage 记录 lastDate + streak
+  const today = new Date().toISOString().slice(0, 10);
+  const [checkin, setCheckin] = useState<{ lastDate: string; streak: number }>(() => {
+    try {
+      const raw = localStorage.getItem('lunasol_checkin');
+      return raw ? JSON.parse(raw) : { lastDate: '', streak: 0 };
+    } catch { return { lastDate: '', streak: 0 }; }
+  });
+  const checkedToday = checkin.lastDate === today;
+  const doCheckin = () => {
+    if (checkedToday) return;
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const newStreak = checkin.lastDate === yesterday ? checkin.streak + 1 : 1;
+    const bonus = newStreak % 10 === 0 ? 100 : 0;
+    const next = { lastDate: today, streak: newStreak };
+    localStorage.setItem('lunasol_checkin', JSON.stringify(next));
+    setCheckin(next);
+    // TODO: 接云函数 /checkin 路由，真正给用户加 10 积分
+    alert(`签到成功！今日 +10 积分${bonus ? `；连续 ${newStreak} 天，额外 +${bonus} 积分` : ''}。积分将在下次登录后到账。`);
+  };
+
   const left = sub.usedLeft ?? PRICING.freeTrialUses;
   const pro = sub.isPro;
 
@@ -55,6 +76,32 @@ export default function Subscribe() {
         'Chat and image generation spend credits. New signups get 100 free credits.'
       )}
     />
+
+    {/* 限时活动 · 每日签到 */}
+    <div style={{
+      background: 'linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%)',
+      border: '1px solid #f0d060', borderRadius: 12, padding: '20px 24px',
+      marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap',
+    }}>
+      <div>
+        <div style={{ fontSize: 12, color: '#a07020', letterSpacing: 1, marginBottom: 6 }}>限时活动 · LIMITED TIME</div>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>每日签到送积分，连续 10 天再加码</div>
+        <div style={{ color: '#6b5520', fontSize: 14, lineHeight: 1.6 }}>
+          每天签到 <Coin size={14} />10 积分，可叠加；每连续签到满 10 天，额外送 <Coin size={14} />100 积分。内测期间每天都能领。
+        </div>
+        <div style={{ marginTop: 8, fontSize: 13, color: '#8a6d30' }}>
+          已连续签到 <strong>{checkin.streak}</strong> 天
+        </div>
+      </div>
+      <button
+        className="v4-btn-dark"
+        disabled={checkedToday}
+        onClick={doCheckin}
+        style={{ whiteSpace: 'nowrap', opacity: checkedToday ? 0.5 : 1 }}
+      >
+        {checkedToday ? '今日已签到 ✓' : '立即签到 +10'}
+      </button>
+    </div>
 
     {/* 当前积分余额 */}
     <Card className="pad-card sub-status-card">

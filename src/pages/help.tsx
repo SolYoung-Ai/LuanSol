@@ -36,7 +36,7 @@ export default function Help() {
         发现 bug、想要新功能、或者对包装设计有想法，直接发邮件给我们：
       </p>
       <p style={{ marginTop: 10 }}>
-        <a className="inline-link" href="mailto:soyoang@outlook.com">soyoang@outlook.com</a>
+        <a className="inline-link" href="mailto:soyoung@outlook.com">soyoung@outlook.com</a>
       </p>
       <p style={{ color: 'var(--muted, #888)', fontSize: 12, marginTop: 14 }}>
         邮件里附上：你用的设备（Mac/Windows/手机）、浏览器版本、以及你期望的效果，能帮我们更快定位问题。

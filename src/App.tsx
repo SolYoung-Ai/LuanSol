@@ -128,6 +128,41 @@ export default function App() {
       {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
       <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
       {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
+      <BetaAnnouncement />
     </div>
   </SubscriptionProvider>;
+}
+
+/** 内测公告：每次打开网站弹一次（当天只弹一次），引导签到/兑换码/反馈 */
+function BetaAnnouncement() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const key = `lunasol_beta_${new Date().toISOString().slice(0, 10)}`;
+    if (!localStorage.getItem(key)) {
+      const t = setTimeout(() => setOpen(true), 800);
+      return () => clearTimeout(t);
+    }
+  }, []);
+  if (!open) return null;
+  const close = () => {
+    localStorage.setItem(`lunasol_beta_${new Date().toISOString().slice(0, 10)}`, '1');
+    setOpen(false);
+  };
+  return <div onClick={close} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 900, display: 'grid', placeItems: 'center', padding: 20 }}>
+    <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 32, maxWidth: 440, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+      <div style={{ fontSize: 12, color: '#a07020', letterSpacing: 2, marginBottom: 8 }}>BETA · 内测中</div>
+      <h2 style={{ fontSize: 24, marginBottom: 12 }}>欢迎来到 LunaSol</h2>
+      <p style={{ color: '#555', lineHeight: 1.7, marginBottom: 16 }}>
+        目前平台处于内测阶段，预计 <strong>2027 年 1 月 1 日</strong>正式上线。
+        内测期间所有功能免费开放，你可以通过<strong>每日签到</strong>和<strong>兑换码</strong>获得积分，体验完整的 AI 包装设计流程。
+      </p>
+      <p style={{ color: '#888', fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>
+        遇到 bug、或有任何产品建议，欢迎发邮件到 <a href="mailto:soyoung@outlook.com">soyoung@outlook.com</a>，工作日内回复。
+      </p>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+        <button className="v4-btn-line" onClick={close}>先逛逛</button>
+        <button className="v4-btn-dark" onClick={() => { close(); go('/subscribe'); }}>去签到领积分</button>
+      </div>
+    </div>
+  </div>;
 }
