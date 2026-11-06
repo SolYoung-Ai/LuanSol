@@ -703,3 +703,13 @@ img { display: block; max-width: 100%; }
 .luna-input { flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; }
 .luna-model-row { margin-top: 8px; font-size: 12px; color: #888; display: flex; align-items: center; gap: 6px; }
 .luna-model-select { padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; }
+
+/* ---- Luna 对话页手机端适配 ---- */
+@media (max-width: 640px) {
+  .luna-input-row { flex-wrap: wrap; }
+  .luna-input-row .luna-input { flex: 1 1 100%; order: -1; }
+  .luna-input-row > button { flex: 0 0 auto; }
+  .luna-model-row { flex-wrap: wrap; row-gap: 6px; }
+  .luna-model-select { max-width: 140px; }
+  .luna-progress-fields { flex-wrap: wrap; gap: 6px; }
+}
