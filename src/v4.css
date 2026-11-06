@@ -196,11 +196,11 @@ input, textarea, select { border-radius: 2px; }
 }
 .hm-letter {
   display: inline-block;
-  transition: transform .2s ease;
+  transition: transform .3s cubic-bezier(.34, 1.56, .64, 1);
   cursor: pointer;
 }
 .hm-letter:hover {
-  transform: translateY(-8px) rotate(-6deg);
+  transform: translateY(-10px) rotate(-8deg);
 }
 .v4-home-sub {
   margin-top: var(--v4-s4);
