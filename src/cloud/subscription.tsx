@@ -296,8 +296,9 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     if (r.error || !r.data || r.data.length === 0) return { ok: false, message: '兑换码无效，检查后重试' };
     const row = r.data[0] as { code: string; points: number; used: boolean; used_by: string | null };
     if (row.used) return { ok: false, message: '该兑换码已被使用' };
-    // 2. 标记已使用
-    await db.from('lunasol_redeem_codes').update({ used: true, used_by: u.id }).eq('code', c);
+    // 2. 标记已使用（检查是否成功，防止并发重复兑换）
+    const markRes = await db.from('lunasol_redeem_codes').update({ used: true, used_by: u.id }).eq('code', c);
+    if (markRes.error) return { ok: false, message: '兑换失败，请稍后重试' };
     // 3. 给用户加积分到 bonus_credits
     const cur = subRef.current;
     if (cur) {
