@@ -101,14 +101,15 @@ export function ModelConfig() {
     </div>
 
     <Card className="pad-card"><SectionLabel en="PLATFORM MODELS">平台模型（托管）</SectionLabel>
-      <p className="ai-caps-intro">LunaSol 已在腾讯云开发 CloudBase 国内站部署后台代理，<strong>DeepSeek 密钥只保存在云函数环境变量</strong>，前端不接触任何厂商 API Key，也不允许自行接入模型。文本能力由平台统一调用 DeepSeek（deepseek-chat 系列），不做多模型切换。</p>
-      <div className="kv"><span>文本模型</span><strong>DeepSeek（deepseek-chat 系列 · 服务端代理）</strong></div>
+      <p className="ai-caps-intro">LunaSol 在腾讯云开发 CloudBase 国内站部署后台代理，<strong>所有厂商 API Key 只保存在云函数环境变量</strong>，前端不接触任何密钥。文本能力由平台统一路由，已接入 DeepSeek、Kimi、Doubao-Seed、GLM 等多款模型，生图接入 Doubao-Seedream 系列，用户可在 Luna 对话里切换。</p>
+      <div className="kv"><span>文本模型</span><strong>DeepSeek-V4.1 · Kimi-K3.1-Pro · Doubao-Seed-2.1 Pro/Lite/Turbo · GLM-5.3-Flash（服务端代理）</strong></div>
+      <div className="kv"><span>生图模型</span><strong>Doubao-Seedream 5.0 Flash / Pro（服务端代理）</strong></div>
       <div className="kv"><span>后台</span><strong>CloudBase HTTP 云函数 · {CLOUD.region}</strong></div>
       <div className="kv"><span>当前状态</span><strong>{enabled ? '已启用平台 AI' : '已关闭，使用内置设计引擎'}</strong></div>
       <Toggle label="启用平台 AI" hint="开启后九步向导由平台大模型提供建议；关闭后改用内置确定性设计引擎（不调用大模型）" checked={enabled} onChange={(v) => setMode(v ? 'proxy' : 'off')} />
       {!deepSeekReady && enabled && <Notice tone="warn">当前构建未配置平台代理地址，开启后也无法实际调用；请在正式站点使用。</Notice>}
       <div className="model-actions"><Button disabled={!enabled || !deepSeekReady} onClick={test}>{testing ? '测试中…' : '测试连接'}</Button></div>
-      <Notice tone="info">当前平台只接入文本模型，不提供图像生成；涉及插画的步骤会使用内置矢量模板，并明确标注「非 AI 图像生成」，不会伪造插画。代理网关按来源域名与令牌校验，并设有 QPS 限制。</Notice>
+      <Notice tone="info">代理网关按来源域名与令牌校验，并设有 QPS 限制；生图按 Flash / Lite / Pro 档位扣积分。</Notice>
     </Card>
 
     <Card className="pad-card"><SectionLabel en="AI IN THE FLOW">AI 已融入哪些环节</SectionLabel>

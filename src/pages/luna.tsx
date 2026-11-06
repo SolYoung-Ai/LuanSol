@@ -265,11 +265,13 @@ export default function Luna() {
       <div className="luna-model-row">
         <span className="luna-model-label">对话：</span>
         <select className="luna-model-select" value={chatModel} onChange={(e) => setChatModel(e.target.value)}>
-          <option value="deepseek">DeepSeek-V3（通用）</option>
-          <option value="kimi">Kimi-K3（长文）</option>
-          <option value="doubao-seed-pro">Doubao-Seed 2.1 Pro（创意）</option>
-          <option value="doubao-seed-lite">Doubao-Seed 2.1 Lite（快）</option>
-          <option value="doubao-seed-turbo">Doubao-Seed 2.1 Turbo</option>
+          <option value="deepseek-v4.1">DeepSeek-V4.1（通用推荐）</option>
+          <option value="kimi-k3.1">Kimi-K3.1-Pro（长文/思考）</option>
+          <option value="doubao-seed-pro">Doubao-Seed-2.1 Pro（创意）</option>
+          <option value="doubao-seed-lite">Doubao-Seed-2.1 Lite（快）</option>
+          <option value="doubao-seed-turbo">Doubao-Seed-2.1 Turbo</option>
+          <option value="glm-5.3">GLM-5.3-Flash（智谱）</option>
+          <option value="gpt" disabled>GPT 系列（即将接入）</option>
         </select>
         <span className="luna-model-label" style={{ marginLeft: 16 }}>生图：</span>
         <select className="luna-model-select" value={imageTier} onChange={(e) => setImageTier(e.target.value as 'flash' | 'lite' | 'pro')}>
