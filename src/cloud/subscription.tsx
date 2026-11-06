@@ -283,12 +283,17 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   }, []);
 
   // 内测兑换码表（硬编码，后续接云函数 /redeem 路由）
+  // 注意：admin 页创建的码需要同步加到这里，否则其他设备无法识别
   const REDEEM_CODES: Record<string, number> = {
-    'LS-FODOP5H3': 200,
+    // 内测测试码
     'LS-100': 100,
     'LS-200': 200,
     'LS-500': 500,
     'LS-TEST': 50,
+    // admin 创建的兑换码（2026-11-07）
+    'LS-Q08P2PAC': 10,
+    'LS-F0D0P5H3': 100,
+    'LS-Y3UHHI0W': 100,
   };
   const USED_KEY = 'lunasol_redeemed_codes';
   const readUsed = () => { try { return JSON.parse(localStorage.getItem(USED_KEY) || '[]'); } catch { return []; } };
