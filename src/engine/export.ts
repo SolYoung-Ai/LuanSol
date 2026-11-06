@@ -1,8 +1,9 @@
 /* 文件输出 Agent：生成真实的毫米级印刷文件，而不是把整张设计截图塞进 PDF。
  * PDF = 逐图层绘制（矢量图形 + 按图层转曲的文字 + 独立刀模页），
  * SVG = 保留可编辑文字的矢量展开稿，DXF = 由刀模几何直接写出的 CAD 图元。 */
-import { jsPDF } from 'jspdf';
-import JSZip from 'jszip';
+// jsPDF / JSZip 体积大且只在「导出文件」时用到，改为函数内动态 import（见 buildPdf / buildBundle），
+// 避免首屏或任何页面静态拉起这两个重库。此处仅保留 jsPDF 类型（编译期擦除，无运行时依赖）。
+import type { jsPDF } from 'jspdf';
 import type { DesignDoc, Dieline, Face, Layer, Segment, Sheet, TextLayer } from '../types';
 import { faceMarkup, faceSvg, shapePrims, type Prim } from './design';
 import { downloadBlob, escapeXml, hexToRgb, mmToPx, ptToMm, round, svgToDataUrl, wrapText } from './utils';
@@ -132,6 +133,7 @@ function drawDielinePage(doc: jsPDF, sheet: Sheet, dieline: Dieline) {
 
 /** 生成印刷 PDF：每个展开图两页（设计页 + 独立刀模页） */
 export async function buildPdf(design: DesignDoc, dieline: Dieline, dpi = 300): Promise<{ blob: Blob; bytes: Uint8Array }> {
+  const { jsPDF } = await import('jspdf');
   const first = dieline.sheets[0];
   // compress:false 让内容流保持可读，便于做真实的字节级预检（MediaBox / 刀模页 / 文字层）
   const doc = new jsPDF({ unit: 'mm', format: [first.width, first.height], orientation: first.width >= first.height ? 'landscape' : 'portrait', compress: false });
@@ -241,6 +243,7 @@ export function downloadText(text: string, filename: string, type = 'text/plain'
 
 /** 打包下载：设计稿、刀模、印刷 PDF、效果图、检查清单 */
 export async function buildBundle(design: DesignDoc, dieline: Dieline, dpi = 300, verified = true) {
+  const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
   const base = design.name.replace(/[\\/:*?"<>|]/g, '_');
   dieline.sheets.forEach((s, i) => zip.file(`01_设计稿_${s.name}.svg`, spreadSvg(design, dieline, i, false)));

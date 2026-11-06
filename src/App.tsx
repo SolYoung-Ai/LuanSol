@@ -1,17 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useApp } from './store';
 import { Button, Logo, Nav, go, useHash } from './ui';
 import Home from './pages/home';
-import { BriefPage, Create, Editor, Schemes } from './pages/flow';
-import { Inspiration, ProjectDetail, Projects, Structures } from './pages/library';
-import { ExportCenter, Prepress, Preview3D } from './pages/output';
-import { ModelConfig, Settings } from './pages/settings';
-import Account from './pages/account';
-import Wizard from './v3/Wizard';
-import Review from './v3/Review';
 import { useAuth } from './cloud/auth';
 import { LoginDialog } from './cloud/LoginDialog';
 import { cloudConfigured } from './cloud/config';
+
+// 路由级代码分割：除首页外壳外，所有页面按需加载。
+// 这样首屏不会拉起 three.js（3D 预览）、jsPDF / JSZip（导出）等重库，
+// 它们只在访问对应页面时才下载。manualChunks 已把重库拆成独立 vendor chunk，
+// 配合这里的动态 import，浏览器只需在真正用到时才请求对应 chunk。
+const Wizard = lazy(() => import('./v3/Wizard'));
+const Review = lazy(() => import('./v3/Review'));
+const Account = lazy(() => import('./pages/account'));
+const Create = lazy(() => import('./pages/flow').then((m) => ({ default: m.Create })));
+const BriefPage = lazy(() => import('./pages/flow').then((m) => ({ default: m.BriefPage })));
+const Schemes = lazy(() => import('./pages/flow').then((m) => ({ default: m.Schemes })));
+const Editor = lazy(() => import('./pages/flow').then((m) => ({ default: m.Editor })));
+const Inspiration = lazy(() => import('./pages/library').then((m) => ({ default: m.Inspiration })));
+const Structures = lazy(() => import('./pages/library').then((m) => ({ default: m.Structures })));
+const Projects = lazy(() => import('./pages/library').then((m) => ({ default: m.Projects })));
+const ProjectDetail = lazy(() => import('./pages/library').then((m) => ({ default: m.ProjectDetail })));
+const Preview3D = lazy(() => import('./pages/output').then((m) => ({ default: m.Preview3D })));
+const Prepress = lazy(() => import('./pages/output').then((m) => ({ default: m.Prepress })));
+const ExportCenter = lazy(() => import('./pages/output').then((m) => ({ default: m.ExportCenter })));
+const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
+const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default: m.ModelConfig })));
 
 function Footer() {
   return <footer className="footer"><div className="footer-inner">
@@ -24,6 +38,10 @@ function Footer() {
       <a href="#/account">账户与云端项目</a><a href="#/models">AI 模型配置</a><a href="#/settings">个人设置</a>
       <span className="footer-note">未登录时项目保存在本机浏览器；登录后按账号同步到云端</span></div>
   </div><div className="footer-bottom"><span>© 2026 LunaSol AI Packaging Studio</span><span>Made for people who have never designed before.</span></div></footer>;
+}
+
+function PageFallback() {
+  return <div className="page-loading"><span className="spinner" />页面加载中…</div>;
 }
 
 export default function App() {
@@ -56,7 +74,7 @@ export default function App() {
 
   return <div className="app">
     <Nav onLogin={() => setLoginOpen(true)} accountLabel={auth.user ? auth.user.label : null} />
-    <main className="main">{page}</main>
+    <main className="main"><Suspense fallback={<PageFallback />}>{page}</Suspense></main>
     <Footer />
     {toast && <div className="toast" onClick={() => setToast(null)}><span>✓</span>{toast}</div>}
     <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
