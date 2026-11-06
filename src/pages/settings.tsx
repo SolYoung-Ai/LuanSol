@@ -44,7 +44,6 @@ export function Settings() {
         <label className="field"><span className="field-label">出血（mm）</span><input type="number" min="1" max="8" step="0.5" value={s.settings.bleed} onChange={(e) => set({ bleed: Math.max(1, Math.min(8, Number(e.target.value))) })} /></label>
         <label className="field"><span className="field-label">输出分辨率（DPI）</span><div className="seg">{[150, 300, 600].map((d) => <button key={d} className={s.settings.printDpi === d ? 'active' : ''} onClick={() => set({ printDpi: d })}>{d}</button>)}</div></label>
         <Notice tone="info">出血、DPI、CMYK、字体嵌入等由印前智能体在后台处理，普通模式下不会向用户暴露。</Notice>
-        <Button variant="outline" onClick={() => { window.location.hash = '/models'; window.scrollTo({ top: 0 }); }}>配置 AI 模型 <span aria-hidden>→</span></Button>
       </Card>
       <Card className="pad-card"><SectionLabel en="STORAGE">数据与存储</SectionLabel>
         <div className="kv"><span>存储方式</span><strong>{s.storage}</strong></div>
