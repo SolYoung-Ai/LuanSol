@@ -12,10 +12,30 @@ import { useApp } from '../store';
 import { go } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { LoginDialog } from '../cloud/LoginDialog';
+import { CLOUD } from '../cloud/config';
 import { loadAI, llmChat, llmJson } from '../engine/llm';
 import { parseSize } from '../engine/brief';
 
-type Msg = { role: 'user' | 'assistant'; text: string };
+type Msg = { role: 'user' | 'assistant'; text: string; image?: string };
+
+/** 调用云函数 Seedream 图像路由 */
+async function callSeedream(prompt: string, referenceImage?: string): Promise<string> {
+  if (!CLOUD.aiBaseUrl || !CLOUD.aiToken) throw new Error('图像服务未配置');
+  const r = await fetch(`${CLOUD.aiBaseUrl}/images/generations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-LunaSol-Token': CLOUD.aiToken },
+    body: JSON.stringify({
+      prompt,
+      size: '1024x1024',
+      ...(referenceImage ? { image: referenceImage } : {}),
+    }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j?.error?.message || `图像生成失败 ${r.status}`);
+  const url = j.data && j.data[0] && (j.data[0].url || j.data[0].b64_json);
+  if (!url) throw new Error('图像未返回');
+  return url.startsWith('data:') ? url : (url.startsWith('http') ? url : `data:image/png;base64,${url}`);
+}
 
 const SYSTEM_PROMPT = `你是 LunaSol 的包装设计助手 Luna，一个有审美、懂印刷工艺的设计师。你的工作是通过对话，帮用户把包装需求从模糊聊到具体。
 
@@ -61,6 +81,9 @@ export default function Luna() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [imageGenerating, setImageGenerating] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [extracted, setExtracted] = useState<Extracted>({ product: '', brand: '', style: '', material: '', size: '', audience: '', scene: '', tagline: '', colors: '' });
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -77,16 +100,18 @@ export default function Luna() {
 
   const send = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if ((!text && !pendingImage) || loading) return;
     setInput('');
-    const next: Msg[] = [...messages, { role: 'user', text }];
+    const img = pendingImage || undefined;
+    setPendingImage(null);
+    const next: Msg[] = [...messages, { role: 'user', text: text || (img ? '（参考图）' : ''), image: img }];
     setMessages(next);
     setLoading(true);
 
     try {
       const ai = loadAI();
       const reply = await llmChat([
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: SYSTEM_PROMPT + (img ? '\n（用户刚上传了一张参考图，请在回复中提及你已收到这张图，并询问这是产品图还是对标参考。）' : '') },
         ...next.map((m) => ({ role: m.role, content: m.text })),
       ], ai);
       setMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
@@ -98,6 +123,42 @@ export default function Luna() {
     } catch (e) {
       setToast((e as Error).message || 'AI 暂时连不上');
     } finally { setLoading(false); }
+  };
+
+  const onPickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > 4 * 1024 * 1024) { setToast('图片请小于 4MB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setPendingImage(String(reader.result));
+    reader.readAsDataURL(f);
+  };
+
+  const generateMockup = async () => {
+    if (imageGenerating) return;
+    setImageGenerating(true);
+    try {
+      const prompt = [
+        '高品质包装设计效果图，商业摄影风格，柔光，干净背景，',
+        extracted.product && `产品：${extracted.product}，`,
+        extracted.brand && `品牌名：${extracted.brand}，`,
+        extracted.style && `风格：${extracted.style}，`,
+        extracted.material && `材质：${extracted.material}，`,
+        extracted.colors && `配色：${extracted.colors}，`,
+        extracted.audience && `面向人群：${extracted.audience}，`,
+        '真实感，高清，专业包装样机，正面视角，影棚灯光。',
+      ].filter(Boolean).join('');
+      const lastUserImage = [...messages].reverse().find((m) => m.role === 'user' && m.image)?.image;
+      const url = await callSeedream(prompt, lastUserImage);
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        text: '根据我们聊的内容，生成了一张效果图（可基于此方向继续调整，或进入工作台细化）：',
+        image: url,
+      }]);
+    } catch (e) {
+      setToast((e as Error).message || '图像生成失败');
+    } finally { setImageGenerating(false); }
   };
 
   const enterWorkspace = () => {
@@ -132,9 +193,13 @@ export default function Luna() {
     <div className="luna-chat" ref={scrollRef}>
       {messages.map((m, i) => <div key={i} className={`luna-msg ${m.role}`}>
         {m.role === 'assistant' && <div className="luna-avatar">L</div>}
-        <div className="luna-bubble">{m.text}</div>
+        <div className="luna-bubble">
+          {m.text && <div>{m.text}</div>}
+          {m.image && <img src={m.image} alt="参考图" style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, marginTop: 8, display: 'block' }} />}
+        </div>
       </div>)}
       {loading && <div className="luna-msg assistant"><div className="luna-avatar">L</div><div className="luna-bubble luna-typing">正在输入…</div></div>}
+      {imageGenerating && <div className="luna-msg assistant"><div className="luna-avatar">L</div><div className="luna-bubble luna-typing">正在生成效果图…（首次约 10-30 秒）</div></div>}
     </div>
 
     <div className="luna-input-bar">
@@ -143,11 +208,21 @@ export default function Luna() {
         <div className="luna-progress-track"><div className="luna-progress-fill" style={{ width: `${(progress / FIELDS.length) * 100}%` }} /></div>
         <div className="luna-progress-fields">{FIELDS.map((f) => <span key={f.key} className={extracted[f.key] ? 'done' : ''}>{f.label}</span>)}</div>
       </div>
+      {pendingImage && <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0' }}>
+        <img src={pendingImage} alt="待发送" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6 }} />
+        <span style={{ fontSize: 12, color: '#888' }}>已选图，发送后作为参考</span>
+        <button className="v4-btn-line" onClick={() => setPendingImage(null)}>移除</button>
+      </div>}
       <div className="luna-input-row">
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
+        <button className="v4-btn-line" title="上传产品图 / 对标图" onClick={() => fileRef.current?.click()}>📎</button>
         <input className="luna-input" value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void send(); }}
-          placeholder="告诉 Luna 你的想法，或者直接问她…" />
+          placeholder="告诉 Luna 你的想法，或发产品图…" />
         <button className="v4-btn-line" disabled={loading} onClick={() => void send()}>{loading ? '…' : '发送'}</button>
+        <button className="v4-btn-line" disabled={imageGenerating || progress < 1} onClick={() => void generateMockup()}>
+          {imageGenerating ? '生成中…' : '✨ 生成效果图'}
+        </button>
         <button className="v4-btn-dark" disabled={progress < 1} onClick={enterWorkspace}>进入工作台 →</button>
       </div>
       <div className="luna-model-row">

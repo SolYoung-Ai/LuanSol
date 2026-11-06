@@ -19,6 +19,8 @@ const { URL } = require('url');
 // 一份独立的 CORS 来源白名单（只放可信站点 origin，不回显任意 Origin）。
 // 本路由的网关不注入 Access-Control-Allow-Origin，因此不会出现双重值。
 const MAX_BODY_BYTES = 256 * 1024;
+// 图像路由要装下参考图 base64，单独放宽
+const MAX_IMAGE_BODY_BYTES = 6 * 1024 * 1024;
 
 function allowedOrigins() {
   return String(process.env.LUNASOL_ALLOWED_ORIGINS || '')
@@ -111,13 +113,13 @@ function sendOptions(res) {
   res.end();
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     let raw = '';
     let size = 0;
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
+      if (size > maxBytes) {
         reject(new Error('请求体过大'));
         req.destroy();
         return;
@@ -197,6 +199,77 @@ function safeUpstreamError(r) {
   return msg.slice(0, 200);
 }
 
+/** 转发图像生成请求到火山引擎方舟 Seedream */
+function callSeedream(payload) {
+  return new Promise((resolve, reject) => {
+    const base = (process.env.SEEDREAM_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/+$/, '');
+    const target = new URL(base + '/images/generations');
+    const data = JSON.stringify(payload);
+    const req = https.request(target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.SEEDREAM_API_KEY || ''}`,
+        'Content-Length': Buffer.byteLength(data),
+      },
+    }, (upstream) => {
+      let raw = '';
+      upstream.setEncoding('utf8');
+      upstream.on('data', (c) => { raw += c; });
+      upstream.on('end', () => {
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch { /* */ }
+        resolve({ status: upstream.statusCode || 502, json: parsed, raw: raw.slice(0, 1500) });
+      });
+    });
+    req.setTimeout(120000, () => req.destroy(new Error('图像生成超时')));
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+async function handleImage(req, res, body) {
+  if (!process.env.SEEDREAM_API_KEY) {
+    return sendJson(res, 503, { error: { message: '后台尚未配置 SEEDREAM_API_KEY' } });
+  }
+  const token = process.env.LUNASOL_PROXY_TOKEN || '';
+  if (!token || String(req.headers['x-lunasol-token'] || '') !== token) {
+    return sendJson(res, 401, { error: { message: '代理令牌无效' } });
+  }
+  const verdict = guard(req);
+  if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
+
+  const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, 2000) : '';
+  if (!prompt) return sendJson(res, 400, { error: { message: '缺少 prompt' } });
+
+  const payload = {
+    model: process.env.SEEDREAM_MODEL || 'doubao-seedream-3-0-t2i-250415',
+    prompt,
+    size: typeof body.size === 'string' ? body.size : '1024x1024',
+    response_format: 'url',
+    // 参考图：base64 dataURL，Seedream 接受
+    ...(typeof body.image === 'string' && body.image.startsWith('data:image/') ? { image: body.image } : {}),
+  };
+
+  try {
+    dayUsed += 1;
+    const r = await callSeedream(payload);
+    if (r.status < 200 || r.status >= 300) {
+      return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, {
+        error: { message: safeUpstreamError(r) },
+      });
+    }
+    // 透传上游 data 数组（url / b64_json）
+    return sendJson(res, 200, {
+      created: r.json.created || Date.now(),
+      data: (r.json.data || []).map((d) => ({ url: d.url || '', b64_json: d.b64_json || '' })),
+    });
+  } catch (e) {
+    return sendJson(res, 502, { error: { message: `图像生成失败：${(e && e.message ? e.message : String(e)).slice(0, 160)}` } });
+  }
+}
+
 async function handleChat(req, res, body) {
   if (!process.env.DEEPSEEK_API_KEY) {
     return sendJson(res, 503, { error: { message: '后台尚未配置 DEEPSEEK_API_KEY，请在云函数环境变量中设置' } });
@@ -266,7 +339,8 @@ const server = http.createServer(async (req, res) => {
       model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
       keyConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
       tokenRequired: Boolean(process.env.LUNASOL_PROXY_TOKEN),
-      imageGeneration: false,
+      imageGeneration: Boolean(process.env.SEEDREAM_API_KEY),
+      imageProvider: process.env.SEEDREAM_API_KEY ? 'seedream' : 'none',
       limits: { ratePerMinute: RATE_PER_MINUTE, dailyLimit: DAILY_LIMIT, dailyUsed: dayUsed, requireOrigin: REQUIRE_ORIGIN },
     });
   }
@@ -281,9 +355,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && pathname.endsWith('/images/generations')) {
-    return sendJson(res, 501, {
-      error: { message: 'DeepSeek 不提供图像生成能力，请关闭图像生成或使用内置插画/上传素材。' },
-    });
+    let body;
+    try { body = await readJsonBody(req, MAX_IMAGE_BODY_BYTES); } catch (e) {
+      return sendJson(res, 400, { error: { message: (e && e.message) || '请求体错误' } });
+    }
+    return handleImage(req, res, body);
   }
 
   if (isChat || pathname.endsWith('/images/generations')) {
