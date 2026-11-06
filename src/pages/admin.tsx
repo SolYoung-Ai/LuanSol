@@ -6,35 +6,37 @@
  *  - 作废兑换码
  *  - 后端待云函数加 NoSQL 路由，当前为前端 UI 骨架
  * ============================================================ */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Card, PageHead, SectionLabel, Notice, go } from '../ui';
 import { useAuth } from '../cloud/auth';
+import { db } from '../cloud/sdk';
 
 interface RedeemCode {
   code: string;
   points: number;
-  usedBy?: string;
-  usedAt?: string;
-  createdAt: string;
-  active: boolean;
-}
-
-/** 本地草稿列表（后端接通后替换为云函数拉取） */
-const STORAGE_KEY = 'lunasol:admin:redeem_codes';
-
-function loadCodes(): RedeemCode[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-}
-function saveCodes(c: RedeemCode[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(c)); } catch { /* */ }
+  used: boolean;
+  used_by?: string | null;
+  created_at?: string;
 }
 
 export default function Admin() {
   const auth = useAuth();
   const [points, setPoints] = useState(100);
   const [customPoints, setCustomPoints] = useState('');
-  const [codes, setCodes] = useState<RedeemCode[]>(() => loadCodes());
+  const [codes, setCodes] = useState<RedeemCode[]>([]);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const d = await db();
+    if (d) {
+      const r = await d.from('lunasol_redeem_codes').select('code,points,used,used_by,created_at').order('created_at', { ascending: false });
+      if (r.data) setCodes(r.data as RedeemCode[]);
+    }
+    setLoading(false);
+  };
+  useEffect(() => { void load(); }, []);
 
   if (auth.user?.email !== 'solyoungwork@gmail.com') {
     return <div className="page page-narrow">
@@ -45,26 +47,23 @@ export default function Admin() {
 
   const actualPoints = customPoints ? parseInt(customPoints, 10) || 0 : points;
 
-  const create = () => {
+  const create = async () => {
     if (actualPoints <= 0) { setMessage({ ok: false, text: '请输入有效积分额度' }); return; }
     const code = `LS-${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-    const next: RedeemCode = {
-      code,
-      points: actualPoints,
-      createdAt: new Date().toISOString(),
-      active: true,
-    };
-    const list = [next, ...codes];
-    setCodes(list);
-    saveCodes(list);
+    const d = await db();
+    if (!d) { setMessage({ ok: false, text: '数据库未连接' }); return; }
+    await d.from('lunasol_redeem_codes').insert({ code, points: actualPoints, used: false });
     setMessage({ ok: true, text: `已创建兑换码 ${code}（${actualPoints} 积分）` });
     setCustomPoints('');
+    void load();
   };
 
-  const revoke = (code: string) => {
-    const list = codes.map((c) => c.code === code ? { ...c, active: false } : c);
-    setCodes(list); saveCodes(list);
+  const revoke = async (code: string) => {
+    const d = await db();
+    if (!d) return;
+    await d.from('lunasol_redeem_codes').update({ used: true, used_by: 'revoked' }).eq('code', code);
     setMessage({ ok: true, text: `已作废 ${code}` });
+    void load();
   };
 
   const presets = [100, 200, 300, 500, 1000];
@@ -100,7 +99,8 @@ export default function Admin() {
 
     <Card className="pad-card">
       <SectionLabel>已创建兑换码（{codes.length}）</SectionLabel>
-      {codes.length === 0
+      {loading ? <p style={{ color: '#999' }}>加载中…</p>
+        : codes.length === 0
         ? <p style={{ color: '#999' }}>暂无兑换码</p>
         : <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
@@ -118,13 +118,13 @@ export default function Admin() {
                   <td style={{ padding: 8, fontFamily: 'monospace' }}>{c.code}</td>
                   <td style={{ padding: 8 }}>{c.points}</td>
                   <td style={{ padding: 8 }}>
-                    {c.usedBy ? <span style={{ color: '#999' }}>已使用 ({c.usedBy})</span>
-                      : c.active ? <span style={{ color: 'green' }}>可用</span>
-                      : <span style={{ color: 'red' }}>已作废</span>}
+                    {c.used
+                      ? (c.used_by && c.used_by !== 'revoked' ? <span style={{ color: '#999' }}>已使用</span> : <span style={{ color: 'red' }}>已作废</span>)
+                      : <span style={{ color: 'green' }}>可用</span>}
                   </td>
-                  <td style={{ padding: 8, color: '#999', fontSize: 12 }}>{new Date(c.createdAt).toLocaleString()}</td>
+                  <td style={{ padding: 8, color: '#999', fontSize: 12 }}>{c.created_at ? new Date(c.created_at).toLocaleString() : '-'}</td>
                   <td style={{ padding: 8 }}>
-                    {c.active && !c.usedBy && (
+                    {!c.used && (
                       <button className="v4-btn-line" onClick={() => revoke(c.code)}>作废</button>
                     )}
                   </td>
@@ -133,7 +133,7 @@ export default function Admin() {
             </tbody>
           </table>}
       <p style={{ color: '#999', fontSize: 12, marginTop: 12 }}>
-        注：当前兑换码存储在浏览器本地，接通云函数后将改为服务端存储。
+        兑换码已存储在云端数据库，所有用户可实时使用。
       </p>
     </Card>
   </div>;

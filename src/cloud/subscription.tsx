@@ -27,6 +27,7 @@ export interface Subscription {
   status: SubStatus;
   quota_total: number;
   quota_used: number;
+  bonus_credits?: number;
   period_start: string | null;
   period_end: string | null;
   activated_by?: string | null;
@@ -282,36 +283,34 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     });
   }, []);
 
-  // 内测兑换码表（硬编码，后续接云函数 /redeem 路由）
-  // 注意：admin 页创建的码需要同步加到这里，否则其他设备无法识别
-  const REDEEM_CODES: Record<string, number> = {
-    // 内测测试码
-    'LS-100': 100,
-    'LS-200': 200,
-    'LS-500': 500,
-    'LS-TEST': 50,
-    // admin 创建的兑换码（2026-11-07）
-    'LS-Q08P2PAC': 10,
-    'LS-F0D0P5H3': 100,
-    'LS-Y3UHHI0W': 100,
-  };
-  const USED_KEY = 'lunasol_redeemed_codes';
-  const readUsed = () => { try { return JSON.parse(localStorage.getItem(USED_KEY) || '[]'); } catch { return []; } };
+  // 兑换码：从 PostgreSQL 读，校验，加积分到 subscription.bonus_credits
   const redeemCode = useCallback(async (code: string): Promise<{ ok: boolean; points?: number; message: string }> => {
     const c = code.trim().toUpperCase();
     if (!c) return { ok: false, message: '请输入兑换码' };
-    const points = REDEEM_CODES[c];
-    if (!points) return { ok: false, message: '兑换码无效，检查后重试（内测测试码：LS-100 / LS-200 / LS-500）' };
-    const used = readUsed();
-    if (used.includes(c)) return { ok: false, message: '该兑换码已使用过' };
-    used.push(c);
-    localStorage.setItem(USED_KEY, JSON.stringify(used));
-    addLocalCredits(points);
-    return { ok: true, points, message: `兑换成功！+${points} 积分` };
-  }, [addLocalCredits]);
+    const u = auth.user;
+    if (!u) return { ok: false, message: '请先登录再兑换' };
+    const db = await import('./sdk').then((m) => m.db()).catch(() => null);
+    if (!db) return { ok: false, message: '数据库未连接，请稍后再试' };
+    // 1. 查码
+    const r = await db.from('lunasol_redeem_codes').select('code,points,used,used_by').eq('code', c);
+    if (r.error || !r.data || r.data.length === 0) return { ok: false, message: '兑换码无效，检查后重试' };
+    const row = r.data[0] as { code: string; points: number; used: boolean; used_by: string | null };
+    if (row.used) return { ok: false, message: '该兑换码已被使用' };
+    // 2. 标记已使用
+    await db.from('lunasol_redeem_codes').update({ used: true, used_by: u.id }).eq('code', c);
+    // 3. 给用户加积分到 bonus_credits
+    const cur = subRef.current;
+    if (cur) {
+      await db.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + row.points }).eq('id', cur.id);
+      setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + row.points } : prev);
+    }
+    return { ok: true, points: row.points, message: `兑换成功！+${row.points} 积分` };
+  }, [auth.user]);
 
   const usedLeftRaw = metered ? remainingOf(sub) : null;
-  const usedLeft = usedLeftRaw !== null ? usedLeftRaw + localCredits : null;
+  // 积分余额 = 云端剩余（quota_total - quota_used + bonus_credits）+ 本地签到缓存
+  const bonus = sub ? (sub as any).bonus_credits || 0 : 0;
+  const usedLeft = usedLeftRaw !== null ? usedLeftRaw + bonus + localCredits : null;
   const isPro = isProActive(sub);
 
   const value = useMemo<SubCtx>(() => ({
