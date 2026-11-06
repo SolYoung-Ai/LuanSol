@@ -156,8 +156,12 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
           )}
           <button className={`v4-avatar-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={t('个人中心', 'Account menu')}>
             {auth.user
-              ? <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>
-              /* 未登录用极简人形剪影，不用「○」字符——「○」在 30px 圆里会被看成加载圈 */
+              ? (() => {
+                  const localAvatar = (() => { try { return localStorage.getItem(`lunasol_avatar_${auth.user.id}`); } catch { return null; } })();
+                  return localAvatar
+                    ? <img src={localAvatar} alt="头像" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+                    : <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>;
+                })()
               : <span className="v4-avatar v4-avatar-guest" aria-hidden>
                   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                     <circle cx="12" cy="8.2" r="3.1" />
