@@ -15,6 +15,15 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
   </button>;
 }
 
+/** 全站唯一的顶层导航。
+ *  V4 信息架构：左侧只有用户头像（唯一的个人功能入口），中间三个主入口，右侧留白。
+ *  不允许再出现重复的「登录」「订阅」按钮——个人功能全部收进头像菜单。 */
+const NAV_ITEMS = [
+  { label: '开始', path: '/', en: 'START' },
+  { label: '工作台', path: '/workspace', en: 'WORKSPACE' },
+  { label: '审美市场', path: '/market', en: 'THE AESTHETIC INDEX' },
+];
+
 export function Nav({ onLogin }: { onLogin: () => void }) {
   const hash = useHash();
   const auth = useAuth();
@@ -32,54 +41,64 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
 
   const go2 = (p: string) => { setOpen(false); go(p); };
   const requestLogin = () => { setOpen(false); onLogin(); };
+  const path = hash.split('?')[0];
+  // 「开始」是一个区域而不是单页：首页、九步向导、方案、编辑器、3D、印前、导出都属于它
+  const CREATE_PATHS = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
+  const active = (p: string) => {
+    if (p === '/') return path === '/' || CREATE_PATHS.some((x) => path.startsWith(x));
+    return path.startsWith(p);
+  };
 
-  const accountItems = [
-    { label: '个人主页', path: '/account' },
-    { label: '作品集', path: '/projects' },
-    { label: '我的订阅', path: '/subscribe' },
-    { label: '账号信息', path: '/settings' },
+  const guestItems: { label: string; path?: string; action?: () => void; primary?: boolean }[] = [
+    { label: '登录 / 注册', primary: true, action: requestLogin },
+    { label: '我的工作台', path: '/workspace' },
+    { label: '账号信息', path: '/account' },
+    { label: '订阅与会员', path: '/subscribe' },
+    { label: '个人设置', path: '/settings' },
+    { label: '帮助与反馈', path: '/help' },
+  ];
+  const userItems: { label: string; path?: string; action?: () => void }[] = [
+    { label: '账号信息', path: '/account' },
+    { label: '我的作品', path: '/workspace' },
+    { label: '我的收藏', path: '/workspace?tab=favorites' },
+    { label: '订阅状态', path: '/subscribe' },
+    { label: '账户设置', path: '/settings' },
+    { label: '帮助与反馈', path: '/help' },
   ];
 
-  return <header className="nav nav-min">
-    <div className="nav-inner">
-      <div className="nav-left">
-        <Logo compact />
-        <div className="nav-avatar-wrap" ref={menuRef}>
-          <button className="nav-avatar-btn" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open}>
-            {auth.user
-              ? <span className="nav-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>
-              : <span className="nav-avatar nav-avatar-guest" aria-hidden>👤</span>}
-            <span className="nav-avatar-name">{auth.user ? auth.user.label : '未登录'}</span>
-            <span className="nav-caret" aria-hidden>▾</span>
-          </button>
-          {open && <div className="nav-menu" role="menu">
-            {auth.user ? <>
-              <div className="nav-menu-user">
-                <span className="nav-avatar nav-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>
-                <div><strong>{auth.user.label}</strong><span>{auth.user.account || '已登录'}</span></div>
-              </div>
-              <div className="nav-menu-divider" />
-              {accountItems.map((m) => <button key={m.path} className="nav-menu-item" role="menuitem" onClick={() => go2(m.path)}>{m.label}</button>)}
-              <div className="nav-menu-divider" />
-              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/inspiration')}>灵感库</button>
-              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/structures')}>包装类型</button>
-              <div className="nav-menu-divider" />
-              <button className="nav-menu-item nav-menu-danger" role="menuitem" onClick={async () => { setOpen(false); await auth.signOut(); }}>退出登录</button>
-            </> : <>
-              <button className="nav-menu-item nav-menu-primary" role="menuitem" onClick={requestLogin}>登录 / 注册</button>
-              <div className="nav-menu-divider" />
-              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/inspiration')}>灵感库</button>
-              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/structures')}>包装类型</button>
-              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/projects')}>我的工作台</button>
-              <button className="nav-menu-item" role="menuitem" onClick={() => go2('/subscribe')}>订阅方案</button>
-            </>}
-          </div>}
-        </div>
+  return <header className="v4-nav">
+    <div className="v4-nav-inner">
+      <div className="v4-nav-left" ref={menuRef}>
+        <button className={`v4-avatar-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label="个人中心">
+          {auth.user
+            ? <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>
+            : <span className="v4-avatar v4-avatar-guest" aria-hidden>○</span>}
+        </button>
+        {open && <div className="v4-menu" role="menu">
+          {auth.user ? <>
+            <div className="v4-menu-user">
+              <span className="v4-avatar v4-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>
+              <div className="v4-menu-user-text"><strong>{auth.user.label}</strong><span>{auth.user.account || '已登录'}</span></div>
+            </div>
+            <div className="v4-menu-sep" />
+            {userItems.map((m) => <button key={m.label} className="v4-menu-item" role="menuitem" onClick={() => go2(m.path!)}>{m.label}</button>)}
+            <div className="v4-menu-sep" />
+            <button className="v4-menu-item v4-menu-danger" role="menuitem" onClick={async () => { setOpen(false); await auth.signOut(); }}>退出登录</button>
+          </> : <>
+            <div className="v4-menu-hint">未登录 · 作品只保存在本机</div>
+            <div className="v4-menu-sep" />
+            {guestItems.map((m) => <button key={m.label} className={`v4-menu-item ${m.primary ? 'v4-menu-primary' : ''}`} role="menuitem" onClick={() => (m.action ? m.action() : go2(m.path!))}>{m.label}</button>)}
+          </>}
+        </div>}
       </div>
-      <div className="nav-actions">
-        {!auth.user && <button className="link-btn" onClick={onLogin}>登录</button>}
-        <button className="btn btn-dark btn-sm" onClick={() => go('/subscribe')}>订阅 <span aria-hidden>↗</span></button>
-      </div>
+
+      <nav className="v4-nav-center" aria-label="主导航">
+        {NAV_ITEMS.map((n) => <button key={n.path} className={`v4-nav-item ${active(n.path) ? 'active' : ''}`} onClick={() => go(n.path)} aria-current={active(n.path) ? 'page' : undefined}>
+          {n.label}
+        </button>)}
+      </nav>
+
+      <div className="v4-nav-right" aria-hidden />
     </div>
   </header>;
 }

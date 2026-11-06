@@ -127,7 +127,10 @@ export async function recordUsage(uid: string, n = 1): Promise<number> {
   return next;
 }
 
-/** 占位开通：当前用激活码，后续替换为支付成功回调。 */
+/** 【仅供服务端/内部调用】直接写库开通会员。
+ *  绝不可由前端凭一个字符串调用：旧版 activate(code) 把 code 参数丢掉后直接调它，
+ *  导致任何登录用户输入任意文本都能拿到 600 次/月额度。前端入口已停用（见 activate），
+ *  未来只允许「支付回调」或「服务端校验激活码」后调用本函数。 */
 export async function activatePlan(uid: string, plan: Plan = 'pro_monthly', months = 1, by: string | null = null): Promise<CloudResult<Subscription>> {
   const d = await db(); if (!d) return fail('云服务未配置，无法开通');
   const start = new Date();
@@ -246,14 +249,15 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     return () => { registerAIGate(null); registerAIReporter(null); };
   }, [metered, requestLogin]);
 
-  const activate = useCallback(async (code: string): Promise<{ ok: boolean; message: string }> => {
+  /** 前端开通入口：当前一律拒绝。
+   *  原因：没有服务端校验的情况下，「输入任意字符串即开通」等于免费送会员。
+   *  真正的开通必须由支付回调或服务端激活码校验完成后写库；在那之前这里如实报「未开放」，
+   *  既不假装成功，也不给后门。 */
+  const activate = useCallback(async (_code: string): Promise<{ ok: boolean; message: string }> => {
     const u = auth.user;
-    if (!u) return { ok: false, message: '请先登录后再开通会员' };
-    if (!sdkUsable()) return { ok: false, message: '当前构建未接入云服务，无法开通（请在正式站点操作）' };
-    const r = await activatePlan(u.id, 'pro_monthly', 1, 'activation-code');
-    if (r.ok) { setSub(r.data); setPaywallOpen(false); setToast('已开通会员，去尽情使用 AI 吧'); return { ok: true, message: '会员已开通' }; }
-    return { ok: false, message: r.message };
-  }, [auth.user, setToast]);
+    if (!u) return { ok: false, message: '请先登录' };
+    return { ok: false, message: '会员开通尚未开放：支付系统接入中，激活通道已停用。开通后会在账户页显示真实有效期。' };
+  }, [auth.user]);
 
   const setPaywall = useCallback((open: boolean, reason?: string) => {
     setPaywallOpen(open);

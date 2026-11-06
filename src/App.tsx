@@ -20,8 +20,11 @@ const Schemes = lazy(() => import('./pages/flow').then((m) => ({ default: m.Sche
 const Editor = lazy(() => import('./pages/flow').then((m) => ({ default: m.Editor })));
 const Inspiration = lazy(() => import('./pages/library').then((m) => ({ default: m.Inspiration })));
 const Structures = lazy(() => import('./pages/library').then((m) => ({ default: m.Structures })));
-const Projects = lazy(() => import('./pages/library').then((m) => ({ default: m.Projects })));
 const ProjectDetail = lazy(() => import('./pages/library').then((m) => ({ default: m.ProjectDetail })));
+const Workspace = lazy(() => import('./pages/workspace'));
+const Market = lazy(() => import('./pages/market').then((m) => ({ default: m.default })));
+const MarketSite = lazy(() => import('./pages/market').then((m) => ({ default: m.MarketSitePage })));
+const MarketWork = lazy(() => import('./pages/market').then((m) => ({ default: m.MarketWorkPage })));
 const Preview3D = lazy(() => import('./pages/output').then((m) => ({ default: m.Preview3D })));
 const Prepress = lazy(() => import('./pages/output').then((m) => ({ default: m.Prepress })));
 const ExportCenter = lazy(() => import('./pages/output').then((m) => ({ default: m.ExportCenter })));
@@ -34,11 +37,11 @@ function Footer() {
     <div className="footer-min-brand"><Logo compact /><span>AI PACKAGING DESIGN STUDIO</span></div>
     <div className="footer-min-links">
       <a href="#/wizard">开始设计</a>
-      <a href="#/subscribe">订阅方案</a>
-      <a href="#/account">账号</a>
-      <a href="#/inspiration">灵感库</a>
+      <a href="#/workspace">工作台</a>
+      <a href="#/market">审美市场</a>
+      <a href="#/subscribe">会员说明</a>
     </div>
-    <span className="footer-min-copy">© 2026 LunaSol · 让包装设计变得简单</span>
+    <span className="footer-min-copy">© 2026 LunaSol · 从想法，到一件作品</span>
   </div></footer>;
 }
 
@@ -66,9 +69,15 @@ export default function App() {
   else if (path === '/schemes') page = <Schemes />;
   else if (path === '/editor') page = <Editor />;
   else if (path === '/preview') page = <Preview3D />;
-  else if (path === '/inspiration') page = <Inspiration />;
+  /* 旧灵感库（内容为虚构项目）已下线：统一指向真实可溯源的审美市场 */
+  else if (path === '/inspiration') page = <Market />;
   else if (path === '/structures') page = <Structures />;
-  else if (path === '/projects') page = <Projects />;
+  /* 工作台：/workspace 与历史路径 /projects 指向同一个新页面，旧链接不 404 */
+  else if (path === '/workspace' || path === '/projects') page = <Workspace />;
+  /* 审美市场：列表 + 站点详情 + 作品详情 */
+  else if (path === '/market') page = <Market />;
+  else if (path.startsWith('/market/site/')) page = <MarketSite />;
+  else if (path.startsWith('/market/work/')) page = <MarketWork />;
   else if (path.startsWith('/project/')) page = <ProjectDetail />;
   else if (path === '/prepress') page = <Prepress />;
   else if (path === '/export') page = <ExportCenter />;

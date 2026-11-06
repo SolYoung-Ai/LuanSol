@@ -1,11 +1,12 @@
 /* ============================================================
- * 订阅方案页：免费 / 会员对比、当前状态、成本测算、开通（激活码占位）
+ * 会员说明页：免费 / 会员对比、当前真实状态、成本测算
  * ------------------------------------------------------------
- *  - 支付系统尚未接入：开通走「激活码」占位，后续替换为支付成功回调；
+ *  - 支付系统尚未接入：页面只说明「即将开放」，不提供任何前端开通入口；
+ *    旧版的激活码输入框已移除（前端无法校验，任意字符串都能开通，属于后门）；
  *  - 所有价格与额度数字都来自 src/cloud/plans.ts（唯一权威来源），界面不写死；
- *  - 当前状态、剩余次数、续费入口来自 useSubscription。
+ *  - 当前状态、剩余次数来自 useSubscription 的真实数据。
  * ============================================================ */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Button, Card, Notice, PageHead, SectionLabel, Tag, go } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, remainingOf, isProActive } from '../cloud/subscription';
@@ -15,38 +16,16 @@ import { CLOUD_SITE_URL } from '../cloud/config';
 export default function Subscribe() {
   const a = useAuth();
   const sub = useSubscription();
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const codeRef = useRef<HTMLInputElement>(null);
-  const actRef = useRef<HTMLDivElement>(null);
-
-  /** 支付系统还没上线，主按钮不应该点了只提示「请输入激活码」。
-   *  这里直接把用户带到激活码输入框并聚焦，减少一步猜测。 */
-  const focusActivation = () => {
-    actRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    window.setTimeout(() => codeRef.current?.focus(), 320);
-  };
 
   const calc = useMemo(() => buildPlanCalc(), []);
   const summary = useMemo(() => planSummaryText(), []);
-
-  const activate = async () => {
-    if (!a.user) { setMsg({ ok: false, text: '请先登录后再订阅会员' }); return; }
-    if (!code.trim()) { setMsg({ ok: false, text: '请输入激活码' }); return; }
-    setBusy(true); setMsg(null);
-    const r = await sub.activate(code.trim());
-    setBusy(false);
-    setMsg({ ok: r.ok, text: r.message });
-    if (r.ok) { setCode(''); void sub.refresh(); }
-  };
 
   const left = sub.usedLeft ?? (sub.sub ? remainingOf(sub.sub) : 0);
   const pro = isProActive(sub.sub);
 
   return <div className="page subscribe-page">
-    <PageHead kicker="PLANS" title="订阅方案"
-      desc="平台统一接入 GPT-4o 与 DeepSeek-V3，你只管用，模型与密钥都在我们这边，你无法（也不需要）自己配置。" />
+    <PageHead kicker="MEMBERSHIP" title="会员说明"
+      desc="平台统一接入 DeepSeek，模型与密钥都在服务端，你不需要也无法自己配置。会员开通通道尚未上线，当前不扣费。" />
 
     {/* 当前状态 */}
     <Card className="pad-card sub-status-card">
@@ -87,14 +66,14 @@ export default function Subscribe() {
         <div className="plan-price">¥{PRICING.proMonthlyPriceRMB}<span>/月</span></div>
         <ul className="plan-feats">
           <li>每月 {PRICING.proMonthlyQuota} 次 AI 调用（统一额度）</li>
-          <li>GPT-4o + DeepSeek-V3 平台模型自动调度</li>
+          <li>平台统一接入 DeepSeek（服务端持有密钥）</li>
           <li>云端同步与多端取回</li>
           <li>全部导出与印前能力</li>
           <li>优先体验新 AI 能力</li>
         </ul>
         {pro
           ? <Button variant="outline" onClick={() => go('/account')}>已是会员</Button>
-          : <Button variant="accent" disabled={!a.user} onClick={focusActivation}>{busy ? '开通中…' : '立即订阅会员'}</Button>}
+          : <Button variant="accent" disabled onClick={() => {}}>即将开放</Button>}
       </Card>
     </div>
 
@@ -114,18 +93,20 @@ export default function Subscribe() {
       <pre className="plan-summary">{summary}</pre>
     </Card>
 
-    {/* 开通（支付上线前的激活码占位） */}
-    {!pro && <div ref={actRef}><Card className="pad-card activation-card">
-      <SectionLabel en="ACTIVATE">订阅会员（支付上线前的内测开通）</SectionLabel>
-      <p className="acct-msg">正式支付系统上线前，会员通过「激活码」开通：输入后即时获得每月 {PRICING.proMonthlyQuota} 次额度。后续会平滑替换为微信 / 支付宝支付回调，不影响已开通用户。</p>
+    {/* 开通状态：如实说明，不放任何前端开通入口 */}
+    {!pro && <Card className="pad-card activation-card">
+      <SectionLabel en="STATUS">会员开通状态</SectionLabel>
+      <p className="acct-msg">
+        会员开通通道尚未上线：真实价格、权益与扣款将以服务端支付回调为准。
+        当前<strong>不会扣费</strong>，也不会出现任何「已开通」的假状态。
+        内置设计引擎、在线编辑、3D 预览、印前检查与文件导出都不依赖会员，可继续使用。
+      </p>
       <div className="activation-row">
-        <input ref={codeRef} className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="输入激活码" disabled={!a.user}
-          onKeyDown={(e) => { if (e.key === 'Enter' && code.trim() && !busy) void activate(); }} />
-        <Button variant="accent" size="sm" disabled={busy || !code.trim() || !a.user} onClick={activate}>{busy ? '开通中…' : '开通会员'}</Button>
+        <Button variant="accent" disabled>即将开放</Button>
+        <Button variant="ghost" onClick={() => go('/account')}>查看我的额度</Button>
       </div>
-      {msg && <div className={`login-msg ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</div>}
-      {!a.user && <Notice tone="warn">请先点击右上角「登录」再订阅。</Notice>}
-    </Card></div>}
+      {!a.user && <Notice tone="warn">请先登录，登录后系统会自动记录你的真实额度。</Notice>}
+    </Card>}
 
     {!sub.metered && <Notice tone="warn">当前为 GitHub Pages 镜像，无法订阅（体验版无法追加安全域名）。请在正式站点 {CLOUD_SITE_URL} 登录并订阅。</Notice>}
   </div>;
