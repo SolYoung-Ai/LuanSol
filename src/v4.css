@@ -601,6 +601,15 @@ img, svg, video, canvas { max-width: 100%; }
 [data-theme="dark"] .notice-warn .notice-icon { background: #8a6a32; color: #1a1408; }
 [data-theme="dark"] .notice-success .notice-icon { background: #4c7c5e; color: #0d160f; }
 
+/* 遗留的「实底 + 白字」控件：浅色下正常，深色下 ink 变浅就会白字压浅底。
+   统一换成语义实底令牌，保持「深色下整体反转」的规则。 */
+[data-theme="dark"] :is(.btn-dark, .chip.active, .step.current .step-num, .toast,
+  .face-tabs button.active, .mini-msg.user, .chat-msg.user .chat-text, .chat-avatar) {
+  background: var(--v4-solid-bg);
+  color: var(--v4-solid-fg);
+  border-color: var(--v4-solid-bg);
+}
+
 /* 窄屏导航：英文长标签在 <=560px 换成短标签（Start / Work / Index），
    中文本身够短，直接复用。这样 390px 宽也不会挤爆或溢出。 */
 .v4-nav-label-short { display: none; }

@@ -72,17 +72,17 @@ img { display: block; max-width: 100%; }
 .toggle-hint { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
 .switch { flex: 0 0 40px; width: 40px; height: 22px; border-radius: 20px; background: #d9d6d0; position: relative; transition: background .2s; }
 .switch span { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px #0002; }
-.switch.on { background: var(--ink); }
+.switch.on { background: var(--v4-solid-bg, var(--ink)); }
 .switch.on span { transform: translateX(18px); }
 .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--radius); overflow: hidden; }
 .seg.full { display: flex; width: 100%; margin-bottom: 14px; }
 .seg button { padding: 7px 14px; font-size: 12.5px; color: var(--muted); border-right: 1px solid var(--line); flex: 1; transition: .2s; }
 .seg.full button { flex: 1; }
 .seg button:last-child { border-right: none; }
-.seg button.active { background: var(--ink); color: #fff; }
+.seg button.active { background: var(--v4-solid-bg, var(--ink)); color: var(--v4-solid-fg, #fff); }
 .seg button:disabled { opacity: .35; cursor: not-allowed; }
 .tag { display: inline-block; padding: 3px 9px; border: 1px solid var(--line-2); border-radius: 2px; font-size: 11px; color: var(--ink-2); letter-spacing: .03em; }
-.tag-dark { background: var(--ink); color: #fff; border-color: var(--ink); }
+.tag-dark { background: var(--v4-solid-bg, var(--ink)); color: var(--v4-solid-fg, #fff); border-color: transparent; }
 .tag-green { background: #e8f0eb; border-color: #cfe0d5; color: #2c5a45; }
 .tag-amber { background: #faf1e2; border-color: #ecdcbb; color: #8a6a32; }
 .tag-red { background: #f8eae8; border-color: #eed4d0; color: var(--red); }
