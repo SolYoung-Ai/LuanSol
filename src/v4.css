@@ -106,9 +106,7 @@ input, textarea, select { border-radius: 2px; }
 }
 .v4-wordmark:hover {
   transform: translateY(-2px);
-  color: #e8783a !important;
 }
-.v4-wordmark:hover span { color: #e8783a !important; }
 /* 右上角工具区：语言 / 深浅色 / 头像。三者间距靠 gap 统一，不各自加 margin */
 .v4-nav-right { justify-self: end; display: flex; align-items: center; gap: 2px; }
 .v4-nav-user { position: relative; }
