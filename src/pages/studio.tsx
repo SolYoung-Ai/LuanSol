@@ -133,6 +133,9 @@ export default function Studio() {
   };
 
   const onMouseUp = () => {
+    if (dragState.current) {
+      pushHistory(layers, brief);
+    }
     dragState.current = null;
   };
 
@@ -275,6 +278,78 @@ export default function Studio() {
 
   const [aiEditing, setAiEditing] = useState(false);
 
+  // 撤销/重做历史
+  const [history, setHistory] = useState<{ layers: Layer[]; brief: Partial<DesignBrief> }[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
+
+  const pushHistory = useCallback((newLayers: Layer[], newBrief: Partial<DesignBrief>) => {
+    setHistory((prev) => {
+      const trimmed = prev.slice(0, historyIndex + 1);
+      return [...trimmed, { layers: newLayers, brief: newBrief }].slice(-50);
+    });
+    setHistoryIndex((prev) => Math.min(prev + 1, 49));
+  }, [historyIndex]);
+
+  const undo = () => {
+    if (historyIndex <= 0) return;
+    const prev = history[historyIndex - 1];
+    setLayers(prev.layers);
+    setBrief(prev.brief);
+    setHistoryIndex(historyIndex - 1);
+  };
+
+  const redo = () => {
+    if (historyIndex >= history.length - 1) return;
+    const next = history[historyIndex + 1];
+    setLayers(next.layers);
+    setBrief(next.brief);
+    setHistoryIndex(historyIndex + 1);
+  };
+
+  // 保存到 localStorage
+  const saveToLocal = useCallback(() => {
+    setSaveState('saving');
+    try {
+      localStorage.setItem('lunasol.studio.v1', JSON.stringify({ layers, brief, updatedAt: Date.now() }));
+      setSaveState('saved');
+    } catch {
+      setSaveState('error');
+    }
+  }, [layers, brief]);
+
+  // 从 localStorage 恢复
+  const loadFromLocal = useCallback(() => {
+    try {
+      const raw = localStorage.getItem('lunasol.studio.v1');
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      setLayers(data.layers || []);
+      setBrief(data.brief || {});
+      setHistory([{ layers: data.layers || [], brief: data.brief || {} }]);
+      setHistoryIndex(0);
+    } catch { /* 忽略 */ }
+  }, []);
+
+  useEffect(() => {
+    loadFromLocal();
+  }, [loadFromLocal]);
+
+  // 自动保存（3秒防抖）
+  useEffect(() => {
+    const t = setTimeout(() => saveToLocal(), 3000);
+    return () => clearTimeout(t);
+  }, [layers, brief, saveToLocal]);
+
+  // 多包装面
+  const [currentPanel, setCurrentPanel] = useState<'front' | 'back' | 'left' | 'right'>('front');
+  const panels = [
+    { id: 'front', name: '正面' },
+    { id: 'back', name: '背面' },
+    { id: 'left', name: '左侧' },
+    { id: 'right', name: '右侧' },
+  ] as const;
+
   const regenerateLayer = async (layerId: string) => {
     const layer = layers.find((l) => l.id === layerId);
     if (!layer || !auth.user) return;
@@ -325,10 +400,15 @@ export default function Studio() {
       }}>
         <button onClick={() => go('/workspace')} style={btnStyle}>← 返回</button>
         <span style={{ fontWeight: 600, fontSize: 15 }}>{brief.brand || '未命名项目'}</span>
-        <span style={{ color: '#999', fontSize: 12 }}>已保存</span>
+        <span style={{
+          color: saveState === 'saved' ? '#4caf50' : saveState === 'saving' ? '#ff9800' : '#f44336',
+          fontSize: 12,
+        }}>
+          {saveState === 'saved' ? '✓ 已保存' : saveState === 'saving' ? '⏳ 保存中...' : '✗ 保存失败'}
+        </span>
         <div style={{ flex: 1 }} />
-        <button style={btnStyle}>撤销</button>
-        <button style={btnStyle}>重做</button>
+        <button onClick={undo} disabled={historyIndex <= 0} style={{ ...btnStyle, opacity: historyIndex <= 0 ? 0.5 : 1 }}>撤销</button>
+        <button onClick={redo} disabled={historyIndex >= history.length - 1} style={{ ...btnStyle, opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>重做</button>
         <button style={btnStyle}>2D / 3D</button>
         <button style={btnStyle}>印前检查</button>
         <button style={{ ...btnStyle, background: '#1a1a2e', color: '#fff' }}>导出</button>
@@ -459,12 +539,39 @@ export default function Studio() {
         )}
 
         {/* 中间：设计画布 */}
-        <div
-          style={{ flex: 1, overflow: 'auto', position: 'relative', padding: 40 }}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-        >
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* 包装面切换 */}
+          <div style={{
+            display: 'flex',
+            gap: 4,
+            padding: '8px 16px',
+            background: '#fff',
+            borderBottom: '1px solid #e5e5e5',
+          }}>
+            {panels.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setCurrentPanel(p.id)}
+                style={{
+                  padding: '6px 12px',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  background: currentPanel === p.id ? '#1a1a2e' : 'transparent',
+                  color: currentPanel === p.id ? '#fff' : '#666',
+                }}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <div
+            style={{ flex: 1, overflow: 'auto', position: 'relative', padding: 40 }}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
+          >
           <div style={{
             width: 400,
             height: 500,
@@ -522,6 +629,7 @@ export default function Studio() {
                 <div style={{ fontSize: 12, marginTop: 8 }}>和 Luna 聊聊你的需求，然后生成设计方案</div>
               </div>
             )}
+          </div>
           </div>
         </div>
 
