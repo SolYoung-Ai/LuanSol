@@ -128,14 +128,16 @@ export default function Luna() {
 
     try {
       const ai = loadAI();
+      // 把用户选的对话模型传进去
+      const aiWithModel = { ...ai, textModel: chatModel };
       const reply = await llmChat([
         { role: 'system', content: SYSTEM_PROMPT + (img ? '\n（用户刚上传了一张参考图，请在回复中提及你已收到这张图，并询问这是产品图还是对标参考。）' : '') },
         ...next.map((m) => ({ role: m.role, content: m.text })),
-      ], ai);
+      ], aiWithModel);
       setMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
 
       // 异步抽取结构化信息（不阻塞对话）
-      llmJson<Extracted>([{ role: 'user', content: EXTRACT_PROMPT(next) }], ai)
+      llmJson<Extracted>([{ role: 'user', content: EXTRACT_PROMPT(next) }], aiWithModel)
         .then((ex) => setExtracted((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(ex).filter(([, v]) => v)) })))
         .catch(() => { /* 抽取失败不影响对话 */ });
     } catch (e) {

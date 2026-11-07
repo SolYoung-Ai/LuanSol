@@ -96,7 +96,22 @@ const ALLOWED_MODELS = new Set([
   'deepseek-chat',
   'deepseek-reasoner',
   'deepseek-flash',
+  // 方舟文本模型（前端选 tier 名，后台映射到真实模型 ID）
+  'kimi-k3.1',
+  'doubao-seed-pro',
+  'doubao-seed-lite',
+  'doubao-seed-turbo',
+  'glm-5.3',
 ]);
+
+/** 前端 tier 名 → 方舟真实模型 ID */
+const ARK_MODEL_MAP = {
+  'kimi-k3.1': 'kimi-k3-1-pro-261024',
+  'doubao-seed-pro': 'doubao-seed-2-1-pro-260915',
+  'doubao-seed-lite': 'doubao-seed-2-1-lite-260915',
+  'doubao-seed-turbo': 'doubao-seed-2-1-turbo-260915',
+  'glm-5.3': 'glm-5-3-flash-20250821',
+};
 
 // res 是每次请求独立的对象，把该请求的 CORS 头挂在它上面，避免并发串扰
 function sendJson(res, statusCode, data) {
@@ -187,6 +202,37 @@ function callDeepSeek(payload) {
       upstream.on('end', () => {
         let parsed = null;
         try { parsed = JSON.parse(raw); } catch { /* 交给下面统一处理 */ }
+        resolve({ status: upstream.statusCode || 502, json: parsed, raw: raw.slice(0, 1000) });
+      });
+    });
+    req.setTimeout(55000, () => req.destroy(new Error('模型服务超时')));
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+/** 转发文本对话到火山引擎方舟（Kimi / Doubao / GLM） */
+function callArkChat(payload) {
+  return new Promise((resolve, reject) => {
+    const base = 'https://ark.cn-beijing.volces.com/api/v3';
+    const target = new URL(base + '/chat/completions');
+    const data = JSON.stringify(payload);
+    const req = https.request(target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${process.env.SEEDREAM_API_KEY || ''}`,
+        'Content-Length': Buffer.byteLength(data),
+      },
+    }, (upstream) => {
+      let raw = '';
+      upstream.setEncoding('utf8');
+      upstream.on('data', (c) => { raw += c; });
+      upstream.on('end', () => {
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch { /* */ }
         resolve({ status: upstream.statusCode || 502, json: parsed, raw: raw.slice(0, 1000) });
       });
     });
@@ -306,11 +352,24 @@ async function handleChat(req, res, body) {
 
   try {
     dayUsed += 1;
-    let r = await callDeepSeek(payload);
+    // 根据模型名路由：方舟模型走 ARK，其他走 DeepSeek
+    const isArkModel = ARK_MODEL_MAP[payload.model];
+    let r;
+    if (isArkModel) {
+      // 方舟模型需要映射到真实模型 ID
+      const arkPayload = { ...payload, model: ARK_MODEL_MAP[payload.model] };
+      r = await callArkChat(arkPayload);
+    } else {
+      r = await callDeepSeek(payload);
+    }
     // 部分模型不接受 response_format：去掉该字段重试一次，不做结果伪装
     if (r.status === 400 && withJsonFormat && /response_format/i.test(r.raw)) {
       payload = buildUpstreamPayload(body, false);
-      r = await callDeepSeek(payload);
+      if (ARK_MODEL_MAP[payload.model]) {
+        r = await callArkChat({ ...payload, model: ARK_MODEL_MAP[payload.model] });
+      } else {
+        r = await callDeepSeek(payload);
+      }
     }
     if (r.status < 200 || r.status >= 300 || !r.json) {
       return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, {
