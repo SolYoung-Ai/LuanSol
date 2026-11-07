@@ -105,6 +105,14 @@ export async function ensureSubscription(uid: string): Promise<Subscription> {
   return row;
 }
 
+/** 获取本地日期字符串（YYYY-MM-DD），不用 UTC 避免凌晨跨天 bug */
+function localDateStr(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /** 自增用量计数（成功调用 AI 后）。返回最新 used，失败返回 -1。
  *  优先走数据库端的原子函数：并发调用不会互相覆盖计数；
  *  数据库函数不可用时退回「读-改-写」，结果仍然正确，只是并发下可能少计一次。 */
@@ -308,7 +316,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       const d = await db();
       if (!d) { setCheckinState({ checkedToday: false, streak: 0, loading: false }); return; }
       try {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localDateStr();
         // 查最近的签到记录，倒序
         const r = await d.from('lunasol_checkin_logs').select('checkin_date,streak,bonus').eq('user_id', u.id).order('checkin_date', { ascending: false }).limit(30);
         if (cancelled) return;
@@ -335,8 +343,8 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     const d = await db();
     if (!d) return { ok: false, points: 0, streak: 0, message: '数据库未连接' };
 
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const today = localDateStr();
+    const yesterday = localDateStr(new Date(Date.now() - 86400000));
 
     // 查上一次签到记录
     const r = await d.from('lunasol_checkin_logs').select('checkin_date,streak').eq('user_id', u.id).order('checkin_date', { ascending: false }).limit(1);
