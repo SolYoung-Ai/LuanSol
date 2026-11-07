@@ -157,7 +157,10 @@ export default function Workspace() {
         <p className="v4-sub">你的每一个想法，都在这里留下作品。</p>
       </div>
       <div className="v4-tools">
-        <button className="v4-btn-dark" onClick={() => go('/wizard')}>新建设计</button>
+        <button className="v4-btn-dark" onClick={() => {
+          if (auth.user?.email === 'solyoungwork@gmail.com') go('/wizard');
+          else setComingSoon(true);
+        }}>新建设计</button>
       </div>
     </div>
 
@@ -285,7 +288,10 @@ export default function Workspace() {
       </div>
       <h3>这里还没有作品</h3>
       <p>从一个想法开始，创建你的第一个包装。</p>
-      <button className="v4-btn-dark" onClick={() => setComingSoon(true)}>开始设计</button>
+      <button className="v4-btn-dark" onClick={() => {
+        if (auth.user?.email === 'solyoungwork@gmail.com') go('/wizard');
+        else setComingSoon(true);
+      }}>开始设计</button>
     </div>}
 
     {/* 单个删除确认 */}

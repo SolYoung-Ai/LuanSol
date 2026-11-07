@@ -13,10 +13,12 @@ import { createEmptyBrief } from '../engine/brief';
 import { createEmptyDraft } from '../v3/draft';
 import { WIZARD_STEPS, stepProgress } from '../v3/steps';
 import { useLang } from '../i18n';
+import { useAuth } from '../cloud/auth';
 
 export default function Home() {
   const { s, update, newProject } = useApp();
   const { t } = useLang();
+  const auth = useAuth();
   const [confirmNew, setConfirmNew] = useState(false);
   const [comingSoon, setComingSoon] = useState(false);
 
@@ -27,9 +29,10 @@ export default function Home() {
     go('/studio');
   };
 
-  /** 开始设计：入口暂未开放，弹开发中提示并引导去 Luna 对话 */
+  /** 开始设计：仅内部管理员可直接进入编辑器；其余用户弹开发中提示并引导去 Luna 对话 */
   const startWizard = () => {
-    setComingSoon(true);
+    if (auth.user?.email === 'solyoungwork@gmail.com') beginFresh();
+    else setComingSoon(true);
   };
 
   return <div className="v4-home">
