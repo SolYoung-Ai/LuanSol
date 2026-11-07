@@ -350,6 +350,64 @@ export default function Studio() {
     { id: 'right', name: '右侧' },
   ] as const;
 
+  // 导出功能
+  const exportPNG = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 500;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // 背景
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 400, 500);
+
+    // 绘制图层
+    layers.filter(l => l.visible !== false).forEach((layer) => {
+      if (layer.type === 'text') {
+        ctx.fillStyle = layer.color || '#333';
+        ctx.font = `${layer.fontSize || 14}px sans-serif`;
+        ctx.fillText(layer.content || '', layer.x, layer.y + (layer.fontSize || 14));
+      } else if (layer.type === 'background') {
+        ctx.fillStyle = '#f5f0e8';
+        ctx.fillRect(0, 0, 400, 500);
+      }
+    });
+
+    // 下载
+    const link = document.createElement('a');
+    link.download = `${brief.brand || '包装设计'}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
+  // 整体 AI 修改
+  const modifyOverall = async (instruction: string) => {
+    if (!auth.user) return;
+    setGenerating(true);
+    try {
+      // 重新生成所有图片图层
+      const newLayers = [...layers];
+      for (let i = 0; i < newLayers.length; i++) {
+        const layer = newLayers[i];
+        if (layer.type === 'image' || layer.type === 'background') {
+          const prompt = `${instruction}，${brief.style || '现代风格'}，包装设计素材`;
+          const newSrc = await callSeedream(prompt);
+          newLayers[i] = { ...layer, src: newSrc };
+        }
+      }
+      setLayers(newLayers);
+      pushHistory(newLayers, brief);
+      await recordUsage(auth.user.id, newLayers.filter(l => l.type === 'image' || l.type === 'background').length * 10);
+      sub.refresh();
+      setMessages((prev) => [...prev, { role: 'assistant', text: '已完成整体修改！', ts: Date.now() }]);
+    } catch (e) {
+      setMessages((prev) => [...prev, { role: 'assistant', text: `修改失败：${(e as Error).message}`, ts: Date.now() }]);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const regenerateLayer = async (layerId: string) => {
     const layer = layers.find((l) => l.id === layerId);
     if (!layer || !auth.user) return;
@@ -411,7 +469,7 @@ export default function Studio() {
         <button onClick={redo} disabled={historyIndex >= history.length - 1} style={{ ...btnStyle, opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>重做</button>
         <button style={btnStyle}>2D / 3D</button>
         <button style={btnStyle}>印前检查</button>
-        <button style={{ ...btnStyle, background: '#1a1a2e', color: '#fff' }}>导出</button>
+        <button onClick={exportPNG} style={{ ...btnStyle, background: '#1a1a2e', color: '#fff' }}>导出 PNG</button>
       </div>
 
       {/* 三栏主体 */}
@@ -791,6 +849,49 @@ export default function Studio() {
                   }}
                 >
                   {aiEditing ? '⏳ 正在生成...' : '✨ 让 AI 重新生成这个元素'}
+                </button>
+              </div>
+            )}
+
+            {/* 整体修改（未选中图层时显示） */}
+            {!selectedLayerObj && (
+              <div style={{ borderTop: '1px solid #e5e5e5', padding: 16 }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>整体设计</h4>
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+                  未选中任何图层，可以对整体设计进行修改。
+                </div>
+                <button
+                  onClick={() => modifyOverall('让整体设计更高级，减少装饰')}
+                  disabled={generating}
+                  style={{
+                    marginBottom: 8,
+                    width: '100%',
+                    padding: '8px',
+                    background: '#e3f2fd',
+                    border: '1px solid #2196f3',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    color: '#1976d2',
+                  }}
+                >
+                  让设计更高级
+                </button>
+                <button
+                  onClick={() => modifyOverall('整体换成低饱和度配色')}
+                  disabled={generating}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    background: '#e3f2fd',
+                    border: '1px solid #2196f3',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    color: '#1976d2',
+                  }}
+                >
+                  换成低饱和度配色
                 </button>
               </div>
             )}
