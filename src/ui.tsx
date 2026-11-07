@@ -24,8 +24,8 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
  *  个人功能（登录、账号、订阅、设置、帮助）全部收进右上角的头像菜单，
  *  顶级导航不允许再出现重复的「登录」「订阅」按钮。 */
 const NAV_ITEMS = [
-  { zh: 'Luan', en: 'Luan', enShort: 'Luan', path: '/luna' },
   { zh: '开始', en: 'Start', enShort: 'Start', path: '/' },
+  { zh: 'Luan', en: 'Luan', enShort: 'Luan', path: '/luna' },
   { zh: '工作台', en: 'Workspace', enShort: 'Work', path: '/workspace' },
   { zh: '审美市场', en: 'Aesthetic Index', enShort: 'Index', path: '/market' },
 ];
