@@ -151,6 +151,7 @@ export default function Luna() {
       setToast(msg);
       // 错误也显示在对话里，用户能看到
       setMessages((prev) => [...prev, { role: 'assistant', text: `抱歉，${msg}。请稍后再试，或者换个说法。` }]);
+      console.error('Luna chat error:', e);
     } finally {
       setLoading(false);
     }

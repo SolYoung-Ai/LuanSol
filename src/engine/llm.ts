@@ -19,7 +19,7 @@ export const DEFAULT_AI: AISettings = {
   // DeepSeek 只提供文本模型，不伪造图像生成能力
   imageEnabled: false,
   temperature: 0.7,
-  retries: 1,
+  retries: 2,
   lastTest: null,
 };
 
@@ -130,7 +130,7 @@ export async function llmChat(messages: LLMMessage[], s: AISettings, json = fals
   const model = s.textModel.trim();
   return withRetry(async () => {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 60000);
+    const timer = setTimeout(() => ctrl.abort(), 120000);
     try {
       const res = await fetch(endpoint(s.baseUrl, '/chat/completions'), {
         method: 'POST',
@@ -146,12 +146,26 @@ export async function llmChat(messages: LLMMessage[], s: AISettings, json = fals
       });
       if (!res.ok) {
         const t = await res.text().catch(() => '');
-        throw new Error(`接口返回 ${res.status}：${t.slice(0, 180)}`);
+        // 优化错误提示，让用户更容易理解
+        if (res.status === 401) throw new Error('登录已过期，请重新登录');
+        if (res.status === 402) throw new Error(`积分不足：${t.slice(0, 100)}`);
+        if (res.status === 429) throw new Error('请求太频繁，请稍后再试');
+        if (res.status >= 500) throw new Error('AI 服务暂时不可用，请稍后再试');
+        throw new Error(`接口返回 ${res.status}：${t.slice(0, 120)}`);
       }
       const data = await res.json();
       const content = data?.choices?.[0]?.message?.content;
-      if (typeof content !== 'string') throw new Error('接口未返回文本内容');
+      if (typeof content !== 'string') throw new Error('AI 没有返回内容，请换个说法试试');
       return content;
+    } catch (e) {
+      // 网络错误（Failed to fetch）优化提示
+      if (e instanceof TypeError && e.message.includes('Failed to fetch')) {
+        throw new Error('网络连接失败，请检查网络后重试');
+      }
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        throw new Error('请求超时，AI 响应太慢，请稍后再试');
+      }
+      throw e;
     } finally { clearTimeout(timer); }
   }, s.retries);
 }
