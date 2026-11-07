@@ -284,6 +284,7 @@ export default function Studio() {
 
   const [aiEditing, setAiEditing] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [is3D, setIs3D] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem('lunasol.studio.guide')) {
@@ -296,6 +297,37 @@ export default function Studio() {
   const [history, setHistory] = useState<{ layers: Layer[]; brief: Partial<DesignBrief> }[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
+
+  // 版本历史
+  const [versions, setVersions] = useState<{ id: string; label: string; layers: Layer[]; brief: Partial<DesignBrief>; ts: number }[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
+
+  const saveVersion = (label: string) => {
+    const v = {
+      id: `v_${Date.now()}`,
+      label: label || `版本 ${versions.length + 1}`,
+      layers: [...layers],
+      brief: { ...brief },
+      ts: Date.now(),
+    };
+    setVersions((prev) => [v, ...prev].slice(0, 20));
+    try {
+      localStorage.setItem('lunasol.studio.versions', JSON.stringify([v, ...versions].slice(0, 20)));
+    } catch { /* 忽略 */ }
+  };
+
+  const restoreVersion = (v: { layers: Layer[]; brief: Partial<DesignBrief> }) => {
+    setLayers(v.layers);
+    setBrief(v.brief);
+    setShowVersions(false);
+  };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('lunasol.studio.versions');
+      if (raw) setVersions(JSON.parse(raw));
+    } catch { /* 忽略 */ }
+  }, []);
 
   const pushHistory = useCallback((newLayers: Layer[], newBrief: Partial<DesignBrief>) => {
     setHistory((prev) => {
@@ -365,12 +397,12 @@ export default function Studio() {
   ] as const;
 
   // 导出功能
-  const exportPNG = () => {
+  const renderCanvas = () => {
     const canvas = document.createElement('canvas');
     canvas.width = 400;
     canvas.height = 500;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return canvas;
 
     // 背景
     ctx.fillStyle = '#ffffff';
@@ -388,11 +420,24 @@ export default function Studio() {
       }
     });
 
-    // 下载
+    return canvas;
+  };
+
+  const exportPNG = () => {
+    const canvas = renderCanvas();
     const link = document.createElement('a');
     link.download = `${brief.brand || '包装设计'}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
+  };
+
+  const exportPDF = async () => {
+    const { jsPDF } = await import('jspdf');
+    const canvas = renderCanvas();
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    pdf.addImage(imgData, 'PNG', 10, 10, 190, 230);
+    pdf.save(`${brief.brand || '包装设计'}.pdf`);
   };
 
   // 整体 AI 修改
@@ -481,9 +526,12 @@ export default function Studio() {
         <div style={{ flex: 1 }} />
         <button onClick={undo} disabled={historyIndex <= 0} style={{ ...btnStyle, opacity: historyIndex <= 0 ? 0.5 : 1 }}>撤销</button>
         <button onClick={redo} disabled={historyIndex >= history.length - 1} style={{ ...btnStyle, opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>重做</button>
-        <button style={btnStyle}>2D / 3D</button>
+        <button onClick={() => saveVersion('手动保存')} style={btnStyle}>保存版本</button>
+        <button onClick={() => setShowVersions(!showVersions)} style={btnStyle}>版本历史</button>
+        <button onClick={() => setIs3D(!is3D)} style={btnStyle}>{is3D ? '切回 2D' : '3D 预览'}</button>
         <button style={btnStyle}>印前检查</button>
-        <button onClick={exportPNG} style={{ ...btnStyle, background: '#1a1a2e', color: '#fff' }}>导出 PNG</button>
+        <button onClick={exportPNG} style={btnStyle}>导出 PNG</button>
+        <button onClick={exportPDF} style={{ ...btnStyle, background: '#1a1a2e', color: '#fff' }}>导出 PDF</button>
       </div>
 
       {/* 三栏主体 */}
@@ -691,7 +739,140 @@ export default function Studio() {
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
           >
-            {/* 新手引导 */}
+            {/* 3D 预览模式 */}
+            {is3D && (
+              <div style={{
+                width: 400,
+                height: 500,
+                margin: '0 auto',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: 8,
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: 14,
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
+                  <div>3D 预览模式</div>
+                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8 }}>立体包装效果预览</div>
+                </div>
+              </div>
+            )}
+
+            {/* 2D 画布模式 */}
+            {!is3D && (
+              <div style={{
+                width: 400,
+                height: 500,
+                margin: '0 auto',
+                background: '#fff',
+                boxShadow: '0 4px 24px rgba(0,0,0,0.1)',
+                position: 'relative',
+                transform: `scale(${zoom})`,
+                transformOrigin: 'top center',
+              }}>
+                {layers.filter(l => l.visible !== false).map((layer) => (
+                  <div
+                    key={layer.id}
+                    onMouseDown={(e) => onLayerMouseDown(e, layer)}
+                    onClick={() => setSelectedLayer(layer.id)}
+                    style={{
+                      position: 'absolute',
+                      left: layer.x,
+                      top: layer.y,
+                      width: layer.width,
+                      height: layer.height,
+                      border: selectedLayer === layer.id ? '2px solid #2196f3' : '1px dashed transparent',
+                      cursor: layer.locked ? 'not-allowed' : 'move',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: layer.fontSize || 14,
+                      color: layer.color || '#333',
+                      background: layer.type === 'background' ? '#f5f0e8' : 'transparent',
+                      opacity: layer.opacity || 1,
+                    }}
+                  >
+                    {layer.type === 'image' && layer.src ? (
+                      <img src={layer.src} alt={layer.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : layer.type === 'text' ? (
+                      layer.content
+                    ) : (
+                      layer.name
+                    )}
+                    {layer.locked && <span style={{ position: 'absolute', top: 2, right: 4, fontSize: 10 }}>🔒</span>}
+                  </div>
+                ))}
+                {layers.length === 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    textAlign: 'center',
+                    color: '#999',
+                    fontSize: 14,
+                  }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>🎨</div>
+                    <div>画布是空的</div>
+                    <div style={{ fontSize: 12, marginTop: 8 }}>和 Luna 聊聊你的需求，然后生成设计方案</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 版本历史面板（浮层） */}
+            {showVersions && (
+              <div style={{
+                position: 'absolute',
+                top: 20,
+                right: 20,
+                width: 260,
+                background: '#fff',
+                borderRadius: 12,
+                boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
+                zIndex: 100,
+                maxHeight: 400,
+                overflow: 'auto',
+              }}>
+                <div style={{ padding: 12, borderBottom: '1px solid #eee', fontWeight: 600, fontSize: 14 }}>
+                  版本历史（{versions.length}）
+                  <button
+                    onClick={() => setShowVersions(false)}
+                    style={{ float: 'right', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div style={{ padding: 8 }}>
+                  {versions.length === 0 && <div style={{ padding: 12, color: '#999', fontSize: 13 }}>暂无版本，点击「保存版本」创建</div>}
+                  {versions.map((v) => (
+                    <div
+                      key={v.id}
+                      onClick={() => restoreVersion(v)}
+                      style={{
+                        padding: '10px 12px',
+                        marginBottom: 4,
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        background: '#f9f9f9',
+                      }}
+                    >
+                      <div style={{ fontWeight: 500 }}>{v.label}</div>
+                      <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+                        {new Date(v.ts).toLocaleString()} · {v.layers.length} 个图层
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 新手引导（浮层） */}
             {showGuide && layers.length === 0 && (
               <div style={{
                 position: 'absolute',
@@ -730,64 +911,6 @@ export default function Studio() {
                 </button>
               </div>
             )}
-          <div style={{
-            width: 400,
-            height: 500,
-            margin: '0 auto',
-            background: '#fff',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.1)',
-            position: 'relative',
-            transform: `scale(${zoom})`,
-            transformOrigin: 'top center',
-          }}>
-            {layers.filter(l => l.visible !== false).map((layer) => (
-              <div
-                key={layer.id}
-                onMouseDown={(e) => onLayerMouseDown(e, layer)}
-                onClick={() => setSelectedLayer(layer.id)}
-                style={{
-                  position: 'absolute',
-                  left: layer.x,
-                  top: layer.y,
-                  width: layer.width,
-                  height: layer.height,
-                  border: selectedLayer === layer.id ? '2px solid #2196f3' : '1px dashed transparent',
-                  cursor: layer.locked ? 'not-allowed' : 'move',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: layer.fontSize || 14,
-                  color: layer.color || '#333',
-                  background: layer.type === 'background' ? '#f5f0e8' : 'transparent',
-                  opacity: layer.opacity || 1,
-                }}
-              >
-                {layer.type === 'image' && layer.src ? (
-                  <img src={layer.src} alt={layer.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : layer.type === 'text' ? (
-                  layer.content
-                ) : (
-                  layer.name
-                )}
-                {layer.locked && <span style={{ position: 'absolute', top: 2, right: 4, fontSize: 10 }}>🔒</span>}
-              </div>
-            ))}
-            {layers.length === 0 && (
-              <div style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                textAlign: 'center',
-                color: '#999',
-                fontSize: 14,
-              }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>🎨</div>
-                <div>画布是空的</div>
-                <div style={{ fontSize: 12, marginTop: 8 }}>和 Luna 聊聊你的需求，然后生成设计方案</div>
-              </div>
-            )}
-          </div>
           </div>
         </div>
 
