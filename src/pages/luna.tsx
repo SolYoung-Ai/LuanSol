@@ -197,8 +197,12 @@ export default function Luna() {
       ].filter(Boolean).join('');
       const lastUserImage = [...messages].reverse().find((m) => m.role === 'user' && m.image)?.image;
       const url = await callSeedream(prompt, lastUserImage, imageTier, auth.user?.id);
-      // 积分由云函数统一扣减，前端只需要刷新显示
-      if (auth.user) sub.refresh();
+      // 生成成功后扣减积分
+      if (auth.user) {
+        const cost = imageTier === 'flash' ? PRICING.costs.imageFlash : imageTier === 'lite' ? PRICING.costs.imageLite : PRICING.costs.imagePro;
+        await recordUsage(auth.user.id, cost);
+        sub.refresh();
+      }
       setMessages((prev) => [...prev, {
         role: 'assistant',
         text: '根据我们聊的内容，生成了一张效果图（可基于此方向继续调整，或进入工作台细化）：',

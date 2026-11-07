@@ -8,7 +8,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useApp } from '../store';
 import { go, useHash } from '../ui';
 import { useAuth } from '../cloud/auth';
-import { useSubscription } from '../cloud/subscription';
+import { useSubscription, recordUsage } from '../cloud/subscription';
 import { loadAI, llmChat, llmJson } from '../engine/llm';
 import { CLOUD } from '../cloud/config';
 
@@ -187,6 +187,12 @@ export default function Studio() {
 
       setMessages((prev) => [...prev, { role: 'assistant', text: reply, ts: Date.now() }]);
 
+      // 扣减对话积分（1积分）
+      if (auth.user) {
+        await recordUsage(auth.user.id, 1);
+        sub.refresh();
+      }
+
       // 异步提取设计简报
       llmJson<Partial<DesignBrief>>([
         { role: 'user', content: `从以下对话中提取包装设计信息，只输出 JSON 对象，字段包括：product, brand, style, material, colors, audience, size, structure, illustration, copy, barcode。没有的字段留空。\n\n对话：${next.map((m) => m.text).join('\n')}` },
@@ -254,6 +260,10 @@ export default function Studio() {
         { id: 'text2', type: 'text', name: '品牌名', x: 120, y: 400, width: 160, height: 30, content: brief.brand || '品牌名', fontSize: 16, color: '#666' },
       ]);
 
+      // 扣减积分（2张图，每张10积分）
+      await recordUsage(auth.user.id, 20);
+      sub.refresh();
+
       setMessages((prev) => [...prev, { role: 'assistant', text: '设计方案已生成！你可以点击任意元素进行修改。', ts: Date.now() }]);
     } catch (e) {
       const msg = (e as Error).message || '生成失败';
@@ -285,6 +295,10 @@ export default function Studio() {
       setLayers((prev) => prev.map((l) =>
         l.id === layerId ? { ...l, src: newSrc } : l
       ));
+
+      // 扣减积分（1张图，10积分）
+      await recordUsage(auth.user.id, 10);
+      sub.refresh();
 
       setMessages((prev) => [...prev, { role: 'assistant', text: `已重新生成「${layer.name}」`, ts: Date.now() }]);
     } catch (e) {
