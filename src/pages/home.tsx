@@ -19,16 +19,14 @@ export default function Home() {
   const { t } = useLang();
   const [confirmNew, setConfirmNew] = useState(false);
 
-  /** 从首页进入新的九步向导；第一步由用户在向导内选择形态 */
+  /** 从首页进入 V6 统一工作台 */
   const beginFresh = () => {
     setConfirmNew(false);
-    update({ draft: createEmptyDraft(), brief: createEmptyBrief(), chat: [], schemes: [], design: null, report: null, activeId: null });
-    go('/luna');
+    go('/studio');
   };
 
   /** 已有进度的草稿会被清空，属于不可撤销操作：先确认，别让用户误点丢数据 */
   const startWizard = () => {
-    if (stepProgress(s.draft) > 0) { setConfirmNew(true); return; }
     beginFresh();
   };
 

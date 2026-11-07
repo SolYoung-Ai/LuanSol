@@ -263,6 +263,38 @@ export default function Studio() {
     }
   };
 
+  const [aiEditing, setAiEditing] = useState(false);
+
+  const regenerateLayer = async (layerId: string) => {
+    const layer = layers.find((l) => l.id === layerId);
+    if (!layer || !auth.user) return;
+    setAiEditing(true);
+
+    try {
+      let prompt = '';
+      if (layer.type === 'image') {
+        prompt = `重新生成这张图片，保持${brief.style || '现代风格'}，${brief.colors || '米白色调'}，包装设计素材`;
+      } else if (layer.type === 'background') {
+        prompt = `${brief.material || '牛皮纸'}材质纹理，${brief.colors || '米白色'}背景，包装设计底纹`;
+      } else {
+        prompt = layer.content || '';
+      }
+
+      const newSrc = await callSeedream(prompt);
+
+      setLayers((prev) => prev.map((l) =>
+        l.id === layerId ? { ...l, src: newSrc } : l
+      ));
+
+      setMessages((prev) => [...prev, { role: 'assistant', text: `已重新生成「${layer.name}」`, ts: Date.now() }]);
+    } catch (e) {
+      const msg = (e as Error).message || '生成失败';
+      setMessages((prev) => [...prev, { role: 'assistant', text: `抱歉，${msg}`, ts: Date.now() }]);
+    } finally {
+      setAiEditing(false);
+    }
+  };
+
   const selectedLayerObj = layers.find((l) => l.id === selectedLayer);
 
   return (
@@ -622,20 +654,21 @@ export default function Studio() {
                   </div>
                 )}
                 <button
-                  onClick={() => alert('AI 修改功能开发中...')}
+                  onClick={() => regenerateLayer(selectedLayer!)}
+                  disabled={aiEditing || selectedLayerObj?.locked}
                   style={{
                     marginTop: 12,
                     width: '100%',
                     padding: '10px',
-                    background: '#f3e5f5',
+                    background: aiEditing ? '#f5f5f5' : '#f3e5f5',
                     border: '1px solid #9c27b0',
                     borderRadius: 8,
-                    cursor: 'pointer',
+                    cursor: aiEditing || selectedLayerObj?.locked ? 'not-allowed' : 'pointer',
                     fontSize: 13,
-                    color: '#7b1fa2',
+                    color: aiEditing || selectedLayerObj?.locked ? '#999' : '#7b1fa2',
                   }}
                 >
-                  ✨ 让 AI 修改这个元素
+                  {aiEditing ? '⏳ 正在生成...' : '✨ 让 AI 重新生成这个元素'}
                 </button>
               </div>
             )}
