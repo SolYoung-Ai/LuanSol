@@ -314,7 +314,7 @@ export default function Studio() {
 
       // 扣积分（10 积分/张）
       if (auth.user) {
-        await recordUsage(auth.user.id, 10);
+        await recordUsage(auth.user.id, 10, 'image');
         sub.refresh();
       }
 
@@ -438,7 +438,7 @@ export default function Studio() {
 
       // 扣减对话积分（1积分）
       if (auth.user) {
-        await recordUsage(auth.user.id, 1);
+        await recordUsage(auth.user.id, 1, 'chat');
         sub.refresh();
       }
 
@@ -535,7 +535,7 @@ export default function Studio() {
       addVersion('AI 生成初版');
 
       // 扣减积分（3张图，每张10积分）
-      await recordUsage(auth.user.id, 30);
+      await recordUsage(auth.user.id, 30, 'image');
       sub.refresh();
 
       addChat({ role: 'ai', text: '设计初版已经生成完成！你可以点击画布上的任意元素进行修改。' });
