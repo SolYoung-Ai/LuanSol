@@ -49,7 +49,7 @@ export default function Home() {
         `This draft is ${stepProgress(s.draft)} of ${WIZARD_STEPS.length} steps in. Starting over clears it and creates an empty project — this cannot be undone.`
       )}</p>
       <div className="modal-buttons">
-        <button className="v4-btn-line" onClick={() => { setConfirmNew(false); go('/wizard'); }}>{t('继续编辑草稿', 'Keep editing')}</button>
+        <button className="v4-btn-line" onClick={() => { setConfirmNew(false); go('/studio'); }}>{t('继续编辑草稿', 'Keep editing')}</button>
         <button className="v4-btn-dark" onClick={beginFresh}>{t('重新开始', 'Start over')}</button>
       </div>
     </Modal>

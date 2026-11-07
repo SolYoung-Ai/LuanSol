@@ -13,23 +13,13 @@ import { LunaLoader } from './components/LunaLoader';
 // 这样首屏不会拉起 three.js（3D 预览）、jsPDF / JSZip（导出）等重库，
 // 它们只在访问对应页面时才下载。manualChunks 已把重库拆成独立 vendor chunk，
 // 配合这里的动态 import，浏览器只需在真正用到时才请求对应 chunk。
-const Wizard = lazy(() => import('./v3/Wizard'));
-const Review = lazy(() => import('./v3/Review'));
 const Account = lazy(() => import('./pages/account'));
-const Create = lazy(() => import('./pages/flow').then((m) => ({ default: m.Create })));
-const Brief = lazy(() => import('./pages/brief'));
-const Schemes = lazy(() => import('./pages/flow').then((m) => ({ default: m.Schemes })));
-const Editor = lazy(() => import('./pages/flow').then((m) => ({ default: m.Editor })));
-const Inspiration = lazy(() => import('./pages/library').then((m) => ({ default: m.Inspiration })));
 const Structures = lazy(() => import('./pages/library').then((m) => ({ default: m.Structures })));
 const ProjectDetail = lazy(() => import('./pages/library').then((m) => ({ default: m.ProjectDetail })));
 const Workspace = lazy(() => import('./pages/workspace'));
 const Market = lazy(() => import('./pages/market').then((m) => ({ default: m.default })));
 const MarketSite = lazy(() => import('./pages/market').then((m) => ({ default: m.MarketSitePage })));
 const MarketWork = lazy(() => import('./pages/market').then((m) => ({ default: m.MarketWorkPage })));
-const Preview3D = lazy(() => import('./pages/output').then((m) => ({ default: m.Preview3D })));
-const Prepress = lazy(() => import('./pages/output').then((m) => ({ default: m.Prepress })));
-const ExportCenter = lazy(() => import('./pages/output').then((m) => ({ default: m.ExportCenter })));
 const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
 const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default: m.ModelConfig })));
 const Subscribe = lazy(() => import('./pages/subscribe'));
@@ -43,7 +33,7 @@ function Footer() {
   return <footer className="footer-min"><div className="footer-min-inner">
     <div className="footer-min-brand"><Logo compact /><span>AI PACKAGING DESIGN STUDIO</span></div>
     <div className="footer-min-links">
-      <a href="#/wizard">开始设计</a>
+      <a href="#/studio">开始设计</a>
       <a href="#/workspace">工作台</a>
       <a href="#/market">审美市场</a>
       <a href="#/subscribe">会员说明</a>
@@ -76,24 +66,24 @@ export default function App() {
   const path = hash.split('?')[0];
   let page: React.ReactNode;
 
-  // 设计链路：必须登录后才能开始。未登录访问时统一拦在门口，引导登录。
-  const DESIGN_GATE = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
-  const gated = DESIGN_GATE.some((p) => path.startsWith(p));
-  if (gated && auth.ready && !auth.user) {
+  // 旧设计链路路由：全部重定向到新的统一工作台 /studio
+  const OLD_FLOW_ROUTES = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
+  const isOldFlow = OLD_FLOW_ROUTES.some((p) => path.startsWith(p));
+
+  // 工作台需要登录
+  const needLogin = (isOldFlow || path === '/studio') && auth.ready && !auth.user;
+  if (needLogin) {
     page = <div className="page page-narrow">
       <PageHead kicker="SIGN IN" title="先登录，再开始设计"
         desc="包装设计会按账号保存项目、同步云端并记录 AI 额度。请先登录或注册账号。" />
-      <Notice tone="info">未登录不能进入设计向导。登录免费，新用户自动获得 2 次 AI 体验。</Notice>
+      <Notice tone="info">登录免费，新用户自动获得免费体验积分。</Notice>
       <div style={{ marginTop: 20 }}><Button size="lg" onClick={requestLogin}>登录 / 注册</Button></div>
     </div>;
+  } else if (isOldFlow) {
+    // 旧路由直接重定向到新工作台
+    page = <OldRouteRedirect />;
   } else if (path === '/') page = <Home />;
-  else if (path === '/wizard') page = <Wizard />;
-  else if (path === '/review') page = <Review />;
-  else if (path === '/create') page = <Create />;
-  else if (path === '/brief') page = <Brief />;
-  else if (path === '/schemes') page = <Schemes />;
-  else if (path === '/editor') page = <Editor />;
-  else if (path === '/preview') page = <Preview3D />;
+  else if (path === '/studio') page = <Studio />;
   /* 旧灵感库（内容为虚构项目）已下线：统一指向真实可溯源的审美市场 */
   else if (path === '/inspiration') page = <Market />;
   else if (path === '/structures') page = <Structures />;
@@ -104,8 +94,6 @@ export default function App() {
   else if (path.startsWith('/market/site/')) page = <MarketSite />;
   else if (path.startsWith('/market/work/')) page = <MarketWork />;
   else if (path.startsWith('/project/')) page = <ProjectDetail />;
-  else if (path === '/prepress') page = <Prepress />;
-  else if (path === '/export') page = <ExportCenter />;
   else if (path === '/account') page = <Account />;
   else if (path === '/settings') page = <Settings />;
   else if (path === '/models') page = <ModelConfig />;
@@ -136,6 +124,16 @@ export default function App() {
       </div>
     </ProfileProvider>
   </SubscriptionProvider>;
+}
+
+/** 旧设计链路路由统一重定向到新工作台 */
+function OldRouteRedirect() {
+  React.useEffect(() => {
+    window.location.hash = '#/studio';
+  }, []);
+  return <div className="page" style={{ padding: 40, textAlign: 'center', color: '#888' }}>
+    正在跳转到工作台…
+  </div>;
 }
 
 /** 内测公告：每次打开网站弹一次（当天只弹一次），引导签到/兑换码/反馈 */
