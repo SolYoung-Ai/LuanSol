@@ -190,6 +190,19 @@ interface SubCtx {
   checkinState: { checkedToday: boolean; streak: number; loading: boolean };
   /** 内测期：尝试兑换码，成功返回 {ok:true, points:n} */
   redeemCode: (code: string) => Promise<{ ok: boolean; points?: number; message: string }>;
+  /** 获取积分使用记录 */
+  getCreditLogs: (limit?: number) => Promise<CreditLog[]>;
+}
+
+export interface CreditLog {
+  id: number;
+  owner_id: string;
+  change_type: 'consume' | 'grant' | 'checkin' | 'redeem' | 'refund';
+  amount: number;
+  balance_after: number;
+  reason: string;
+  task_type?: string;
+  created_at: string;
 }
 
 const Ctx = createContext<SubCtx | null>(null);
@@ -442,6 +455,26 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     return { ok: true, points: row.points, message: `兑换成功！+${row.points} 积分` };
   }, [auth.user]);
 
+  // 获取积分使用记录
+  const getCreditLogs = useCallback(async (limit = 50): Promise<CreditLog[]> => {
+    const u = userRef.current;
+    if (!u) return [];
+    const d = await db();
+    if (!d) return [];
+    try {
+      const { data, error } = await d
+        .from('lunasol_credit_logs')
+        .select('*')
+        .eq('owner_id', u.id)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) return [];
+      return (data || []) as CreditLog[];
+    } catch {
+      return [];
+    }
+  }, []);
+
   const usedLeftRaw = metered ? remainingOf(sub) : null;
   // 积分余额 = 云端剩余（quota_total - quota_used + bonus_credits）
   // 签到和兑换码的积分都存在 bonus_credits 里，不再用 localStorage 缓存
@@ -450,8 +483,8 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   const isPro = isProActive(sub);
 
   const value = useMemo<SubCtx>(() => ({
-    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode,
-  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode]);
+    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode, getCreditLogs,
+  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode, getCreditLogs]);
 
   return <Ctx.Provider value={value}>
     {children}

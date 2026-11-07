@@ -7,11 +7,11 @@
  *  - 底部：兑换码兑换入口
  *  - 不展示成本/毛利等内部经营数据
  * ============================================================ */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Card, Notice, PageHead, SectionLabel, Tag, go } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
-import { useSubscription } from '../cloud/subscription';
+import { useSubscription, CreditLog } from '../cloud/subscription';
 import { PRICING } from '../cloud/plans';
 import { useLang } from '../i18n';
 
@@ -32,6 +32,18 @@ export default function Subscribe() {
   const [redeemCode, setRedeemCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
   const [redeemMsg, setRedeemMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [creditLogs, setCreditLogs] = useState<CreditLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  // 获取积分记录
+  useEffect(() => {
+    if (!a.user) return;
+    setLogsLoading(true);
+    sub.getCreditLogs(30).then((logs) => {
+      setCreditLogs(logs);
+      setLogsLoading(false);
+    });
+  }, [a.user, sub.usedLeft]);
 
   // 签到状态：从数据库读取（已登录用户）
   const today = new Date().toISOString().slice(0, 10);
@@ -115,6 +127,43 @@ export default function Subscribe() {
           </div>
         </>}
     </Card>
+
+    {/* 积分使用记录 */}
+    {a.user && (
+      <Card className="pad-card">
+        <SectionLabel en={lang === 'en' ? '' : 'HISTORY'}>{t('积分明细', 'Credit history')}</SectionLabel>
+        {logsLoading ? (
+          <div style={{ padding: 20, textAlign: 'center', color: '#999' }}>{t('加载中…', 'Loading…')}</div>
+        ) : creditLogs.length === 0 ? (
+          <div style={{ padding: 20, textAlign: 'center', color: '#999' }}>{t('暂无积分记录', 'No credit records yet')}</div>
+        ) : (
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            {creditLogs.map((log) => (
+              <div key={log.id} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 0', borderBottom: '1px solid #f0f0f0',
+              }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>{log.reason}</div>
+                  <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
+                    {new Date(log.created_at).toLocaleString('zh-CN', {
+                      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                    })}
+                    {log.task_type && ` · ${log.task_type}`}
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: 16, fontWeight: 600,
+                  color: log.amount > 0 ? '#22c55e' : '#ef4444',
+                }}>
+                  {log.amount > 0 ? '+' : ''}{log.amount}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    )}
 
     {/* 积分怎么花 */}
     <Card className="pad-card">
