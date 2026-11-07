@@ -10,7 +10,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
 import { useAuth } from './auth';
-import { listProjects, pushMany, pushProject, pullAll, removeProject, projectIdOf, timeLabel } from './projects';
+import { listProjects, pushMany, pushProject, pullAll, removeProject, removeManyProjects, projectIdOf, timeLabel } from './projects';
 
 export type SyncState = 'off' | 'idle' | 'syncing' | 'ok' | 'error';
 
@@ -25,6 +25,7 @@ export interface CloudSync {
   downloadAll: () => Promise<void>;
   pushOne: (id: string) => Promise<boolean>;
   removeOne: (id: string) => Promise<boolean>;
+  removeMany: (ids: string[]) => Promise<{ ok: number; failed: string[] }>;
 }
 
 /* 记录「哪个本机项目属于哪个云端账号」：
@@ -208,7 +209,20 @@ function useCloudSyncState(): CloudSync {
     return true;
   }, [user, setToast]);
 
-  return { state, message, lastSync, cloudCount, ownerOf, syncNow, downloadAll, pushOne, removeOne };
+  const removeMany = useCallback(async (ids: string[]) => {
+    if (!user) return { ok: 0, failed: [...ids] };
+    const r = await removeManyProjects(user.id, ids);
+    ids.forEach((id) => {
+      delete pushedAt.current[id];
+      cloudIdsRef.current.delete(projectIdOf(id));
+    });
+    setCloudCount(cloudIdsRef.current.size);
+    if (r.failed.length > 0) setToast(`已删除 ${r.ok} 个，${r.failed.length} 个失败（刷新后会回来）`);
+    else setToast(`已删除 ${r.ok} 个项目`);
+    return r;
+  }, [user, setToast]);
+
+  return { state, message, lastSync, cloudCount, ownerOf, syncNow, downloadAll, pushOne, removeOne, removeMany };
 }
 
 const SyncCtx = createContext<CloudSync | null>(null);

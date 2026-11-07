@@ -131,19 +131,19 @@ export default function Workspace() {
 
   const doBatchDelete = async () => {
     const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
     setBatchDeleting(true);
-    // 本地逐个删除（函数式更新，连续调用安全）
-    ids.forEach((id) => deleteProject(id));
-    // 登录用户：同步删除云端副本，单个失败不阻断
-    if (auth.user) {
-      for (const id of ids) {
-        try { await sync.removeOne(id); } catch { /* 留待下次同步处理 */ }
-      }
+    try {
+      // 先删云端（此时本地项目仍在、id 有效），再删本地，避免本地删除与自动同步竞态
+      if (auth.user) await sync.removeMany(ids);
+      // 本地逐个删除（函数式更新，连续调用安全）
+      ids.forEach((id) => deleteProject(id));
+      setConfirmBatchDel(false);
+      setBatchMode(false);
+      setSelectedIds(new Set());
+    } finally {
+      setBatchDeleting(false);
     }
-    setBatchDeleting(false);
-    setConfirmBatchDel(false);
-    setBatchMode(false);
-    setSelectedIds(new Set());
   };
 
   const empty = s.projects.length === 0;

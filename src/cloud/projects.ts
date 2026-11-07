@@ -140,6 +140,30 @@ export async function removeProject(uid: string, projectId: string): Promise<Clo
   }
 }
 
+/** 批量删除：复用同一个数据库连接，逐个删除；每个请求加超时，避免一次挂起导致整个流程卡死。
+ *  返回成功数与失败的本地 id 列表，调用方据此如实提示，不假装全部成功。 */
+export async function removeManyProjects(
+  uid: string, projectIds: string[],
+): Promise<{ ok: number; failed: string[] }> {
+  const d = await db();
+  if (!d) return { ok: 0, failed: [...projectIds] };
+  let ok = 0;
+  const failed: string[] = [];
+  for (const projectId of projectIds) {
+    try {
+      const r = await Promise.race([
+        d.from(TABLE).delete().eq('id', rowId(uid, projectId)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+      ]) as { error?: { message?: string } | null };
+      if (r.error) failed.push(projectId);
+      else ok += 1;
+    } catch {
+      failed.push(projectId);
+    }
+  }
+  return { ok, failed };
+}
+
 /** 生成本地时间标签，用于界面展示同步时间 */
 export const timeLabel = (iso?: string) => {
   if (!iso) return '—';

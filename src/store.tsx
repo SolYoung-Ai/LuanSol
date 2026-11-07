@@ -116,6 +116,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const saveTimer = useRef<number | undefined>(undefined);
+  // 用户是否已主动删除过项目：一旦主动操作，「空 state 磁盘恢复」保护就不再适用，
+  // 否则用户主动删光全部作品时，会被旧磁盘数据重新拉回。
+  const userDeletedRef = useRef(false);
 
   useEffect(() => {
     idbLoad().then((v) => {
@@ -135,7 +138,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveTimer.current = window.setTimeout(async () => {
       // 防御：内存里项目为空时，先核对磁盘是否真的为空。
       // 若磁盘有数据而内存为空（异常重挂载 / 初始化竞态），用磁盘数据恢复，绝不能用空 state 覆盖真实作品。
-      if (s.projects.length === 0) {
+      // 但用户主动删除导致的空（userDeletedRef）不在此列，必须如实保存空状态，不能把作品拉回。
+      if (s.projects.length === 0 && !userDeletedRef.current) {
         const onDisk = await idbLoad();
         const diskProjects = onDisk && typeof onDisk === 'object' && Array.isArray((onDisk as Persisted).projects)
           ? (onDisk as Persisted).projects : [];
@@ -216,9 +220,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { ...prev, projects };
   }), []);
 
-  const deleteProject = useCallback((id: string) => setS((prev) => ({
-    ...prev, projects: prev.projects.filter((p) => p.id !== id), activeId: prev.activeId === id ? null : prev.activeId,
-  })), []);
+  const deleteProject = useCallback((id: string) => {
+    userDeletedRef.current = true;
+    setS((prev) => ({
+      ...prev, projects: prev.projects.filter((p) => p.id !== id), activeId: prev.activeId === id ? null : prev.activeId,
+    }));
+  }, []);
 
   const duplicateProject = useCallback((id: string) => setS((prev) => {
     const p = prev.projects.find((x) => x.id === id);
