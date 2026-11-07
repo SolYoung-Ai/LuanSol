@@ -80,26 +80,59 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { void load(); }, [load]);
 
   const updateAvatar = useCallback(async (avatarUrl: string) => {
-    if (!auth.user) return;
+    if (!auth.user) throw new Error('未登录');
     const d = await db();
-    if (!d) return;
-    await d.from('lunasol_user_profiles').update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() }).eq('owner_id', auth.user.id);
+    if (!d) throw new Error('数据库未连接');
+    const r = await d.from('lunasol_user_profiles')
+      .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+      .eq('owner_id', auth.user.id);
+    if (r?.error) throw new Error(r.error.message || '头像保存失败');
+    // 检查是否真的更新了行
+    if (r?.data && Array.isArray(r.data) && r.data.length === 0) {
+      // 可能行不存在，尝试 upsert
+      const row = {
+        id: auth.user.id,
+        owner_id: auth.user.id,
+        avatar_url: avatarUrl,
+        birthday: profile?.birthday || '',
+        bio: profile?.bio || '',
+      };
+      const r2 = await d.from('lunasol_user_profiles').upsert(row, { onConflict: 'id' });
+      if (r2?.error) throw new Error(r2.error.message || '头像保存失败');
+    }
     setProfile((prev) => prev ? { ...prev, avatar_url: avatarUrl } : prev);
-  }, [auth.user?.id]);
+  }, [auth.user?.id, profile?.birthday, profile?.bio]);
 
   const updateBirthday = useCallback(async (birthday: string) => {
-    if (!auth.user) return;
+    if (!auth.user) throw new Error('未登录');
     const d = await db();
-    if (!d) return;
-    await d.from('lunasol_user_profiles').update({ birthday, updated_at: new Date().toISOString() }).eq('owner_id', auth.user.id);
+    if (!d) throw new Error('数据库未连接');
+    const r = await d.from('lunasol_user_profiles')
+      .update({ birthday, updated_at: new Date().toISOString() })
+      .eq('owner_id', auth.user.id);
+    if (r?.error) throw new Error(r.error.message || '生日保存失败');
+    if (r?.data && Array.isArray(r.data) && r.data.length === 0) {
+      const row = {
+        id: auth.user.id,
+        owner_id: auth.user.id,
+        avatar_url: profile?.avatar_url || '',
+        birthday,
+        bio: profile?.bio || '',
+      };
+      const r2 = await d.from('lunasol_user_profiles').upsert(row, { onConflict: 'id' });
+      if (r2?.error) throw new Error(r2.error.message || '生日保存失败');
+    }
     setProfile((prev) => prev ? { ...prev, birthday } : prev);
-  }, [auth.user?.id]);
+  }, [auth.user?.id, profile?.avatar_url, profile?.bio]);
 
   const updateBio = useCallback(async (bio: string) => {
-    if (!auth.user) return;
+    if (!auth.user) throw new Error('未登录');
     const d = await db();
-    if (!d) return;
-    await d.from('lunasol_user_profiles').update({ bio, updated_at: new Date().toISOString() }).eq('owner_id', auth.user.id);
+    if (!d) throw new Error('数据库未连接');
+    const r = await d.from('lunasol_user_profiles')
+      .update({ bio, updated_at: new Date().toISOString() })
+      .eq('owner_id', auth.user.id);
+    if (r?.error) throw new Error(r.error.message || '简介保存失败');
     setProfile((prev) => prev ? { ...prev, bio } : prev);
   }, [auth.user?.id]);
 

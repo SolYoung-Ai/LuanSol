@@ -117,8 +117,25 @@ function localDateStr(d: Date = new Date()): string {
 /** 自增用量计数（成功调用 AI 后）。返回最新 used，失败返回 -1。
  *  优先走数据库端的原子函数：并发调用不会互相覆盖计数；
  *  数据库函数不可用时退回「读-改-写」，结果仍然正确，只是并发下可能少计一次。 */
-export async function recordUsage(uid: string, n = 1): Promise<number> {
+export async function recordUsage(uid: string, n = 1, taskType = 'ai_call'): Promise<number> {
   const d = await db(); if (!d) return -1;
+
+  // 写入积分明细的辅助函数
+  const writeLog = async (balanceAfter: number) => {
+    try {
+      await d.from('lunasol_credit_logs').insert({
+        owner_id: uid,
+        change_type: 'consume',
+        amount: n,
+        balance_after: balanceAfter,
+        reason: taskType === 'image' ? 'AI 图像生成消耗' : taskType === 'chat' ? 'AI 对话消耗' : 'AI 调用消耗',
+        task_type: taskType,
+      });
+    } catch (e) {
+      console.error('写入积分明细失败', e);
+    }
+  };
+
   try {
     if (typeof d.rpc === 'function') {
       const r = await d.rpc('lunasol_consume_quota', { p_uid: uid, p_n: n });
@@ -126,14 +143,22 @@ export async function recordUsage(uid: string, n = 1): Promise<number> {
         const v = typeof r.data === 'number' ? r.data : (r.data as { value?: number } | null)?.value;
         // -1 表示该用户还没有订阅行（新注册用户），必须继续走兜底逻辑建行并计数，
         // 否则第一次 AI 调用会白白丢掉这一次额度。
-        if (typeof v === 'number' && v >= 0) return v;
+        if (typeof v === 'number' && v >= 0) {
+          await writeLog(v);
+          return v;
+        }
       }
     }
   } catch { /* 落到兜底实现 */ }
   const cur = await getSubscription(uid);
   const base = cur.ok ? cur.data : await ensureSubscription(uid);
   const next = Math.min(base.quota_total, base.quota_used + n);
-  try { await d.from(TABLE).update({ quota_used: next, updated_at: new Date().toISOString() }).eq('id', uid); } catch { /* 忽略 */ }
+  try {
+    await d.from(TABLE).update({ quota_used: next, updated_at: new Date().toISOString() }).eq('id', uid);
+    // 计算剩余总积分（基础额度剩余 + 奖励积分）
+    const remaining = Math.max(0, base.quota_total - next) + (base.bonus_credits || 0);
+    await writeLog(remaining);
+  } catch { /* 忽略 */ }
   return next;
 }
 

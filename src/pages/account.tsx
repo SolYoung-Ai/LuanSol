@@ -84,15 +84,20 @@ export default function Account() {
   const saveProfile = async () => {
     if (!a.user) return;
     setSaving(true);
-    // 头像和生日保存到云端
-    await profile.updateAvatar(avatar.trim());
-    await profile.updateBirthday(birthday);
-    const r = await a.updateProfile({
-      nickName: nick.trim() || undefined,
-    });
-    setSaving(false);
-    if (!r.ok) { setToast(r.message); return; }
-    setToast('个人资料已保存（云端同步）');
+    try {
+      // 头像和生日保存到云端
+      await profile.updateAvatar(avatar.trim());
+      await profile.updateBirthday(birthday);
+      const r = await a.updateProfile({
+        nickName: nick.trim() || undefined,
+      });
+      if (!r.ok) { setToast(r.message); return; }
+      setToast('个人资料已保存（云端同步）');
+    } catch (e) {
+      setToast('保存失败：' + ((e as Error).message || '未知错误'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!cloudConfigured) {

@@ -75,8 +75,19 @@ const smallBtn: React.CSSProperties = {
   padding: '3px 8px',
 };
 
+// 缩放按钮
+const zoomBtn: React.CSSProperties = {
+  background: '#fff',
+  border: '1px solid #ddd',
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontSize: 12,
+  padding: '4px 10px',
+  minWidth: 32,
+};
+
 export default function Studio() {
-  const { s, dieline, update, patchBrief, addChat, saveProject, loadProject, addVersion, restoreVersion } = useApp();
+  const { s, dieline, update, patchBrief, addChat, saveProject, loadProject, addVersion, restoreVersion, syncProject } = useApp();
   const auth = useAuth();
   const sub = useSubscription();
   const hash = useHash();
@@ -112,6 +123,43 @@ export default function Studio() {
 
   // 版本历史
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // 自动保存状态
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 对话内上传的参考图片
+  const [chatImages, setChatImages] = useState<{ src: string; name: string }[]>([]);
+  const chatImgRef = useRef<HTMLInputElement>(null);
+
+  // 网格显示
+  const [showGrid, setShowGrid] = useState(false);
+  // 智能参考线（拖动时显示）
+  const [guides, setGuides] = useState<{ v?: number; h?: number }>({});
+
+  const onPickChatImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const src = reader.result as string;
+        const img = new Image();
+        img.onload = () => {
+          // 压缩到最大宽度 800
+          let w = img.width, h = img.height;
+          if (w > 800) { h = h * 800 / w; w = 800; }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d')!.drawImage(img, 0, 0, w, h);
+          setChatImages((prev) => [...prev, { src: c.toDataURL('image/jpeg', 0.85), name: file.name }]);
+        };
+        img.src = src;
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
 
   // 拖拽状态
   const dragState = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
@@ -171,6 +219,19 @@ export default function Studio() {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
       if (mod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+      // 缩放快捷键
+      if (mod && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        setZoom((z) => Math.min(5, +(z + 0.1).toFixed(2)));
+      }
+      if (mod && e.key === '-') {
+        e.preventDefault();
+        setZoom((z) => Math.max(0.1, +(z - 0.1).toFixed(2)));
+      }
+      if (mod && e.key === '0') {
+        e.preventDefault();
+        setZoom(1);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -186,6 +247,39 @@ export default function Studio() {
       update({ design: newDesign, activeId: null });
     }
   }, [projectId]);
+
+  // 自动保存：design 变化后延迟 1.5 秒保存
+  useEffect(() => {
+    if (!design) return;
+    setSaveStatus('saving');
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      if (s.activeId) {
+        syncProject();
+      } else {
+        saveProject();
+      }
+      setSaveStatus('saved');
+      // 3 秒后恢复 idle
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }, 1500);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [design, s.activeId]);
+
+  // 手动保存按钮
+  const manualSave = () => {
+    if (!design) return;
+    setSaveStatus('saving');
+    if (s.activeId) {
+      saveProject(); // 手动保存用 saveProject，会新增版本
+    } else {
+      saveProject();
+    }
+    setSaveStatus('saved');
+    setTimeout(() => setSaveStatus('idle'), 2000);
+  };
 
   // 滚动到底部
   useEffect(() => {
@@ -281,11 +375,44 @@ export default function Studio() {
   // 发送消息
   const sendMessage = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    const imgs = [...chatImages];
+    if ((!text && imgs.length === 0) || loading) return;
     setInput('');
+    setChatImages([]);
     setLoading(true);
 
-    addChat({ role: 'user', text });
+    // 消息文本（如果有图片，附带说明）
+    const msgText = text + (imgs.length ? `\n[附带 ${imgs.length} 张参考图片]` : '');
+    addChat({ role: 'user', text: msgText });
+
+    // 如果有上传图片，同时把第一张图添加到当前画布（作为素材）
+    if (imgs.length > 0 && face && design) {
+      const firstImg = imgs[0];
+      const img = new Image();
+      img.onload = () => {
+        const newLayer: ImageLayer = {
+          id: uid('lay'),
+          name: firstImg.name || '上传素材',
+          type: 'image',
+          src: firstImg.src,
+          x: 10, y: 10,
+          w: Math.min(40, img.width / 3.78),
+          h: Math.min(40, img.width / 3.78 * img.height / img.width),
+          rotation: 0,
+          opacity: 1,
+          naturalW: img.width,
+          naturalH: img.height,
+          fit: 'contain',
+          locked: false,
+        };
+        const newDesign: DesignDoc = {
+          ...design,
+          faces: { ...design.faces, [currentFace]: { ...face, layers: [...face.layers, newLayer] } },
+        };
+        update({ design: newDesign });
+      };
+      img.src = firstImg.src;
+    }
 
     // 如果有选中图层，走局部修改流程
     if (selectedLayer) {
@@ -445,9 +572,30 @@ export default function Studio() {
     if (!dragState.current || !face) return;
     const dx = (e.clientX - dragState.current.startX) / zoom;
     const dy = (e.clientY - dragState.current.startY) / zoom;
+    let newX = dragState.current.origX + dx;
+    let newY = dragState.current.origY + dy;
+    const dragLayer = face.layers.find((l) => l.id === dragState.current!.id)!;
+    const snapDist = 2; // 2mm 吸附阈值
+    const newGuides: { v?: number; h?: number } = {};
+
+    // 垂直方向：左边缘、中心、右边缘 对齐画布中心/边缘
+    const centerX = face.w / 2;
+    const layerCenterX = newX + dragLayer.w / 2;
+    if (Math.abs(newX - 0) < snapDist) { newX = 0; newGuides.v = 0; }
+    else if (Math.abs(layerCenterX - centerX) < snapDist) { newX = centerX - dragLayer.w / 2; newGuides.v = centerX; }
+    else if (Math.abs(newX + dragLayer.w - face.w) < snapDist) { newX = face.w - dragLayer.w; newGuides.v = face.w; }
+
+    // 水平方向
+    const centerY = face.h / 2;
+    const layerCenterY = newY + dragLayer.h / 2;
+    if (Math.abs(newY - 0) < snapDist) { newY = 0; newGuides.h = 0; }
+    else if (Math.abs(layerCenterY - centerY) < snapDist) { newY = centerY - dragLayer.h / 2; newGuides.h = centerY; }
+    else if (Math.abs(newY + dragLayer.h - face.h) < snapDist) { newY = face.h - dragLayer.h; newGuides.h = face.h; }
+
+    setGuides(newGuides);
     const layers = face.layers.map((l) =>
       l.id === dragState.current!.id
-        ? { ...l, x: dragState.current!.origX + dx, y: dragState.current!.origY + dy }
+        ? { ...l, x: newX, y: newY }
         : l
     );
     update({ design: { ...design!, faces: { ...design!.faces, [currentFace]: { ...face, layers } } } });
@@ -456,6 +604,7 @@ export default function Studio() {
   const onMouseUp = () => {
     dragState.current = null;
     resizeState.current = null;
+    setGuides({});
   };
 
   // 缩放：控制点按下
@@ -642,6 +791,22 @@ export default function Studio() {
     pdf.save(`${design.name || 'lunasol'}.pdf`);
   };
 
+  // 导出 SVG
+  const exportSVG = () => {
+    if (!design) return;
+    const svg = spreadSvg(design, dieline, 0, false);
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    downloadBlob(blob, `${design.name || 'lunasol'}.svg`);
+  };
+
+  // 导出 ZIP 完整包
+  const exportZIP = async () => {
+    if (!design) return;
+    const { buildBundle } = await import('../engine/export');
+    const { blob } = await buildBundle(design, dieline, 300, true);
+    downloadBlob(blob, `${design.name || 'lunasol'}_完整交付包.zip`);
+  };
+
   return (
     <div className="studio-layout" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* 左侧：AI 对话 */}
@@ -720,7 +885,31 @@ export default function Studio() {
 
           {/* 输入框 */}
           <div style={{ padding: 16, borderTop: '1px solid #eee' }}>
+            {/* 已上传图片预览 */}
+            {chatImages.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                {chatImages.map((img, i) => (
+                  <div key={i} style={{ position: 'relative', width: 60, height: 60 }}>
+                    <img src={img.src} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} />
+                    <button
+                      onClick={() => setChatImages((prev) => prev.filter((_, idx) => idx !== i))}
+                      style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, padding: 0, lineHeight: '18px' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input ref={chatImgRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onPickChatImage} />
             <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => chatImgRef.current?.click()}
+                style={{ padding: '10px 12px', background: '#fff', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer', fontSize: 16 }}
+                title="上传参考图/Logo/产品照片"
+              >
+                📎
+              </button>
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -730,7 +919,7 @@ export default function Studio() {
               />
               <button
                 onClick={sendMessage}
-                disabled={loading || !input.trim()}
+                disabled={loading || (!input.trim() && chatImages.length === 0)}
                 style={{ padding: '10px 16px', background: '#333', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
               >
                 发送
@@ -757,7 +946,29 @@ export default function Studio() {
         <div style={{ height: 48, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, background: '#fff' }}>
           <button onClick={() => go('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>← 返回</button>
           <span style={{ fontWeight: 600, fontSize: 14 }}>{design?.name || '未命名项目'}</span>
+          {/* 保存状态 */}
+          <span style={{ fontSize: 12, color: saveStatus === 'saved' ? '#16a34a' : saveStatus === 'saving' ? '#d97706' : '#999' }}>
+            {saveStatus === 'saving' ? '保存中…' : saveStatus === 'saved' ? '✓ 已保存' : ''}
+          </span>
           <div style={{ flex: 1 }} />
+          <button
+            onClick={manualSave}
+            style={{ padding: '4px 12px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}
+          >
+            💾 保存
+          </button>
+          <button
+            onClick={() => setShowGrid((v) => !v)}
+            style={{
+              padding: '4px 10px',
+              background: showGrid ? '#e0f2fe' : '#fff',
+              border: '1px solid ' + (showGrid ? '#7dd3fc' : '#ddd'),
+              borderRadius: 6, cursor: 'pointer', fontSize: 13,
+            }}
+            title="显示/隐藏网格"
+          >
+            # 网格
+          </button>
           <button
             onClick={undo}
             disabled={!canUndo}
@@ -777,11 +988,13 @@ export default function Studio() {
           <button onClick={() => setHistoryOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>版本历史</button>
           <button onClick={() => setViewMode('2d')} style={{ padding: '4px 12px', background: viewMode === '2d' ? '#333' : '#fff', color: viewMode === '2d' ? '#fff' : '#333', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>2D</button>
           <button onClick={() => setViewMode('3d')} style={{ padding: '4px 12px', background: viewMode === '3d' ? '#333' : '#fff', color: viewMode === '3d' ? '#fff' : '#333', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>3D</button>
-          <button onClick={exportPNG} style={{ padding: '4px 12px', background: '#fff', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>导出 PNG</button>
-          <button onClick={exportPDF} style={{ padding: '4px 12px', background: '#fff', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>导出 PDF</button>
+          <button onClick={exportPNG} style={{ padding: '4px 12px', background: '#fff', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>PNG</button>
+          <button onClick={exportSVG} style={{ padding: '4px 12px', background: '#fff', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>SVG</button>
+          <button onClick={exportPDF} style={{ padding: '4px 12px', background: '#fff', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>PDF</button>
+          <button onClick={exportZIP} style={{ padding: '4px 12px', background: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>ZIP 完整包</button>
         </div>
 
-        {/* 包装面切换 */}
+        {/* 包装面切换 + 缩放控制 */}
         <div style={{ height: 36, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 4, background: '#fff' }}>
           {(['front', 'back', 'left', 'right', 'top'] as FaceId[]).map((f) => (
             <button
@@ -797,10 +1010,48 @@ export default function Studio() {
               {f === 'front' ? '正面' : f === 'back' ? '背面' : f === 'left' ? '左侧' : f === 'right' ? '右侧' : '顶面'}
             </button>
           ))}
+          <div style={{ flex: 1 }} />
+          {/* 缩放控制 */}
+          <button
+            onClick={() => setZoom((z) => Math.max(0.1, +(z - 0.1).toFixed(2)))}
+            style={zoomBtn} title="缩小"
+          >
+            −
+          </button>
+          <button
+            onClick={() => setZoom(1)}
+            style={{ ...zoomBtn, minWidth: 52 }}
+            title="重置为 100%"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            onClick={() => setZoom((z) => Math.min(5, +(z + 0.1).toFixed(2)))}
+            style={zoomBtn} title="放大"
+          >
+            +
+          </button>
+          <button
+            onClick={() => {
+              // 适应屏幕：根据容器和画布尺寸计算
+              if (!face) return;
+              const container = document.querySelector('.studio-canvas-wrap') as HTMLElement;
+              if (!container) return;
+              const pxW = face.w * 3.78;
+              const pxH = face.h * 3.78;
+              const scaleW = (container.clientWidth - 48) / pxW;
+              const scaleH = (container.clientHeight - 48) / pxH;
+              setZoom(+Math.min(scaleW, scaleH, 2).toFixed(2));
+            }}
+            style={{ ...zoomBtn, padding: '4px 8px' }}
+            title="适应屏幕"
+          >
+            适应
+          </button>
         </div>
 
         {/* 画布区域 */}
-        <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div className="studio-canvas-wrap" style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           {viewMode === '2d' && face && (
             <div
               style={{
@@ -809,12 +1060,31 @@ export default function Studio() {
                 height: face.h * zoom * 3.78,
                 background: face.bg,
                 boxShadow: '0 4px 24px rgba(0,0,0,0.1)',
+                // 网格背景
+                backgroundImage: showGrid ? `
+                  linear-gradient(to right, rgba(59,130,246,0.2) 1px, transparent 1px),
+                  linear-gradient(to bottom, rgba(59,130,246,0.2) 1px, transparent 1px)
+                ` : undefined,
+                backgroundSize: showGrid ? `${10 * zoom * 3.78}px ${10 * zoom * 3.78}px` : undefined,
               }}
               onMouseMove={onMouseMove}
               onMouseUp={onMouseUp}
               onMouseLeave={onMouseUp}
               onClick={() => setSelectedLayer(null)}
             >
+              {/* 智能参考线 */}
+              {guides.v !== undefined && (
+                <div style={{
+                  position: 'absolute', left: guides.v * zoom * 3.78, top: 0, bottom: 0,
+                  width: 1, background: '#ef4444', zIndex: 100, pointerEvents: 'none',
+                }} />
+              )}
+              {guides.h !== undefined && (
+                <div style={{
+                  position: 'absolute', top: guides.h * zoom * 3.78, left: 0, right: 0,
+                  height: 1, background: '#ef4444', zIndex: 100, pointerEvents: 'none',
+                }} />
+              )}
               {face.layers.filter((l) => !l.hidden).map((layer) => (
                 <div
                   key={layer.id}
