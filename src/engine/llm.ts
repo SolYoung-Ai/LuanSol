@@ -44,13 +44,17 @@ export const isDeepSeekProxy = (s: AISettings) =>
 /** 配置版本：V3.2 起默认接入已部署的 DeepSeek 后台代理。
  *  老用户浏览器里存着 V3.1 的 mode:'off'，需要一次性升级，
  *  但用户之后主动关掉 AI 时（rev 已是新值）必须被尊重。 */
-export const AI_REV = 2;
+export const AI_REV = 3;
 
 export function migrateAI(s: AISettings): AISettings {
   const rev = s.rev ?? 1;
   if (rev >= AI_REV) return s;
-  const neverConfigured = !s.apiKey.trim() && (!s.mode || s.mode === 'off');
   const next: AISettings = { ...s, rev: AI_REV };
+  // 强制更新代理令牌：安全加固后轮换了令牌，所有老用户都要重新同步
+  if (deepSeekReady && s.mode === 'proxy') {
+    return { ...applyDeepSeekProxy(next), rev: AI_REV };
+  }
+  const neverConfigured = !s.apiKey.trim() && (!s.mode || s.mode === 'off');
   if (neverConfigured && deepSeekReady) return { ...applyDeepSeekProxy(next), rev: AI_REV };
   return next;
 }
