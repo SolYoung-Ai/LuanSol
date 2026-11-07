@@ -20,6 +20,16 @@ const tierName = (t: ImageTier) => (t === 'flash' ? 'Flash' : t === 'lite' ? 'Li
 const tierCost = (t: ImageTier) =>
   t === 'flash' ? PRICING.costs.imageFlash : t === 'lite' ? PRICING.costs.imageLite : PRICING.costs.imagePro;
 
+// 前端按纯文本渲染（不解析 Markdown），把模型偶尔带出的 Markdown 符号清掉，
+// 避免页面上裸露 ** 或 #，同时保留正常换行。
+const toPlainText = (s: string) =>
+  s
+    .replace(/\*\*([^*]+?)\*\*/g, '$1')
+    .replace(/(^|\n)\s{0,3}#{1,6}\s*/g, '$1')
+    .replace(/`{1,3}([^`\n]+?)`{1,3}/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
 /* --------------------------- 思考过程折叠块 --------------------------- */
 function ReasoningBlock({ reasoning, defaultOpen }: { reasoning: string; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -76,7 +86,7 @@ function Bubble({ m, isLast }: { m: LunaMessage; isLast: boolean }) {
       <div className="lc-msg-body">
         {m.reasoning && <ReasoningBlock reasoning={m.reasoning} defaultOpen={isLast} />}
         {m.content && m.content !== '（参考图）' && (
-          <div className={`lc-msg-text ${m.error ? 'error' : ''}`}>{m.content}</div>
+          <div className={`lc-msg-text ${m.error ? 'error' : ''}`}>{toPlainText(m.content)}</div>
         )}
         {m.image && (
           <div className="lc-msg-imgwrap">
