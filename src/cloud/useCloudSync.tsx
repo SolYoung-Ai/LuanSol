@@ -199,7 +199,7 @@ function useCloudSyncState(): CloudSync {
 
   const removeOne = useCallback(async (id: string) => {
     if (!user) return false;
-    const r = await removeProject(id);
+    const r = await removeProject(user.id, id);
     if (!r.ok) { setToast(r.message); return false; }
     delete pushedAt.current[id];
     cloudIdsRef.current.delete(projectIdOf(id));

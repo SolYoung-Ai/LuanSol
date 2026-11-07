@@ -132,8 +132,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready) return;
     window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      idbSave(s).then((kind) => setS((prev) => prev.storage === kind ? prev : { ...prev, storage: kind }));
+    saveTimer.current = window.setTimeout(async () => {
+      // 防御：内存里项目为空时，先核对磁盘是否真的为空。
+      // 若磁盘有数据而内存为空（异常重挂载 / 初始化竞态），用磁盘数据恢复，绝不能用空 state 覆盖真实作品。
+      if (s.projects.length === 0) {
+        const onDisk = await idbLoad();
+        const diskProjects = onDisk && typeof onDisk === 'object' && Array.isArray((onDisk as Persisted).projects)
+          ? (onDisk as Persisted).projects : [];
+        if (diskProjects.length > 0) {
+          setS((prev) => ({ ...(onDisk as Persisted), storage: prev.storage }));
+          return;
+        }
+      }
+      const kind = await idbSave(s);
+      setS((prev) => prev.storage === kind ? prev : { ...prev, storage: kind });
     }, 350);
     return () => window.clearTimeout(saveTimer.current);
   }, [s, ready]);

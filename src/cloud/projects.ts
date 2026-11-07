@@ -127,11 +127,12 @@ export async function pullAll(): Promise<CloudResult<Project[]>> {
 }
 
 /* ------------------------------- 删除 ------------------------------- */
-export async function removeProject(id: string): Promise<CloudResult> {
+export async function removeProject(uid: string, projectId: string): Promise<CloudResult> {
   const d = await db();
   if (!d) return fail('云服务未配置');
   try {
-    const r = await d.from(TABLE).delete().eq('id', id);
+    // 云端行主键是「uid:本地id」，必须用 rowId 拼全，否则匹配不到任何行、删除静默落空
+    const r = await d.from(TABLE).delete().eq('id', rowId(uid, projectId));
     if (r.error) return fail(`删除失败：${errText(r.error)}`);
     return { ok: true, data: undefined };
   } catch (e) {
