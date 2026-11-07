@@ -14,6 +14,7 @@ import { loadAI, llmChat, llmJson, llmImage } from '../engine/llm';
 import { buildSchemes, addImageLayer, cloneDesign, faceMarkup } from '../engine/design';
 import { styleById } from '../v3/styles';
 import { buildDieline, faceSizes, STRUCTURES, structureById } from '../engine/structure';
+import { runPrepress, autoFix } from '../engine/prepress';
 import { spreadSvg, svgToCanvas } from '../engine/export';
 import { uid, downloadBlob, mmToPx } from '../engine/utils';
 import Viewer3D from '../components/Viewer3D';
@@ -86,6 +87,16 @@ const zoomBtn: React.CSSProperties = {
   minWidth: 32,
 };
 
+// 对齐按钮
+const alignBtn: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontSize: 13,
+  padding: '4px 6px',
+};
+
 export default function Studio() {
   const { s, dieline, update, patchBrief, addChat, saveProject, loadProject, addVersion, restoreVersion, syncProject } = useApp();
   const auth = useAuth();
@@ -104,6 +115,8 @@ export default function Studio() {
 
   // 选中图层
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
+  // 多选图层 ID 列表（包含主选中）
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // 画布
   const [zoom, setZoom] = useState(1);
@@ -148,6 +161,10 @@ export default function Studio() {
     centerX: number;
     centerY: number;
   } | null>(null);
+
+  // 印前检查弹窗
+  const [prepressOpen, setPrepressOpen] = useState(false);
+  const [prepressReport, setPrepressReport] = useState<ReturnType<typeof runPrepress> | null>(null);
 
   const onPickChatImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -588,7 +605,26 @@ export default function Studio() {
   const onLayerMouseDown = (e: React.MouseEvent, layer: Layer) => {
     if (layer.locked) return;
     e.stopPropagation();
+
+    // Shift 点击：多选切换
+    if (e.shiftKey) {
+      setSelectedLayer(layer.id);
+      setSelectedIds((prev) => {
+        if (prev.includes(layer.id)) {
+          return prev.filter((id) => id !== layer.id);
+        }
+        return [...prev, layer.id];
+      });
+      return;
+    }
+
     setSelectedLayer(layer.id);
+    // 普通点击：如果之前没有多选，重置为单选
+    if (selectedIds.length <= 1) {
+      setSelectedIds([layer.id]);
+    } else {
+      setSelectedIds([layer.id]);
+    }
     pushHistory(); // 拖拽开始前记录历史
     dragState.current = {
       id: layer.id,
@@ -875,6 +911,84 @@ export default function Studio() {
     downloadBlob(blob, `${design.name || 'lunasol'}_完整交付包.zip`);
   };
 
+  // 打开印前检查
+  const openPrepress = () => {
+    if (!design) return;
+    const report = runPrepress({ design, brief: s.brief, dieline, dpi: 300 });
+    setPrepressReport(report);
+    setPrepressOpen(true);
+  };
+
+  // 执行自动修复
+  const doAutoFix = () => {
+    if (!design) return;
+    pushHistory();
+    const { design: fixed, changes } = autoFix(design, dieline);
+    update({ design: fixed });
+    // 重新检查
+    const newReport = runPrepress({ design: fixed, brief: s.brief, dieline, dpi: 300 });
+    setPrepressReport(newReport);
+    if (changes.length) {
+      addChat({ role: 'ai', text: '自动修复完成：' + changes.join('；') });
+    }
+  };
+
+  // 对齐和分布：修改选中的多个图层
+  const alignLayers = (kind: 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'hdist' | 'vdist') => {
+    if (!face || !design || selectedIds.length < 2) return;
+    pushHistory();
+    const layers = face.layers.filter((l) => selectedIds.includes(l.id));
+    let newLayers = [...face.layers];
+
+    if (kind === 'left') {
+      const minX = Math.min(...layers.map((l) => l.x));
+      newLayers = newLayers.map((l) => selectedIds.includes(l.id) ? { ...l, x: minX } : l);
+    } else if (kind === 'hcenter') {
+      const centers = layers.map((l) => l.x + l.w / 2);
+      const avgCenter = centers.reduce((a, b) => a + b, 0) / centers.length;
+      newLayers = newLayers.map((l) => selectedIds.includes(l.id) ? { ...l, x: avgCenter - l.w / 2 } : l);
+    } else if (kind === 'right') {
+      const maxRight = Math.max(...layers.map((l) => l.x + l.w));
+      newLayers = newLayers.map((l) => selectedIds.includes(l.id) ? { ...l, x: maxRight - l.w } : l);
+    } else if (kind === 'top') {
+      const minY = Math.min(...layers.map((l) => l.y));
+      newLayers = newLayers.map((l) => selectedIds.includes(l.id) ? { ...l, y: minY } : l);
+    } else if (kind === 'vcenter') {
+      const centers = layers.map((l) => l.y + l.h / 2);
+      const avgCenter = centers.reduce((a, b) => a + b, 0) / centers.length;
+      newLayers = newLayers.map((l) => selectedIds.includes(l.id) ? { ...l, y: avgCenter - l.h / 2 } : l);
+    } else if (kind === 'bottom') {
+      const maxBottom = Math.max(...layers.map((l) => l.y + l.h));
+      newLayers = newLayers.map((l) => selectedIds.includes(l.id) ? { ...l, y: maxBottom - l.h } : l);
+    } else if (kind === 'hdist') {
+      // 水平等距分布
+      const sorted = [...layers].sort((a, b) => a.x - b.x);
+      const totalW = sorted.reduce((sum, l) => sum + l.w, 0);
+      const gap = (sorted[sorted.length - 1].x + sorted[sorted.length - 1].w - sorted[0].x - totalW) / (sorted.length - 1);
+      let curX = sorted[0].x;
+      const positions = new Map<string, number>();
+      sorted.forEach((l) => {
+        positions.set(l.id, curX);
+        curX += l.w + gap;
+      });
+      newLayers = newLayers.map((l) => positions.has(l.id) ? { ...l, x: positions.get(l.id)! } : l);
+    } else if (kind === 'vdist') {
+      // 垂直等距分布
+      const sorted = [...layers].sort((a, b) => a.y - b.y);
+      const totalH = sorted.reduce((sum, l) => sum + l.h, 0);
+      const gap = (sorted[sorted.length - 1].y + sorted[sorted.length - 1].h - sorted[0].y - totalH) / (sorted.length - 1);
+      let curY = sorted[0].y;
+      const positions = new Map<string, number>();
+      sorted.forEach((l) => {
+        positions.set(l.id, curY);
+        curY += l.h + gap;
+      });
+      newLayers = newLayers.map((l) => positions.has(l.id) ? { ...l, y: positions.get(l.id)! } : l);
+    }
+
+    update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers: newLayers } } } });
+  };
+
   return (
     <div className="studio-layout" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* 左侧：AI 对话 */}
@@ -1038,6 +1152,27 @@ export default function Studio() {
             # 网格
           </button>
           <button
+            onClick={openPrepress}
+            style={{ padding: '4px 10px', background: '#fff', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}
+            title="印前检查"
+          >
+            ✓ 印前检查
+          </button>
+
+          {/* 多选对齐按钮组（选中 2 个以上时显示） */}
+          {selectedIds.length >= 2 && (
+            <div style={{ display: 'flex', gap: 2, padding: '2px 6px', background: '#f5f5f5', borderRadius: 6 }}>
+              <button onClick={() => alignLayers('left')} style={alignBtn} title="左对齐">⇤</button>
+              <button onClick={() => alignLayers('hcenter')} style={alignBtn} title="水平居中">⇔</button>
+              <button onClick={() => alignLayers('right')} style={alignBtn} title="右对齐">⇥</button>
+              <button onClick={() => alignLayers('top')} style={alignBtn} title="顶对齐">⇧</button>
+              <button onClick={() => alignLayers('vcenter')} style={alignBtn} title="垂直居中">⇕</button>
+              <button onClick={() => alignLayers('bottom')} style={alignBtn} title="底对齐">⇩</button>
+              <button onClick={() => alignLayers('hdist')} style={alignBtn} title="水平等距分布">⇉</button>
+              <button onClick={() => alignLayers('vdist')} style={alignBtn} title="垂直等距分布">⇊</button>
+            </div>
+          )}
+          <button
             onClick={undo}
             disabled={!canUndo}
             style={{ padding: '4px 10px', background: '#fff', border: '1px solid #ddd', borderRadius: 6, cursor: canUndo ? 'pointer' : 'not-allowed', fontSize: 13, opacity: canUndo ? 1 : 0.4 }}
@@ -1173,7 +1308,7 @@ export default function Studio() {
               onMouseMove={onMouseMove}
               onMouseUp={onMouseUp}
               onMouseLeave={onMouseUp}
-              onClick={() => setSelectedLayer(null)}
+              onClick={() => { setSelectedLayer(null); setSelectedIds([]); }}
             >
               {/* 智能参考线 */}
               {guides.v !== undefined && (
@@ -1578,6 +1713,98 @@ export default function Studio() {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 印前检查弹窗 */}
+      {prepressOpen && prepressReport && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 800,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}
+          onClick={() => setPrepressOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 12, maxWidth: 640, width: '100%',
+              maxHeight: '85vh', overflow: 'auto', padding: 24,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>印前检查报告</h3>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={() => setPrepressOpen(false)}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 总结 */}
+            <div style={{
+              padding: 12, borderRadius: 8, marginBottom: 16,
+              background: prepressReport.status === 'pass' ? '#dcfce7' : prepressReport.status === 'warning' ? '#fef3c7' : '#fee2e2',
+              color: prepressReport.status === 'pass' ? '#166534' : prepressReport.status === 'warning' ? '#92400e' : '#991b1b',
+              fontSize: 14, fontWeight: 500,
+            }}>
+              {prepressReport.summary}
+            </div>
+
+            {/* 检查项列表 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {prepressReport.items.map((item) => (
+                <div key={item.id} style={{
+                  padding: 12, borderRadius: 8, border: '1px solid #eee',
+                  borderLeft: '4px solid ' + (item.level === 'pass' ? '#22c55e' : item.level === 'warning' ? '#f59e0b' : '#ef4444'),
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{
+                      width: 20, height: 20, borderRadius: '50%', display: 'inline-flex',
+                      alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#fff',
+                      background: item.level === 'pass' ? '#22c55e' : item.level === 'warning' ? '#f59e0b' : '#ef4444',
+                    }}>
+                      {item.level === 'pass' ? '✓' : item.level === 'warning' ? '!' : '×'}
+                    </span>
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>{item.title}</span>
+                    <span style={{ fontSize: 11, color: '#999', marginLeft: 'auto' }}>{item.group}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#555', lineHeight: 1.6, marginLeft: 28 }}>
+                    {item.detail}
+                  </div>
+                  {item.fix && (
+                    <div style={{ fontSize: 12, color: '#0369a1', marginTop: 4, marginLeft: 28 }}>
+                      建议：{item.fix}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* 底部操作 */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button
+                onClick={doAutoFix}
+                style={{
+                  padding: '8px 16px', background: '#f5c451', color: '#333',
+                  border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                自动修复可处理问题
+              </button>
+              <button
+                onClick={() => setPrepressOpen(false)}
+                style={{
+                  padding: '8px 16px', background: '#fff', color: '#333',
+                  border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer',
+                }}
+              >
+                关闭
+              </button>
+            </div>
           </div>
         </div>
       )}
