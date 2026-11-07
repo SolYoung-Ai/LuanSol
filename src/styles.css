@@ -369,8 +369,10 @@ img { display: block; max-width: 100%; }
 .lock-btn { font-size: 11px; }
 .undo-row { display: flex; gap: 6px; margin: 14px 0 20px; border-top: 1px solid var(--line); padding-top: 12px; }
 .version-list { display: flex; flex-direction: column; gap: 2px; max-height: 150px; overflow-y: auto; }
-.version-list button { display: flex; flex-direction: column; align-items: flex-start; padding: 7px; font-size: 11px; text-align: left; border-bottom: 1px solid var(--line); }
+.version-list button { display: flex; align-items: center; gap: 8px; padding: 7px; font-size: 11px; text-align: left; border-bottom: 1px solid var(--line); }
 .version-list button:hover { background: var(--soft); }
+.version-color { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+.version-label { flex: 1; }
 .version-list em { font-style: normal; color: var(--muted); font-size: 10px; }
 .editor-canvas { border: 1px solid var(--line); background: #fff; }
 .canvas-bar, .canvas-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 16px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--line); }
@@ -681,51 +683,96 @@ img { display: block; max-width: 100%; }
 }
 .global-back:hover { border-color: var(--ink, #222); background: var(--soft, #f6f6f4); }
 
+/* ============================================================
+ * 设计简报确认页
+ * ============================================================ */
+.brief-page { max-width: 800px; margin: 0 auto; padding: 24px 20px; position: relative; }
+.brief-back { border: none; background: transparent; color: #999; font-size: 14px; cursor: pointer; }
+.brief-header { text-align: center; margin-bottom: 32px; }
+.brief-header h1 { font-size: 24px; font-weight: 600; margin: 0 0 8px; color: #1d1d1b; }
+.brief-header p { font-size: 14px; color: #666; margin: 0; }
+.brief-content { margin-bottom: 32px; }
+.brief-section { margin-bottom: 24px; }
+.brief-section h2 { font-size: 14px; font-weight: 600; color: #333; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #f0f0ee; }
+.brief-items { display: flex; flex-direction: column; gap: 8px; }
+.brief-item { display: flex; align-items: center; padding: 12px 16px; background: #fafaf9; border-radius: 8px; gap: 12px; }
+.brief-item-label { font-size: 13px; color: #999; width: 80px; flex-shrink: 0; }
+.brief-item-value { flex: 1; font-size: 14px; color: #333; }
+.brief-item-value input { width: 100%; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+.brief-item-source { font-size: 11px; flex-shrink: 0; }
+.brief-actions { display: flex; gap: 12px; justify-content: center; }
+.brief-btn { padding: 12px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; border: none; }
+.brief-btn.secondary { background: #f0f0ee; color: #333; }
+.brief-btn.primary { background: #1d1d1b; color: #fff; }
+
 /* Luna 对话页 */
-.luna-page { display: flex; flex-direction: column; height: calc(100vh - 60px - 60px); max-width: 880px; margin: 0 auto; padding: 0 16px 12px; }
-.luna-chat { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 20px; }
-.luna-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px 0; }
-.luna-empty h1 { font-size: 28px; font-weight: 600; color: #1d1d1b; margin: 0; text-align: center; }
-.luna-empty p { color: #888; font-size: 14px; margin: 0; text-align: center; }
-.luna-msg { display: flex; gap: 12px; align-items: flex-start; }
-.luna-msg.user { flex-direction: row-reverse; }
-.luna-avatar { width: 32px; height: 32px; border-radius: 50%; background: #1d1d1b; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
-.luna-msg.user .luna-avatar { background: #c8a86b; }
-.luna-bubble { max-width: 75%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.7; background: #f4f2ec; color: #222; }
-.luna-msg.user .luna-bubble { background: #1d1d1b; color: #fff; border-bottom-right-radius: 4px; }
-.luna-msg.assistant .luna-bubble { border-bottom-left-radius: 4px; }
-.luna-bubble img { max-width: 100%; border-radius: 12px; margin-top: 8px; cursor: zoom-in; }
-.luna-typing { color: #888; font-style: italic; }
-.luna-input-bar { padding-top: 12px; }
-.luna-progress { margin-bottom: 10px; }
-.luna-progress-label { font-size: 12px; color: #888; margin-bottom: 6px; }
-.luna-progress-track { height: 4px; background: #e8e6e0; border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+.luna-page { display: flex; height: calc(100vh - 60px - 60px); max-width: 1280px; margin: 0 auto; background: #fff; box-shadow: 0 0 40px rgba(0,0,0,0.04); }
+.luna-sidebar { width: 200px; border-right: 1px solid #f0f0ee; display: flex; flex-direction: column; background: #fafaf9; }
+.luna-sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; font-size: 14px; font-weight: 500; color: #333; }
+.luna-sidebar-new { width: 24px; height: 24px; border: none; background: #e8e6e0; border-radius: 6px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.luna-sidebar-list { flex: 1; overflow-y: auto; padding: 0 8px; }
+.luna-sidebar-item { padding: 10px 12px; border-radius: 8px; font-size: 13px; color: #666; cursor: pointer; margin-bottom: 2px; }
+.luna-sidebar-item.active { background: #e8e6e0; color: #1d1d1b; }
+.luna-sidebar-footer { padding: 12px; border-top: 1px solid #f0f0ee; }
+.luna-settings-btn { border: none; background: transparent; color: #999; font-size: 13px; cursor: pointer; padding: 6px 8px; border-radius: 6px; }
+.luna-settings-btn:hover { background: #e8e6e0; color: #333; }
+.luna-main { flex: 1; display: flex; flex-direction: column; padding: 0 24px; min-width: 0; }
+.luna-summary { width: 260px; border-left: 1px solid #f0f0ee; display: flex; flex-direction: column; background: #fafaf9; }
+.luna-summary-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; font-size: 14px; font-weight: 500; color: #333; border-bottom: 1px solid #f0f0ee; }
+.luna-summary-count { font-size: 12px; color: #999; font-weight: 400; }
+.luna-summary-list { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.luna-summary-item { padding: 10px 12px; border-radius: 8px; background: #fff; border: 1px solid #f0f0ee; }
+.luna-summary-label { font-size: 11px; color: #999; display: block; margin-bottom: 4px; }
+.luna-summary-value { font-size: 13px; color: #333; }
+.luna-summary-item.done .luna-summary-value { color: #2f5d4a; }
+.luna-summary-hint { padding: 12px; margin: 0 12px 12px; background: #e8f5e9; border-radius: 8px; font-size: 12px; color: #2e7d32; text-align: center; }
+.luna-topbar { display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid #f0f0ee; }
+.luna-progress-mini { flex: 1; display: flex; align-items: center; gap: 12px; }
+.luna-progress-label { font-size: 12px; color: #999; white-space: nowrap; }
+.luna-progress-track { flex: 1; max-width: 160px; height: 2px; background: #eee; border-radius: 1px; overflow: hidden; }
 .luna-progress-fill { height: 100%; background: #c8a86b; transition: width .3s; }
-.luna-progress-fields { display: flex; gap: 10px; font-size: 11px; color: #aaa; flex-wrap: wrap; }
-.luna-progress-fields span.done { color: #2f5d4a; font-weight: 600; }
-.luna-progress-fields span.done::before { content: '✓ '; }
-.luna-input-wrapper { background: #fff; border: 1px solid #e5e5e5; border-radius: 24px; padding: 12px 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.04); }
-.luna-input-row { display: flex; gap: 8px; align-items: center; }
-.luna-input { flex: 1; padding: 8px 0; border: none; outline: none; font-size: 15px; background: transparent; resize: none; }
-.luna-input:focus { outline: none; }
-.luna-input-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: #f4f2ec; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.luna-model-panel { background: #fafaf9; border: 1px solid #f0f0ee; border-radius: 8px; padding: 12px; margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+.luna-model-item { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #666; }
+.luna-model-item select { padding: 4px 8px; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 12px; background: #fff; }
+.luna-chat { flex: 1; overflow-y: auto; padding: 24px 0; display: flex; flex-direction: column; gap: 24px; }
+.luna-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px 0; }
+.luna-empty h1 { font-size: 24px; font-weight: 500; color: #1d1d1b; margin: 0; text-align: center; }
+.luna-empty p { color: #999; font-size: 14px; margin: 0; text-align: center; }
+.luna-msg { display: flex; gap: 10px; align-items: flex-start; }
+.luna-msg.user { flex-direction: row-reverse; }
+.luna-avatar { width: 28px; height: 28px; border-radius: 50%; background: #1d1d1b; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+.luna-msg.user .luna-avatar { background: #c8a86b; }
+.luna-bubble { max-width: 70%; padding: 12px 16px; font-size: 14px; line-height: 1.7; color: #222; }
+.luna-msg.user .luna-bubble { color: #1d1d1b; }
+.luna-msg.assistant .luna-bubble { color: #333; }
+.luna-bubble img { max-width: 100%; border-radius: 8px; margin-top: 8px; cursor: zoom-in; }
+.luna-typing { color: #999; }
+.luna-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+.luna-action-btn { padding: 8px 16px; border: 1px solid #e5e5e5; border-radius: 6px; background: #fff; font-size: 13px; cursor: pointer; color: #666; transition: all .2s; }
+.luna-action-btn:hover { background: #fafaf9; }
+.luna-action-btn.primary { background: #1d1d1b; color: #fff; border-color: #1d1d1b; }
+.luna-action-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+.luna-action-btn.disabled:hover { background: #fff; }
+.luna-input-bar { padding-bottom: 16px; }
+.luna-pending-img { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; color: #999; }
+.luna-pending-img img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
+.luna-pending-img button { border: none; background: none; color: #999; cursor: pointer; font-size: 12px; text-decoration: underline; }
+.luna-input-wrapper { background: #fafaf9; border: 1px solid #e5e5e5; border-radius: 8px; padding: 8px; display: flex; align-items: center; gap: 8px; }
+.luna-input { flex: 1; padding: 8px; border: none; outline: none; font-size: 14px; background: transparent; }
+.luna-input-btn { width: 32px; height: 32px; border-radius: 6px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; color: #999; }
 .luna-input-btn:hover { background: #e8e6e0; }
-.luna-send-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: #1d1d1b; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
-.luna-send-btn:disabled { background: #ccc; cursor: not-allowed; }
-.luna-model-row { margin-top: 10px; font-size: 12px; color: #888; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.luna-model-label { color: #aaa; }
-.luna-model-select { padding: 4px 10px; border: 1px solid #e5e5e5; border-radius: 8px; font-size: 12px; background: #fff; cursor: pointer; }
-.luna-quick-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.luna-quick-btn { padding: 6px 14px; border: 1px solid #e5e5e5; border-radius: 16px; background: #fff; font-size: 12px; cursor: pointer; color: #666; }
-.luna-quick-btn:hover { background: #f4f2ec; }
+.luna-send-btn { padding: 8px 16px; border-radius: 6px; border: none; background: #1d1d1b; color: #fff; cursor: pointer; font-size: 13px; flex-shrink: 0; }
+.luna-send-btn:disabled { background: #ddd; cursor: not-allowed; }
 
 /* ---- Luna 对话页手机端适配 ---- */
-@media (max-width: 640px) {
-  .luna-page { padding: 0 12px 12px; height: calc(100vh - 56px); }
-  .luna-empty h1 { font-size: 22px; }
-  .luna-bubble { max-width: 88%; font-size: 14px; }
-  .luna-input-wrapper { border-radius: 20px; padding: 10px 12px; }
-  .luna-model-row { flex-wrap: wrap; row-gap: 6px; }
-  .luna-model-select { max-width: 120px; font-size: 11px; }
-  .luna-progress-fields { flex-wrap: wrap; gap: 6px; }
+@media (max-width: 768px) {
+  .luna-page { flex-direction: column; }
+  .luna-sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #f0f0ee; flex-direction: row; align-items: center; padding: 0 12px; }
+  .luna-sidebar-header { padding: 12px; }
+  .luna-sidebar-list { display: none; }
+  .luna-sidebar-footer { padding: 8px; border-top: none; }
+  .luna-main { padding: 0 12px; }
+  .luna-empty h1 { font-size: 20px; }
+  .luna-bubble { max-width: 88%; }
+  .luna-summary { display: none; }
 }

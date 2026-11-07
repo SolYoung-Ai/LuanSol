@@ -399,7 +399,11 @@ export function Editor() {
         </div>)}</div>
         <div className="undo-row"><Button variant="ghost" onClick={undo} disabled={hi <= 0}>↶ 撤销</Button><Button variant="ghost" onClick={redo} disabled={hi >= hist.length - 1}>↷ 重做</Button></div>
         <div className="panel-title">历史版本</div>
-        <div className="version-list">{(project?.versions || []).slice(-6).reverse().map((v) => <button key={v.id} onClick={() => { restoreVersion(v.id); setToast('已恢复历史版本'); }}><span>{v.label}</span><em>{formatDate(v.at)}</em></button>)}</div>
+        <div className="version-list">{(project?.versions || []).slice(-6).reverse().map((v) => <button key={v.id} onClick={() => { restoreVersion(v.id); setToast('已恢复历史版本'); }}>
+          <span className="version-color" style={{ background: v.design.palette.primary }} />
+          <span className="version-label">{v.label}</span>
+          <em>{formatDate(v.at)}</em>
+        </button>)}</div>
       </aside>
 
       <main className="editor-canvas">

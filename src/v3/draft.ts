@@ -178,8 +178,37 @@ export interface BarcodeDraft {
   legalNote: string;
 }
 
+/** 项目状态机 */
+export type ProjectStage =
+  | 'collecting'      // 正在收集需求
+  | 'brief_ready'     // 需求已经完整
+  | 'reviewing'       // 用户正在检查需求
+  | 'concept_pending' // 等待生成创意方案
+  | 'concept_ready'   // 创意方案已生成
+  | 'designing'       // 正在生成包装设计
+  | 'editing'         // 用户正在编辑
+  | 'preflighting'    // 正在印前检查
+  | 'completed';      // 项目已完成
+
+/** 信息来源标记 */
+export type InfoSource = 'user' | 'ai_extracted' | 'ai_recommended' | 'missing';
+
+/** 对话消息（与项目绑定） */
+export interface ProjectMessage {
+  id: string;
+  role: 'user' | 'ai';
+  text: string;
+  at: number;
+  options?: string[];
+  kind?: 'question' | 'note' | 'result';
+}
+
 export interface ProjectDraft {
   project_id: string;
+  /** 项目状态机 */
+  stage: ProjectStage;
+  /** 对话数据 */
+  conversation: ProjectMessage[];
   /** 向导状态 */
   step: number;
   visited: number[];
@@ -246,6 +275,8 @@ export function createEmptyDraft(): ProjectDraft {
   const form: PackageForm = 'box';
   return {
     project_id: `proj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    stage: 'collecting',
+    conversation: [],
     step: 0, visited: [0], skipped: [], savedAt: Date.now(), snapshots: [],
     package_type: form,
     package_dimensions: defaultDimensions(form),
@@ -276,6 +307,8 @@ export function normalizeDraft(d: Partial<ProjectDraft> | undefined | null): Pro
   if (!d || typeof d !== 'object') return base;
   return {
     ...base, ...d,
+    stage: d.stage || 'collecting',
+    conversation: d.conversation || [],
     package_dimensions: { ...base.package_dimensions, ...(d.package_dimensions || {}), values: { ...(d.package_dimensions?.values || {}) }, extra: { ...(d.package_dimensions?.extra || {}) } },
     target_audience: { ...base.target_audience, ...(d.target_audience || {}) },
     product_category: { ...base.product_category, ...(d.product_category || {}) },

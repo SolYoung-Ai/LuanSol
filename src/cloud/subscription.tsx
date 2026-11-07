@@ -261,14 +261,9 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     });
     registerAIReporter((taskId: string) => {
       const u = userRef.current; if (!u) return;
-      // 根据 taskId 扣不同积分：聊天免费，生图按档位扣
-      const cost = taskId === 'imageFlash' ? PRICING.costs.imageFlash
-        : taskId === 'imageLite' ? PRICING.costs.imageLite
-        : taskId === 'imagePro' ? PRICING.costs.imagePro
-        : taskId === 'image' ? PRICING.costs.imageFlash  // 默认 Flash
-        : 0;  // 聊天免费
-      if (cost === 0) return;
-      void recordUsage(u.id, cost).then((next) => { if (next >= 0) setSub((prev) => (prev ? { ...prev, quota_used: next } : prev)); });
+      // 积分由云函数统一扣减，前端只需要刷新显示
+      // 这里不再手动扣减，避免双重扣减
+      void refresh();
     });
     return () => { registerAIGate(null); registerAIReporter(null); };
   }, [metered, requestLogin]);
@@ -370,11 +365,29 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       return { ok: false, points: 0, streak: newStreak, message: '签到失败：' + errText(e) };
     }
 
-    // 把积分加到 bonus_credits
+    // 用 RPC 函数加积分（绕过 RLS，安全）
     const cur = subRef.current;
     if (cur) {
-      await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
-      setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
+      try {
+        if (typeof (d as any).rpc === 'function') {
+          const r = await (d as any).rpc('lunasol_grant_bonus', { p_uid: u.id, p_points: totalPoints });
+          if (!r.error && typeof r.data === 'number') {
+            setSub((prev) => prev ? { ...prev, bonus_credits: r.data as number } : prev);
+          } else {
+            // RPC 失败时兜底
+            await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
+            setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
+          }
+        } else {
+          // 没有 rpc 方法，直接更新
+          await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
+          setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
+        }
+      } catch {
+        // RPC 失败时兜底
+        await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
+        setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
+      }
     }
 
     setCheckinState({ checkedToday: true, streak: newStreak, loading: false });
@@ -402,19 +415,38 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     // 2. 标记已使用（检查是否成功，防止并发重复兑换）
     const markRes = await db.from('lunasol_redeem_codes').update({ used: true, used_by: u.id }).eq('code', c);
     if (markRes.error) return { ok: false, message: '兑换失败，请稍后重试' };
-    // 3. 给用户加积分到 bonus_credits
+    // 3. 用 RPC 函数给用户加积分（绕过 RLS，安全）
     const cur = subRef.current;
     if (cur) {
-      await db.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + row.points }).eq('id', cur.id);
-      setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + row.points } : prev);
+      try {
+        if (typeof (db as any).rpc === 'function') {
+          const r = await (db as any).rpc('lunasol_grant_bonus', { p_uid: u.id, p_points: row.points });
+          if (!r.error && typeof r.data === 'number') {
+            setSub((prev) => prev ? { ...prev, bonus_credits: r.data as number } : prev);
+          } else {
+            // RPC 失败时兜底
+            await db.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + row.points }).eq('id', cur.id);
+            setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + row.points } : prev);
+          }
+        } else {
+          // 没有 rpc 方法，直接更新
+          await db.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + row.points }).eq('id', cur.id);
+          setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + row.points } : prev);
+        }
+      } catch {
+        // RPC 失败时兜底
+        await db.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + row.points }).eq('id', cur.id);
+        setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + row.points } : prev);
+      }
     }
     return { ok: true, points: row.points, message: `兑换成功！+${row.points} 积分` };
   }, [auth.user]);
 
   const usedLeftRaw = metered ? remainingOf(sub) : null;
-  // 积分余额 = 云端剩余（quota_total - quota_used + bonus_credits）+ 本地签到缓存
+  // 积分余额 = 云端剩余（quota_total - quota_used + bonus_credits）
+  // 签到和兑换码的积分都存在 bonus_credits 里，不再用 localStorage 缓存
   const bonus = sub ? (sub as any).bonus_credits || 0 : 0;
-  const usedLeft = usedLeftRaw !== null ? usedLeftRaw + bonus + localCredits : null;
+  const usedLeft = usedLeftRaw !== null ? usedLeftRaw + bonus : null;
   const isPro = isProActive(sub);
 
   const value = useMemo<SubCtx>(() => ({

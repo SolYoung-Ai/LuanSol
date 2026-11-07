@@ -14,6 +14,57 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
+const tcb = require('@cloudbase/node-sdk');
+
+// 初始化 CloudBase SDK（用于查询和扣减积分）
+let dbInstance = null;
+function getDb() {
+  if (dbInstance) return dbInstance;
+  const app = tcb.init({ env: process.env.TCB_ENV_ID || 'solyoung-d4gpp1f7s4e075f6d' });
+  dbInstance = app.database();
+  return dbInstance;
+}
+
+/** 查询用户剩余积分，返回 -1 表示查询失败 */
+async function checkQuota(uid) {
+  try {
+    const db = getDb();
+    const { data } = await db.collection('lunasol_subscriptions')
+      .where({ id: uid })
+      .limit(1)
+      .get();
+    if (!data || !data.length) return -1;
+    const sub = data[0];
+    const remaining = (sub.quota_total || 0) - (sub.quota_used || 0) + (sub.bonus_credits || 0);
+    return Math.max(0, remaining);
+  } catch (e) {
+    console.error('checkQuota error:', e.message);
+    return -1;
+  }
+}
+
+/** 扣减积分，返回扣减后的剩余积分，-1 表示失败 */
+async function consumeQuota(uid, cost) {
+  try {
+    const db = getDb();
+    // 用 RPC 函数原子扣减，避免并发问题
+    const { data } = await db.runTransaction(async (transaction) => {
+      const { data: subs } = await transaction.collection('lunasol_subscriptions').where({ id: uid }).get();
+      if (!subs || !subs.length) throw new Error('no subscription');
+      const sub = subs[0];
+      const newUsed = Math.min(sub.quota_total, (sub.quota_used || 0) + cost);
+      await transaction.collection('lunasol_subscriptions').doc(uid).update({
+        quota_used: newUsed,
+        updated_at: new Date().toISOString(),
+      });
+      return { remaining: (sub.quota_total - newUsed) + (sub.bonus_credits || 0) };
+    });
+    return data.remaining;
+  } catch (e) {
+    console.error('consumeQuota error:', e.message);
+    return -1;
+  }
+}
 
 // 体验版环境无法通过管理 API 追加环境安全域名，所以这里用后台环境变量维护
 // 一份独立的 CORS 来源白名单（只放可信站点 origin，不回显任意 Origin）。
@@ -126,7 +177,7 @@ function sendJson(res, statusCode, data) {
 function sendOptions(res) {
   res.writeHead(204, {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-LunaSol-Token',
+    'Access-Control-Allow-Headers': 'Content-Type, X-LunaSol-Token, X-CloudBase-Uid',
     'Access-Control-Max-Age': '600',
     ...(res.cors || {}),
   });
@@ -291,6 +342,7 @@ async function handleImage(req, res, body) {
   const verdict = guard(req);
   if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
 
+  const uid = String(req.headers['x-cloudbase-uid'] || '').trim();
   const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, 2000) : '';
   if (!prompt) return sendJson(res, 400, { error: { message: '缺少 prompt' } });
 
@@ -300,14 +352,23 @@ async function handleImage(req, res, body) {
     lite: 'doubao-seedream-4-5-251128',
     pro: 'doubao-seedream-5-0-pro-260628',
   };
-  const tier = typeof body.model === 'string' && TIER_MODEL[body.model] ? body.model : null;
+  const tier = typeof body.model === 'string' && TIER_MODEL[body.model] ? body.model : 'flash';
+  const cost = tier === 'flash' ? 6 : tier === 'lite' ? 10 : 15;
+
+  // 积分校验：先查余额，不足直接拒绝
+  const remaining = await checkQuota(uid);
+  if (remaining === -1) {
+    return sendJson(res, 500, { error: { message: '积分查询失败，请稍后再试' } });
+  }
+  if (remaining < cost) {
+    return sendJson(res, 402, { error: { message: `积分不足：生图需要 ${cost} 积分，当前剩余 ${remaining}` } });
+  }
 
   const payload = {
-    model: tier ? TIER_MODEL[tier] : (process.env.SEEDREAM_MODEL || 'doubao-seedream-5-0-flash-260915'),
+    model: TIER_MODEL[tier] || TIER_MODEL.flash,
     prompt,
     size: typeof body.size === 'string' ? body.size : '1024x1024',
     response_format: 'url',
-    // 参考图：base64 dataURL，Seedream 接受
     ...(typeof body.image === 'string' && body.image.startsWith('data:image/') ? { image: body.image } : {}),
   };
 
@@ -319,6 +380,8 @@ async function handleImage(req, res, body) {
         error: { message: safeUpstreamError(r) },
       });
     }
+    // 成功后扣减积分
+    await consumeQuota(uid, cost);
     // 透传上游 data 数组（url / b64_json）
     return sendJson(res, 200, {
       created: r.json.created || Date.now(),
@@ -343,6 +406,18 @@ async function handleChat(req, res, body) {
   }
   const verdict = guard(req);
   if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
+
+  const uid = String(req.headers['x-cloudbase-uid'] || '').trim();
+  const cost = 1; // 聊天每次扣 1 积分
+
+  // 积分校验：先查余额，不足直接拒绝
+  const remaining = await checkQuota(uid);
+  if (remaining === -1) {
+    return sendJson(res, 500, { error: { message: '积分查询失败，请稍后再试' } });
+  }
+  if (remaining < cost) {
+    return sendJson(res, 402, { error: { message: `积分不足：聊天需要 ${cost} 积分，当前剩余 ${remaining}` } });
+  }
 
   const withJsonFormat = !!(body.response_format && body.response_format.type === 'json_object');
   let payload = buildUpstreamPayload(body, withJsonFormat);
@@ -380,6 +455,8 @@ async function handleChat(req, res, body) {
     if (typeof content !== 'string') {
       return sendJson(res, 502, { error: { message: '模型未返回文本内容' } });
     }
+    // 成功后扣减积分
+    await consumeQuota(uid, cost);
     // 只返回前端需要的最小 OpenAI 兼容结构，不透传上游原始响应头
     return sendJson(res, 200, {
       id: r.json.id,

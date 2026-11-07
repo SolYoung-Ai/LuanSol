@@ -106,6 +106,7 @@ export default function Luna() {
   const [imageTier, setImageTier] = useState<'flash' | 'lite' | 'pro'>('flash');
   const [chatModel, setChatModel] = useState('deepseek');
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [modelOpen, setModelOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [extracted, setExtracted] = useState<Extracted>({ product: '', brand: '', style: '', material: '', size: '', audience: '', scene: '', tagline: '', colors: '' });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -146,8 +147,13 @@ export default function Luna() {
         .then((ex) => setExtracted((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(ex).filter(([, v]) => v)) })))
         .catch(() => { /* 抽取失败不影响对话 */ });
     } catch (e) {
-      setToast((e as Error).message || 'AI 暂时连不上');
-    } finally { setLoading(false); }
+      const msg = (e as Error).message || 'AI 暂时连不上';
+      setToast(msg);
+      // 错误也显示在对话里，用户能看到
+      setMessages((prev) => [...prev, { role: 'assistant', text: `抱歉，${msg}。请稍后再试，或者换个说法。` }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onPickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,6 +168,11 @@ export default function Luna() {
 
   const generateMockup = async () => {
     if (imageGenerating) return;
+    // 信息不足时提示，不让用户点了才发现
+    if (progress < 1) {
+      setToast(`先和 Luna 聊一聊你的产品和品牌，信息够了就能生成效果图。`);
+      return;
+    }
     // 积分余额检查：不够直接拦截，不让用户点了才发现
     const cost = imageTier === 'flash' ? PRICING.costs.imageFlash
       : imageTier === 'lite' ? PRICING.costs.imageLite : PRICING.costs.imagePro;
@@ -185,11 +196,8 @@ export default function Luna() {
       ].filter(Boolean).join('');
       const lastUserImage = [...messages].reverse().find((m) => m.role === 'user' && m.image)?.image;
       const url = await callSeedream(prompt, lastUserImage, imageTier, auth.user?.id);
-      // 生图成功后扣减积分
-      if (auth.user) {
-        const next = await recordUsage(auth.user.id, cost);
-        if (next >= 0) sub.refresh();
-      }
+      // 积分由云函数统一扣减，前端只需要刷新显示
+      if (auth.user) sub.refresh();
       setMessages((prev) => [...prev, {
         role: 'assistant',
         text: '根据我们聊的内容，生成了一张效果图（可基于此方向继续调整，或进入工作台细化）：',
@@ -233,75 +241,141 @@ export default function Luna() {
   }
 
   return <div className="luna-page">
-    <div className="luna-chat" ref={scrollRef}>
-      {messages.length === 0 && !loading && !imageGenerating && (
-        <div className="luna-empty">
-          <h1>今天想做什么包装？</h1>
-          <p>告诉我你的产品、品牌或想法，我来帮你从零设计到成品。</p>
+    {/* 左侧作品栏 */}
+    <div className="luna-sidebar">
+      <div className="luna-sidebar-header">
+        <span>作品</span>
+        <button className="luna-sidebar-new" title="新建对话">+</button>
+      </div>
+      <div className="luna-sidebar-list">
+        <div className="luna-sidebar-item active">
+          <span>当前对话</span>
         </div>
-      )}
-      {messages.map((m, i) => <div key={i} className={`luna-msg ${m.role}`}>
-        {m.role === 'assistant' && <div className="luna-avatar">L</div>}
-        <div className="luna-bubble">
-          {m.text && <div>{m.text}</div>}
-          {m.image && <img src={m.image} alt="生成效果图" onClick={() => setLightbox(m.image!)} />}
-        </div>
-      </div>)}
-      {loading && <div className="luna-msg assistant"><div className="luna-avatar">L</div><div className="luna-bubble luna-typing">正在输入…</div></div>}
-      {imageGenerating && <div className="luna-msg assistant"><div className="luna-avatar">L</div><div className="luna-bubble luna-typing">正在生成效果图…（首次约 10-30 秒）</div></div>}
+      </div>
+      <div className="luna-sidebar-footer">
+        <button className="luna-settings-btn" onClick={() => setModelOpen(!modelOpen)}>
+          设置
+        </button>
+      </div>
     </div>
 
-    <div className="luna-input-bar">
-      <div className="luna-progress">
-        <div className="luna-progress-label">关键信息 {progress}/{FIELDS.length}</div>
-        <div className="luna-progress-track"><div className="luna-progress-fill" style={{ width: `${(progress / FIELDS.length) * 100}%` }} /></div>
-        <div className="luna-progress-fields">{FIELDS.map((f) => <span key={f.key} className={extracted[f.key] ? 'done' : ''}>{f.label}</span>)}</div>
+    {/* 中间对话区 */}
+    <div className="luna-main">
+      {/* 顶部栏 */}
+      <div className="luna-topbar">
+        <div className="luna-progress-mini">
+          <span className="luna-progress-label">已收集 {progress}/{FIELDS.length}</span>
+          <div className="luna-progress-track"><div className="luna-progress-fill" style={{ width: `${(progress / FIELDS.length) * 100}%` }} /></div>
+        </div>
       </div>
-      {pendingImage && <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0' }}>
-        <img src={pendingImage} alt="待发送" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6 }} />
-        <span style={{ fontSize: 12, color: '#888' }}>已选图，发送后作为参考</span>
-        <button className="v4-btn-line" onClick={() => setPendingImage(null)}>移除</button>
-      </div>}
-      <div className="luna-input-wrapper">
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
-        <div className="luna-input-row">
+
+      {/* 模型设置面板 */}
+      {modelOpen && (
+        <div className="luna-model-panel">
+          <div className="luna-model-item">
+            <span>对话模型</span>
+            <select value={chatModel} onChange={(e) => setChatModel(e.target.value)}>
+              <option value="deepseek-v4.1">DeepSeek（推荐）</option>
+              <option value="kimi-k3.1">Kimi Pro</option>
+              <option value="doubao-seed-pro">Doubao Pro</option>
+              <option value="doubao-seed-lite">Doubao Lite</option>
+              <option value="glm-5.3">GLM Flash</option>
+            </select>
+          </div>
+          <div className="luna-model-item">
+            <span>生图档位</span>
+            <select value={imageTier} onChange={(e) => setImageTier(e.target.value as 'flash' | 'lite' | 'pro')}>
+              <option value="flash">Flash · 6积分</option>
+              <option value="lite">Lite · 10积分</option>
+              <option value="pro">Pro · 15积分</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* 对话区 */}
+      <div className="luna-chat" ref={scrollRef}>
+        {messages.length === 0 && !loading && !imageGenerating && (
+          <div className="luna-empty">
+            <h1>今天想做什么包装？</h1>
+            <p>告诉我你的产品、品牌或想法，我来帮你从零设计到成品。</p>
+          </div>
+        )}
+        {messages.map((m, i) => <div key={i} className={`luna-msg ${m.role}`}>
+          {m.role === 'assistant' && <div className="luna-avatar">L</div>}
+          <div className="luna-bubble">
+            {m.text && <div>{m.text}</div>}
+            {m.image && <img src={m.image} alt="生成效果图" onClick={() => setLightbox(m.image!)} />}
+          </div>
+        </div>)}
+        {loading && <div className="luna-msg assistant"><div className="luna-avatar">L</div><div className="luna-bubble luna-typing">正在输入…</div></div>}
+        {imageGenerating && <div className="luna-msg assistant"><div className="luna-avatar">L</div><div className="luna-bubble luna-typing">正在生成效果图…（首次约 10-30 秒）</div></div>}
+      </div>
+
+      {/* 底部操作区 */}
+      <div className="luna-actions">
+        <button
+          className={`luna-action-btn ${progress < 1 ? 'disabled' : ''}`}
+          disabled={imageGenerating}
+          onClick={() => void generateMockup()}
+        >
+          生成效果图
+        </button>
+        <button
+          className={`luna-action-btn ${progress < 3 ? 'disabled' : ''}`}
+          onClick={() => go('/brief')}
+        >
+          确认需求
+        </button>
+        <button
+          className={`luna-action-btn ${progress < 3 ? 'disabled' : 'primary'}`}
+          onClick={enterWorkspace}
+        >
+          进入工作台
+        </button>
+      </div>
+
+      {/* 输入区 */}
+      <div className="luna-input-bar">
+        {pendingImage && <div className="luna-pending-img">
+          <img src={pendingImage} alt="待发送" />
+          <span>已选图，发送后作为参考</span>
+          <button onClick={() => setPendingImage(null)}>移除</button>
+        </div>}
+        <div className="luna-input-wrapper">
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
           <button className="luna-input-btn" title="上传产品图 / 对标图" onClick={() => fileRef.current?.click()}>+</button>
           <input className="luna-input" value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
             placeholder="告诉 Luna 你的想法…" />
-          <button className="luna-send-btn" disabled={loading || !input.trim()} onClick={() => void send()}>↑</button>
+          <button className="luna-send-btn" disabled={loading || !input.trim()} onClick={() => void send()}>发送</button>
         </div>
       </div>
-      <div className="luna-quick-actions">
-        <button className="luna-quick-btn" disabled={imageGenerating || progress < 1} onClick={() => void generateMockup()}>
-          ✨ 生成效果图（{imageTier === 'flash' ? 6 : imageTier === 'lite' ? 10 : 15} 积分）
-        </button>
-        <button
-          className="luna-quick-btn"
-          disabled={progress >= 3}
-          onClick={enterWorkspace}
-          title={progress < 3 ? `还差 ${3 - progress} 项关键信息，先和 Luna 聊完` : ''}
-          style={progress < 3 ? { opacity: 0.4, cursor: 'not-allowed' } : { background: '#1d1d1b', color: '#fff', borderColor: '#1d1d1b' }}
-        >进入工作台 →</button>
+    </div>
+
+    {/* 右侧需求摘要面板 */}
+    <div className="luna-summary">
+      <div className="luna-summary-header">
+        <span>需求摘要</span>
+        <span className="luna-summary-count">{progress}/{FIELDS.length}</span>
       </div>
-      <div className="luna-model-row">
-        <span className="luna-model-label">对话：</span>
-        <select className="luna-model-select" value={chatModel} onChange={(e) => setChatModel(e.target.value)}>
-          <option value="deepseek-v4.1">DeepSeek-V4.1（通用推荐）</option>
-          <option value="kimi-k3.1">Kimi-K3.1-Pro（长文/思考）</option>
-          <option value="doubao-seed-pro">Doubao-Seed-2.1 Pro（创意）</option>
-          <option value="doubao-seed-lite">Doubao-Seed-2.1 Lite（快）</option>
-          <option value="doubao-seed-turbo">Doubao-Seed-2.1 Turbo</option>
-          <option value="glm-5.3">GLM-5.3-Flash（智谱）</option>
-          <option value="gpt" disabled>GPT 系列（即将接入）</option>
-        </select>
-        <span className="luna-model-label">生图：</span>
-        <select className="luna-model-select" value={imageTier} onChange={(e) => setImageTier(e.target.value as 'flash' | 'lite' | 'pro')}>
-          <option value="flash">Flash（≈6 积分/张，快）</option>
-          <option value="lite">Lite（≈10 积分/张，平衡）</option>
-          <option value="pro">Pro（≈15 积分/张，精细）</option>
-        </select>
+      <div className="luna-summary-list">
+        {FIELDS.map((f) => {
+          const val = extracted[f.key];
+          const has = !!val;
+          return (
+            <div key={f.key} className={`luna-summary-item ${has ? 'done' : ''}`}>
+              <span className="luna-summary-label">{f.label}</span>
+              <span className="luna-summary-value">{has ? val : '待补充'}</span>
+            </div>
+          );
+        })}
       </div>
+      {progress >= 3 && (
+        <div className="luna-summary-hint">
+          ✓ 信息已足够，可以进入设计了
+        </div>
+      )}
     </div>
 
     {/* 图片放大 lightbox */}

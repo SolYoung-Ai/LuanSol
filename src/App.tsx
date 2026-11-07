@@ -16,7 +16,7 @@ const Wizard = lazy(() => import('./v3/Wizard'));
 const Review = lazy(() => import('./v3/Review'));
 const Account = lazy(() => import('./pages/account'));
 const Create = lazy(() => import('./pages/flow').then((m) => ({ default: m.Create })));
-const BriefPage = lazy(() => import('./pages/flow').then((m) => ({ default: m.BriefPage })));
+const Brief = lazy(() => import('./pages/brief'));
 const Schemes = lazy(() => import('./pages/flow').then((m) => ({ default: m.Schemes })));
 const Editor = lazy(() => import('./pages/flow').then((m) => ({ default: m.Editor })));
 const Inspiration = lazy(() => import('./pages/library').then((m) => ({ default: m.Inspiration })));
@@ -88,7 +88,7 @@ export default function App() {
   else if (path === '/wizard') page = <Wizard />;
   else if (path === '/review') page = <Review />;
   else if (path === '/create') page = <Create />;
-  else if (path === '/brief') page = <BriefPage />;
+  else if (path === '/brief') page = <Brief />;
   else if (path === '/schemes') page = <Schemes />;
   else if (path === '/editor') page = <Editor />;
   else if (path === '/preview') page = <Preview3D />;
