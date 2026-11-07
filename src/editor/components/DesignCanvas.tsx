@@ -5,6 +5,7 @@ import { Icon } from '../../components/icons';
 import Viewer3D from '../../components/Viewer3D';
 import LayerView from './LayerView';
 import DielineView from './DielineView';
+import AssetLibrary from './AssetLibrary';
 import { FACE_LABELS, MM_TO_PX, zoomBtn } from '../constants';
 import type { FaceId } from '../../types';
 
@@ -21,42 +22,48 @@ export default function DesignCanvas() {
         height: 38, borderBottom: '1px solid #e5e5e5', display: 'flex',
         alignItems: 'center', padding: '0 12px', gap: 4, background: '#fff',
       }}>
-        {/* 平面设计视图才显示面切换 */}
-        {ed.viewMode === 'design' && FACE_ORDER.map((f) => (
-          <button
-            key={f}
-            onClick={() => ed.setCurrentFace(f)}
-            style={{
-              padding: '4px 12px', fontSize: 12,
-              background: ed.currentFace === f ? '#333' : '#fff',
-              color: ed.currentFace === f ? '#fff' : '#666',
-              border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer',
-            }}
-          >
-            {FACE_LABELS[f]}
-          </button>
-        ))}
+        {ed.activeTool === 'assets' ? (
+          <div style={{ fontSize: 12, color: '#555', fontWeight: 600 }}>素材库</div>
+        ) : (
+          <>
+            {/* 平面设计视图才显示面切换 */}
+            {ed.viewMode === 'design' && FACE_ORDER.map((f) => (
+              <button
+                key={f}
+                onClick={() => ed.setCurrentFace(f)}
+                style={{
+                  padding: '4px 12px', fontSize: 12,
+                  background: ed.currentFace === f ? '#333' : '#fff',
+                  color: ed.currentFace === f ? '#fff' : '#666',
+                  border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer',
+                }}
+              >
+                {FACE_LABELS[f]}
+              </button>
+            ))}
 
-        <div style={{ flex: 1 }} />
+            <div style={{ flex: 1 }} />
 
-        {/* 缩放控制 */}
-        <button onClick={() => ed.setZoom((z) => Math.max(0.1, +(z - 0.1).toFixed(2)))} style={zoomBtn} title="缩小">
-          <Icon name="minus" size={13} />
-        </button>
-        <button
-          onClick={() => ed.setZoom(1)}
-          style={{ ...zoomBtn, minWidth: 52 }}
-          title="重置为 100%"
-        >
-          {Math.round(ed.zoom * 100)}%
-        </button>
-        <button onClick={() => ed.setZoom((z) => Math.min(5, +(z + 0.1).toFixed(2)))} style={zoomBtn} title="放大">
-          <Icon name="plus" size={13} />
-        </button>
-        <button onClick={ed.fitToScreen} style={{ ...zoomBtn, display: 'flex', alignItems: 'center', gap: 4 }} title="适应屏幕">
-          <Icon name="fit" size={13} />
-          适应
-        </button>
+            {/* 缩放控制 */}
+            <button onClick={() => ed.setZoom((z) => Math.max(0.1, +(z - 0.1).toFixed(2)))} style={zoomBtn} title="缩小">
+              <Icon name="minus" size={13} />
+            </button>
+            <button
+              onClick={() => ed.setZoom(1)}
+              style={{ ...zoomBtn, minWidth: 52 }}
+              title="重置为 100%"
+            >
+              {Math.round(ed.zoom * 100)}%
+            </button>
+            <button onClick={() => ed.setZoom((z) => Math.min(5, +(z + 0.1).toFixed(2)))} style={zoomBtn} title="放大">
+              <Icon name="plus" size={13} />
+            </button>
+            <button onClick={ed.fitToScreen} style={{ ...zoomBtn, display: 'flex', alignItems: 'center', gap: 4 }} title="适应屏幕">
+              <Icon name="fit" size={13} />
+              适应
+            </button>
+          </>
+        )}
       </div>
 
       {/* 画布区域 */}
@@ -72,6 +79,12 @@ export default function DesignCanvas() {
         onMouseUp={ed.onCanvasMouseUp}
         onMouseLeave={ed.onCanvasMouseLeave}
       >
+        {ed.activeTool === 'assets' ? (
+          <div style={{ width: '100%', height: '100%' }}>
+            <AssetLibrary />
+          </div>
+        ) : (
+          <>
         {/* 平面设计视图 */}
         {ed.viewMode === 'design' && face && (
           <div style={{
@@ -132,6 +145,8 @@ export default function DesignCanvas() {
 
         {/* 刀模与印前视图 */}
         {ed.viewMode === 'dieline' && <DielineView />}
+          </>
+        )}
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ import { styleById } from '../v3/styles';
 import { runPrepress, autoFix } from '../engine/prepress';
 import { spreadSvg, svgToCanvas } from '../engine/export';
 import { uid, downloadBlob } from '../engine/utils';
-import type { DesignDoc, Face, FaceId, Layer, TextLayer, ImageLayer, ShapeLayer, DesignBrief, StructureId } from '../types';
+import type { DesignDoc, Face, FaceId, Layer, TextLayer, ImageLayer, ShapeLayer, DesignBrief, StructureId, Asset, AssetCategory } from '../types';
 import { HandlePos, MM_TO_PX, ToolId, ViewMode } from './constants';
 import { executeAction } from './ai/executor';
 import { planFromUser } from './ai/planner';
@@ -103,6 +103,14 @@ interface EditorCtx {
   bringToFront: (id: string) => void;
   sendToBack: (id: string) => void;
   updateLayer: (id: string, patch: Partial<Layer>) => void;
+  // 独立素材库
+  addAssetToCanvas: (assetId: string) => void;
+  assetFileRef: React.RefObject<HTMLInputElement>;
+  onPickAssetFiles: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  generateToLibrary: (prompt: string, category: import('../types').AssetCategory) => Promise<void>;
+  assetBusy: boolean;
+  removeAsset: (id: string) => void;
+  toggleFavoriteAsset: (id: string) => void;
   // 画布交互
   onLayerMouseDown: (e: React.MouseEvent, layer: Layer) => void;
   onMouseMove: (e: React.MouseEvent) => void;
@@ -142,7 +150,7 @@ export const useEditor = () => {
 };
 
 export function EditorProvider({ children }: { children: React.ReactNode }) {
-  const { s, dieline, update, patchBrief, addChat, saveProject, loadProject, addVersion, syncProject } = useApp();
+  const { s, dieline, update, patchBrief, addChat, saveProject, loadProject, addVersion, syncProject, addAsset, removeAsset, toggleFavoriteAsset } = useApp();
   const auth = useAuth();
   const sub = useSubscription();
   const hash = useHash();
@@ -791,6 +799,72 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     update({ design: { ...design, faces } });
   };
 
+  // —— 独立素材库操作 ——
+  const assetFileRef = useRef<HTMLInputElement>(null);
+  const [assetBusy, setAssetBusy] = useState(false);
+
+  /** 把素材库中的素材作为独立图片图层加入当前画布 */
+  const addAssetToCanvas = (assetId: string) => {
+    const asset = s.assets.find((a) => a.id === assetId);
+    if (!asset || !face || !design) return;
+    const ratio = asset.naturalW ? asset.naturalH / asset.naturalW : 1;
+    const w = Math.min(60, asset.naturalW ? asset.naturalW / 3.78 : 60);
+    const layer: ImageLayer = {
+      id: uid('lay'), name: asset.name, type: 'image',
+      src: asset.src, x: 10, y: 10,
+      w, h: +(w * ratio).toFixed(1),
+      rotation: 0, opacity: 1,
+      naturalW: asset.naturalW, naturalH: asset.naturalH,
+      fit: 'contain', locked: false,
+    };
+    addLayer(layer);
+    setSelectedLayer(layer.id);
+  };
+
+  /** 上传文件到素材库（读取为持久化 data URL） */
+  const onPickAssetFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result);
+        const img = new Image();
+        img.onload = () => {
+          addAsset({
+            id: uid('asset'), name: file.name.replace(/\.[^.]+$/, ''),
+            src: result, kind: 'uploaded', category: 'other',
+            naturalW: img.width, naturalH: img.height, favorite: false,
+            projectId: s.activeId || undefined, createdAt: Date.now(),
+          });
+        };
+        img.src = result;
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  /** 调用 AI 生成素材并直接入库（独立成层，不自动上画布） */
+  const generateToLibrary = async (prompt: string, category: AssetCategory) => {
+    if (!prompt.trim()) return;
+    const ai = { ...loadAI(), cloudbaseUid: auth.user?.id || '' };
+    setAssetBusy(true);
+    try {
+      const fullPrompt = category === 'background'
+        ? `${prompt}。纯背景，不要任何文字、Logo 或人物，无缝可平铺。`
+        : prompt;
+      const img = await llmImage(fullPrompt, ai);
+      addAsset({
+        id: uid('asset'), name: prompt.slice(0, 16),
+        src: img.src, kind: 'generated', category,
+        naturalW: img.naturalW, naturalH: img.naturalH, favorite: false,
+        projectId: s.activeId || undefined, sourcePrompt: prompt, createdAt: Date.now(),
+      });
+    } finally {
+      setAssetBusy(false);
+    }
+  };
+
   const clearSelection = () => { setSelectedLayer(null); setSelectedIds([]); };
 
   // 对齐
@@ -1010,7 +1084,18 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       const fullPrompt = kind === 'background'
         ? `${prompt}。纯背景，不要任何文字、Logo 或人物，无缝可平铺。`
         : prompt;
-      return llmImage(fullPrompt, ai);
+      const img = await llmImage(fullPrompt, ai);
+      // 生成素材自动入库，保持可复用与可独立管理
+      const category = (['background', 'illustration', 'texture', 'pattern', 'sticker', 'product'].includes(kind)
+        ? kind
+        : 'other') as AssetCategory;
+      addAsset({
+        id: uid('asset'), name: prompt.slice(0, 16),
+        src: img.src, kind: 'generated', category,
+        naturalW: img.naturalW, naturalH: img.naturalH, favorite: false,
+        projectId: s.activeId || undefined, sourcePrompt: prompt, createdAt: Date.now(),
+      });
+      return img;
     },
     runPrepress: () => runPrepress({ design: design!, brief: s.brief, dieline, dpi: 300 }),
     exportDesign: async (format) => {
@@ -1033,6 +1118,8 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     saveStatus, manualSave,
     toggleLock, toggleVisible, deleteLayer, duplicateLayer, renameLayer,
     moveLayerUp, moveLayerDown, bringToFront, sendToBack, updateLayer,
+    addAssetToCanvas, assetFileRef, onPickAssetFiles, generateToLibrary, assetBusy,
+    removeAsset, toggleFavoriteAsset,
     onLayerMouseDown, onMouseMove, onMouseUp, onResizeMouseDown, onRotateMouseDown,
     onCanvasMouseDown, onCanvasMouseMove, onCanvasMouseUp, onCanvasMouseLeave,
     alignLayers,

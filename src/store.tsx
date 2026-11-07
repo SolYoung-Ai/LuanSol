@@ -1,6 +1,6 @@
 /* 全局项目仓库：IndexedDB 优先，localStorage 兜底；所有智能体共享同一份项目数据。 */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { AISettings, ChatMessage, DesignBrief, DesignDoc, Dieline, PrepressReport, Project, UserSettings, Version } from './types';
+import type { AISettings, Asset, ChatMessage, DesignBrief, DesignDoc, Dieline, PrepressReport, Project, UserSettings, Version } from './types';
 import { createEmptyBrief } from './engine/brief';
 import { buildDieline } from './engine/structure';
 import { DEFAULT_AI, migrateAI } from './engine/llm';
@@ -62,12 +62,14 @@ interface Persisted {
   storage: string;
   /** V3 九步向导的统一项目数据（旧数据没有此字段，载入时兜底） */
   draft: ProjectDraft;
+  /** 独立素材库（持久化，可跨项目复用） */
+  assets: Asset[];
 }
 
 const initial = (): Persisted => ({
   projects: [], activeId: null, brief: createEmptyBrief(), chat: [], schemes: [], design: null,
   report: null, settings: { ...DEFAULT_SETTINGS }, ai: { ...DEFAULT_AI }, storage: '—',
-  draft: createEmptyDraft(),
+  draft: createEmptyDraft(), assets: [],
 });
 
 interface AppCtx {
@@ -92,6 +94,9 @@ interface AppCtx {
   newProject: () => void;
   addVersion: (label: string) => void;
   restoreVersion: (id: string) => void;
+  addAsset: (asset: Asset) => void;
+  removeAsset: (id: string) => void;
+  toggleFavoriteAsset: (id: string) => void;
 }
 
 const Ctx = createContext<AppCtx | null>(null);
@@ -214,6 +219,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     draft: createEmptyDraft(),
   })), []);
 
+  // —— 独立素材库 ——
+  const addAsset = useCallback((asset: Asset) => setS((prev) => ({
+    ...prev, assets: [asset, ...prev.assets],
+  })), []);
+  const removeAsset = useCallback((id: string) => setS((prev) => ({
+    ...prev, assets: prev.assets.filter((a) => a.id !== id),
+  })), []);
+  const toggleFavoriteAsset = useCallback((id: string) => setS((prev) => ({
+    ...prev, assets: prev.assets.map((a) => a.id === id ? { ...a, favorite: !a.favorite } : a),
+  })), []);
+
   const addVersion = useCallback((label: string) => setS((prev) => {
     if (!prev.design || !prev.activeId) return prev;
     const projects = prev.projects.map((p) => p.id === prev.activeId ? {
@@ -233,6 +249,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value: AppCtx = {
     s, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
     saveProject, syncProject, loadProject, mergeCloudProjects, deleteProject, duplicateProject, newProject, addVersion, restoreVersion,
+    addAsset, removeAsset, toggleFavoriteAsset,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

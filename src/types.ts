@@ -65,6 +65,27 @@ export interface ImageLayer extends BaseLayer {
 
 export type Layer = TextLayer | ShapeLayer | ImageLayer;
 
+/** 素材类别：决定生成提示词与素材库筛选 */
+export type AssetCategory =
+  | 'background' | 'illustration' | 'texture' | 'pattern' | 'sticker' | 'product' | 'logo' | 'other';
+
+/** 独立素材库中的一个素材。素材持久化、可复用，并可作为独立图层加入画布。 */
+export interface Asset {
+  id: string;
+  name: string;
+  src: string; // data URL
+  kind: 'generated' | 'uploaded';
+  category: AssetCategory;
+  naturalW: number;
+  naturalH: number;
+  favorite: boolean;
+  /** 属于某个项目的素材标记；全局可复用素材为空 */
+  projectId?: string;
+  /** 生成素材的原始提示词，便于再次生成 */
+  sourcePrompt?: string;
+  createdAt: number;
+}
+
 export interface Face {
   id: FaceId;
   w: number; h: number; // mm（成品面尺寸）

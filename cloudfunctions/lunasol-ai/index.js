@@ -283,6 +283,36 @@ function callSeedream(payload) {
   });
 }
 
+/** 服务端下载图片并转 base64（Node 端无浏览器 CORS 限制）。
+ *  上游 Seedream 返回的是 TOS 签名 URL，存储桶未对前端开放 CORS，
+ *  所以由云函数在服务端取回，统一以 b64_json 返回，保证前端能持久化素材。 */
+function downloadToBase64(fileUrl) {
+  return new Promise((resolve, reject) => {
+    let target;
+    try { target = new URL(fileUrl); } catch { return reject(new Error('图片地址不合法')); }
+    const lib = target.protocol === 'http:' ? http : https;
+    const req = lib.get(target, (up) => {
+      // 跟随重定向
+      if (up.statusCode >= 300 && up.statusCode < 400 && up.headers.location) {
+        up.resume();
+        return resolve(downloadToBase64(new URL(up.headers.location, target).toString()));
+      }
+      if (up.statusCode !== 200) {
+        up.resume();
+        return reject(new Error(`图片下载失败 ${up.statusCode}`));
+      }
+      const chunks = [];
+      up.on('data', (c) => chunks.push(c));
+      up.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        resolve({ b64: buf.toString('base64'), mime: String(up.headers['content-type'] || 'image/jpeg') });
+      });
+    });
+    req.setTimeout(60000, () => req.destroy(new Error('图片下载超时')));
+    req.on('error', reject);
+  });
+}
+
 async function handleImage(req, res, body) {
   if (!process.env.SEEDREAM_API_KEY) {
     return sendJson(res, 503, { error: { message: '后台尚未配置 SEEDREAM_API_KEY' } });
@@ -322,10 +352,22 @@ async function handleImage(req, res, body) {
         error: { message: safeUpstreamError(r) },
       });
     }
-    // 透传上游 data 数组（url / b64_json）
+    // 统一把上游结果转成 b64_json 返回：服务端下载 TOS URL，规避前端 CORS
+    const out = [];
+    for (const d of (r.json.data || [])) {
+      if (d.b64_json) {
+        out.push({ b64_json: d.b64_json, url: '' });
+      } else if (d.url) {
+        const dl = await downloadToBase64(d.url);
+        out.push({ b64_json: dl.b64, url: '' });
+      }
+    }
+    if (!out.length) {
+      return sendJson(res, 502, { error: { message: '图像接口未返回可用图片' } });
+    }
     return sendJson(res, 200, {
       created: r.json.created || Date.now(),
-      data: (r.json.data || []).map((d) => ({ url: d.url || '', b64_json: d.b64_json || '' })),
+      data: out,
     });
   } catch (e) {
     return sendJson(res, 502, { error: { message: `图像生成失败：${(e && e.message ? e.message : String(e)).slice(0, 160)}` } });
