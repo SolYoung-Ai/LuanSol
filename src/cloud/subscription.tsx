@@ -404,6 +404,24 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       }
     }
 
+    // 写入积分明细记录
+    try {
+      const finalSub = subRef.current;
+      const balanceAfter = finalSub
+        ? (finalSub.quota_total - finalSub.quota_used + (finalSub.bonus_credits || 0))
+        : totalPoints;
+      await d.from('lunasol_credit_logs').insert({
+        owner_id: u.id,
+        change_type: 'checkin',
+        amount: totalPoints,
+        balance_after: balanceAfter,
+        reason: `每日签到（连续 ${newStreak} 天）`,
+        task_type: 'checkin',
+      });
+    } catch (e) {
+      console.error('写入积分明细失败', e);
+    }
+
     setCheckinState({ checkedToday: true, streak: newStreak, loading: false });
     return {
       ok: true,
