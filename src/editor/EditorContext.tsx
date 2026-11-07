@@ -6,14 +6,18 @@ import { useApp } from '../store';
 import { useHash } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
-import { loadAI, llmChat, llmJson, llmImage } from '../engine/llm';
+import { loadAI, llmChat, llmJson, llmImage, aiEnabled } from '../engine/llm';
 import { buildSchemes, cloneDesign } from '../engine/design';
+import { faceSizes } from '../engine/structure';
 import { styleById } from '../v3/styles';
 import { runPrepress, autoFix } from '../engine/prepress';
 import { spreadSvg, svgToCanvas } from '../engine/export';
 import { uid, downloadBlob } from '../engine/utils';
-import type { DesignDoc, Face, FaceId, Layer, TextLayer, ImageLayer, ShapeLayer, DesignBrief } from '../types';
+import type { DesignDoc, Face, FaceId, Layer, TextLayer, ImageLayer, ShapeLayer, DesignBrief, StructureId } from '../types';
 import { HandlePos, MM_TO_PX, ToolId, ViewMode } from './constants';
+import { executeAction } from './ai/executor';
+import { planFromUser } from './ai/planner';
+import type { ToolHost } from './ai/types';
 
 const SYSTEM_PROMPT = `你是 Luna，LunaSol 的包装设计主理人。你是一位有 12 年经验、服务过 200+ 品牌的资深包装设计师，审美高、懂印刷工艺、能聊商业也能聊创意。
 
@@ -400,32 +404,44 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // 整体对话：自然语言 → 结构化工具计划 → 校验执行
+    const ai = loadAI();
+    if (!aiEnabled(ai) || !face || !design) {
+      addChat({ role: 'ai', text: 'AI 尚未启用，请在「模型配置」里接入后，再让我操作设计工程。' });
+      setLoading(false);
+      return;
+    }
     try {
-      const ai = loadAI();
       const aiWithModel = { ...ai, cloudbaseUid: auth.user?.id || '' };
-      const reply = await llmChat(
-        [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...s.chat.map((m) => ({ role: m.role === 'ai' ? 'assistant' as const : m.role, content: m.text })),
-        ],
-        aiWithModel
+      const plan = await planFromUser(
+        text,
+        s.chat,
+        {
+          currentFace,
+          faceSize: { w: face.w, h: face.h },
+          bg: face.bg,
+          layers: face.layers.map((l) => ({ id: l.id, name: l.name, type: l.type, hidden: l.hidden, locked: l.locked })),
+          palette: design.palette,
+          structure: brief.structure,
+        },
+        aiWithModel,
       );
-      addChat({ role: 'ai', text: reply });
-      if (auth.user) { await recordUsage(auth.user.id, 1, 'chat'); sub.refresh(); }
-      llmJson<Partial<DesignBrief>>(
-        [
-          { role: 'user', content: `从以下对话中提取包装设计信息，只输出 JSON 对象，字段包括：product, brand, style, material, colors, audience, size, structure, illustration, copy, barcode。没有的字段留空。\n\n对话：${s.chat.map((m) => m.text).join('\n')}` },
-        ],
-        aiWithModel
-      )
-        .then((extracted) => {
-          const cleaned = Object.fromEntries(Object.entries(extracted).filter(([, v]) => v));
-          patchBrief(cleaned);
-        })
-        .catch(() => { /* 忽略 */ });
+      if (plan.thought) addChat({ role: 'ai', text: plan.thought });
+
+      if (plan.actions.length === 0) {
+        // 纯对话，无工具操作
+        if (auth.user) { await recordUsage(auth.user.id, 1, 'chat'); sub.refresh(); }
+      } else {
+        for (const action of plan.actions) {
+          const result = await executeAction(action, toolHost);
+          addChat({ role: 'ai', text: `${action.name}｜${result.ok ? '已完成' : '未完成'}：${result.message}` });
+        }
+        const hasImage = plan.actions.some((a) => a.name === 'generate_image_asset');
+        if (auth.user) { await recordUsage(auth.user.id, hasImage ? 10 : 1, hasImage ? 'image' : 'chat'); sub.refresh(); }
+      }
     } catch (e) {
       const msg = (e as Error).message || 'AI 暂时连不上';
-      addChat({ role: 'ai', text: `抱歉，${msg}。请稍后再试。` });
+      addChat({ role: 'ai', text: `操作失败：${msg}。请稍后再试。` });
     } finally {
       setLoading(false);
     }
@@ -720,6 +736,60 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     const layers = face.layers.map((l) => l.id === id ? ({ ...l, ...patch } as Layer) : l);
     update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers } } } });
   };
+  /** 通用新增图层（AI 工具系统使用） */
+  const addLayer = (layer: Layer) => {
+    if (!face || !design) return;
+    pushHistory();
+    update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers: [...face.layers, layer] } } } });
+  };
+  /** 显式设置可见性（与 toggleVisible 的切换语义区分，AI 工具使用） */
+  const setLayerVisible = (id: string, visible: boolean) => {
+    if (!face || !design) return;
+    const target = face.layers.find((l) => l.id === id);
+    if (!target || target.hidden === !visible) return;
+    pushHistory();
+    const layers = face.layers.map((l) => l.id === id ? { ...l, hidden: !visible } : l);
+    update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers } } } });
+  };
+  /** 修改当前面背景色 */
+  const setFaceBackground = (color: string) => {
+    if (!face || !design) return;
+    pushHistory();
+    update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, bg: color } } } });
+  };
+  /** 更新工程配色板 */
+  const setDesignPalette = (palette: Partial<DesignDoc['palette']>) => {
+    if (!design) return;
+    pushHistory();
+    update({ design: { ...design, palette: { ...design.palette, ...palette } } });
+  };
+
+  /** 更换结构：更新 brief，并重映射各面尺寸（保留图层坐标，不挤压变形） */
+  const applyStructure = (structure: StructureId) => {
+    if (!design) return;
+    pushHistory();
+    patchBrief({ structure });
+    const sizes = faceSizes(structure, brief.size.l ? brief.size : { l: 200, w: 150, h: 80 });
+    const faces = { ...design.faces };
+    (Object.keys(faces) as FaceId[]).forEach((fid) => {
+      const ns = sizes[fid];
+      if (ns && faces[fid]) faces[fid] = { ...faces[fid]!, w: ns.w, h: ns.h };
+    });
+    update({ design: { ...design, faces } });
+  };
+  /** 修改尺寸：更新 brief 与各面尺寸，保留图层 */
+  const applyDimensions = (size: { l: number; w: number; h: number }) => {
+    if (!design) return;
+    pushHistory();
+    patchBrief({ size });
+    const sizes = faceSizes(brief.structure, size);
+    const faces = { ...design.faces };
+    (Object.keys(faces) as FaceId[]).forEach((fid) => {
+      const ns = sizes[fid];
+      if (ns && faces[fid]) faces[fid] = { ...faces[fid]!, w: ns.w, h: ns.h };
+    });
+    update({ design: { ...design, faces } });
+  };
 
   const clearSelection = () => { setSelectedLayer(null); setSelectedIds([]); };
 
@@ -911,6 +981,46 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   }, [face, selectedLayer, currentFace, design, undo, redo]);
 
   const selectedL = face?.layers.find((l) => l.id === selectedLayer) || null;
+
+  /** AI 工具系统的宿主：把受控能力暴露给执行器，所有操作仍走统一状态管理 */
+  const toolHost: ToolHost = {
+    getDesign: () => design,
+    getCurrentFace: () => currentFace,
+    getFace: () => face,
+    findLayer: (id) => {
+      if (face?.layers.some((l) => l.id === id)) return face.layers.find((l) => l.id === id) || null;
+      for (const f of Object.values(design?.faces || {})) {
+        const hit = f?.layers.find((l) => l.id === id);
+        if (hit) return hit;
+      }
+      return null;
+    },
+    addLayer,
+    removeLayer: deleteLayer,
+    patchLayer: updateLayer,
+    duplicateLayerById: duplicateLayer,
+    setVisibility: setLayerVisible,
+    switchFace: setCurrentFace,
+    setBackground: setFaceBackground,
+    setPalette: setDesignPalette,
+    setStructure: applyStructure,
+    setDimensions: applyDimensions,
+    generateAsset: async (prompt, kind) => {
+      const ai = { ...loadAI(), cloudbaseUid: auth.user?.id || '' };
+      const fullPrompt = kind === 'background'
+        ? `${prompt}。纯背景，不要任何文字、Logo 或人物，无缝可平铺。`
+        : prompt;
+      return llmImage(fullPrompt, ai);
+    },
+    runPrepress: () => runPrepress({ design: design!, brief: s.brief, dieline, dpi: 300 }),
+    exportDesign: async (format) => {
+      if (format === 'png') return exportPNG();
+      if (format === 'svg') return exportSVG();
+      if (format === 'pdf') return exportPDF();
+      if (format === 'zip') return exportZIP();
+      throw new Error(`不支持的导出格式：${format}`);
+    },
+  };
 
   const value: EditorCtx = {
     s, design, brief, face, currentFace, setCurrentFace,
