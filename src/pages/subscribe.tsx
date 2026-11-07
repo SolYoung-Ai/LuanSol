@@ -34,6 +34,7 @@ export default function Subscribe() {
   const [redeemMsg, setRedeemMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [creditLogs, setCreditLogs] = useState<CreditLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
 
   // 获取积分记录
   useEffect(() => {
@@ -121,49 +122,51 @@ export default function Subscribe() {
             <span style={{ color: '#888' }}>{t('积分可用', 'credits available')}</span>
           </div>
           <div className="quota-bar"><span style={{ width: `${Math.min(100, (left / Math.max(1, pro ? PRICING.proMonthlyQuota : PRICING.freeTrialUses)) * 100)}%` }} /></div>
-          <div style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <Tag tone="green">{pro ? t(`会员 · ¥${PRICING.proMonthlyPriceRMB}/月`, `Member · ¥${PRICING.proMonthlyPriceRMB}/mo`) : t('免费版', 'Free')}</Tag>
             {pro && sub.sub?.period_end && <Tag>{t('有效期至', 'Valid until')} {new Date(sub.sub.period_end).toLocaleDateString()}</Tag>}
+            <button
+              onClick={() => { setLogsOpen(!logsOpen); if (!logsOpen) { setLogsLoading(true); sub.getCreditLogs(30).then((logs) => { setCreditLogs(logs); setLogsLoading(false); }); } }}
+              style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: 12, background: 'none', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}
+            >
+              {logsOpen ? '收起明细' : '查看明细'}
+            </button>
           </div>
+
+          {/* 积分明细（展开） */}
+          {logsOpen && (
+            <div style={{ marginTop: 16, borderTop: '1px solid #eee', paddingTop: 16 }}>
+              {logsLoading ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#999', fontSize: 14 }}>加载中...</div>
+              ) : creditLogs.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#999', fontSize: 14 }}>暂无积分记录</div>
+              ) : (
+                <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                  {creditLogs.map((log) => (
+                    <div key={log.id} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '8px 0', borderBottom: '1px solid #f5f5f5',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{log.reason}</div>
+                        <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                          {new Date(log.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      <div style={{
+                        fontSize: 14, fontWeight: 600,
+                        color: log.amount > 0 ? '#22c55e' : '#ef4444',
+                      }}>
+                        {log.amount > 0 ? '+' : ''}{log.amount}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>}
     </Card>
-
-    {/* 积分使用记录 */}
-    {a.user && (
-      <Card className="pad-card">
-        <SectionLabel en={lang === 'en' ? '' : 'HISTORY'}>{t('积分明细', 'Credit history')}</SectionLabel>
-        {logsLoading ? (
-          <div style={{ padding: 20, textAlign: 'center', color: '#999' }}>{t('加载中…', 'Loading…')}</div>
-        ) : creditLogs.length === 0 ? (
-          <div style={{ padding: 20, textAlign: 'center', color: '#999' }}>{t('暂无积分记录', 'No credit records yet')}</div>
-        ) : (
-          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-            {creditLogs.map((log) => (
-              <div key={log.id} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '10px 0', borderBottom: '1px solid #f0f0f0',
-              }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>{log.reason}</div>
-                  <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
-                    {new Date(log.created_at).toLocaleString('zh-CN', {
-                      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                    })}
-                    {log.task_type && ` · ${log.task_type}`}
-                  </div>
-                </div>
-                <div style={{
-                  fontSize: 16, fontWeight: 600,
-                  color: log.amount > 0 ? '#22c55e' : '#ef4444',
-                }}>
-                  {log.amount > 0 ? '+' : ''}{log.amount}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    )}
 
     {/* 积分怎么花 */}
     <Card className="pad-card">
