@@ -266,6 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setBusy(true); setError(null);
     try {
       const r = await auth.updateUserBasicInfo(p);
+      if (!r) return { ok: true, message: '资料已保存' }; // 某些 SDK 版本不返回结果
       if (r.error) return { ok: false, message: r.error.message || '更新失败' };
       // 立即拉一次最新会话，让昵称/头像在导航与账户页可见
       const g = await auth.getUser?.();
