@@ -255,16 +255,22 @@ export default function Studio() {
       const illusPrompt = `${brief.illustration || '山水插画'}，${brief.style || '现代东方风格'}，${brief.product || '茶叶'}主题，包装设计插画，干净背景`;
       const illusSrc = await callSeedream(illusPrompt);
 
-      // 3. 组装图层
+      // 3. 生成贴纸装饰
+      setMessages((prev) => [...prev, { role: 'assistant', text: '正在生成装饰贴纸...', ts: Date.now() }]);
+      const stickerPrompt = `小贴纸装饰，${brief.product || '茶叶'}主题，${brief.style || '现代东方'}风格，透明背景，独立小图标`;
+      const stickerSrc = await callSeedream(stickerPrompt);
+
+      // 4. 组装图层
       setLayers([
         { id: 'bg', type: 'background', name: '背景材质', x: 0, y: 0, width: 400, height: 500, src: bgSrc, visible: true },
         { id: 'illus', type: 'image', name: '主视觉插画', x: 50, y: 80, width: 300, height: 250, src: illusSrc, visible: true },
+        { id: 'sticker', type: 'image', name: '装饰贴纸', x: 300, y: 320, width: 80, height: 80, src: stickerSrc, visible: true },
         { id: 'text1', type: 'text', name: '产品名称', x: 100, y: 350, width: 200, height: 40, content: brief.product || '产品名称', fontSize: 24, color: '#333' },
         { id: 'text2', type: 'text', name: '品牌名', x: 120, y: 400, width: 160, height: 30, content: brief.brand || '品牌名', fontSize: 16, color: '#666' },
       ]);
 
-      // 扣减积分（2张图，每张10积分）
-      await recordUsage(auth.user.id, 20);
+      // 扣减积分（3张图，每张10积分）
+      await recordUsage(auth.user.id, 30);
       sub.refresh();
 
       setMessages((prev) => [...prev, { role: 'assistant', text: '设计方案已生成！你可以点击任意元素进行修改。', ts: Date.now() }]);
@@ -277,6 +283,14 @@ export default function Studio() {
   };
 
   const [aiEditing, setAiEditing] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+
+  useEffect(() => {
+    if (!localStorage.getItem('lunasol.studio.guide')) {
+      setShowGuide(true);
+      localStorage.setItem('lunasol.studio.guide', '1');
+    }
+  }, []);
 
   // 撤销/重做历史
   const [history, setHistory] = useState<{ layers: Layer[]; brief: Partial<DesignBrief> }[]>([]);
@@ -592,6 +606,53 @@ export default function Studio() {
               >
                 {generating ? '⏳ 正在生成...' : '✨ 生成设计方案'}
               </button>
+              <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                <button
+                  onClick={() => setInput('我想做一个茶叶礼盒，东方现代风格，牛皮纸材质，山水插画')}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    background: '#f5f5f5',
+                    border: '1px solid #ddd',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    color: '#666',
+                  }}
+                >
+                  茶叶礼盒
+                </button>
+                <button
+                  onClick={() => setInput('我想做一个咖啡包装，极简风格，白色调，简约插画')}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    background: '#f5f5f5',
+                    border: '1px solid #ddd',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    color: '#666',
+                  }}
+                >
+                  咖啡包装
+                </button>
+                <button
+                  onClick={() => setInput('我想做一个护肤品包装，高级感，莫兰迪色系，植物插画')}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    background: '#f5f5f5',
+                    border: '1px solid #ddd',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    color: '#666',
+                  }}
+                >
+                  护肤品
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -630,6 +691,45 @@ export default function Studio() {
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
           >
+            {/* 新手引导 */}
+            {showGuide && layers.length === 0 && (
+              <div style={{
+                position: 'absolute',
+                top: 20,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: '#1a1a2e',
+                color: '#fff',
+                padding: '12px 20px',
+                borderRadius: 12,
+                fontSize: 13,
+                zIndex: 100,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              }}>
+                <div style={{ marginBottom: 8 }}>👋 欢迎使用 LunaSol V6 工作台</div>
+                <div style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.8 }}>
+                  1. 在左侧和 Luna 聊聊你的设计需求<br/>
+                  2. 点击「生成设计方案」自动生成素材<br/>
+                  3. 点击任意元素可以单独修改<br/>
+                  4. 右侧可以调整图层属性
+                </div>
+                <button
+                  onClick={() => setShowGuide(false)}
+                  style={{
+                    marginTop: 10,
+                    padding: '6px 16px',
+                    background: '#e8783a',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                  }}
+                >
+                  知道了
+                </button>
+              </div>
+            )}
           <div style={{
             width: 400,
             height: 500,
