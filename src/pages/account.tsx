@@ -8,7 +8,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
 import { Button, Card, Empty, Notice, PageHead, SectionLabel, go } from '../ui';
-import { useAuth, getBirthday, setBirthday } from '../cloud/auth';
+import { useAuth } from '../cloud/auth';
+import { useProfile } from '../cloud/profile';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { useCloudSync } from '../cloud/useCloudSync';
 import { listProjects, pullProject, projectIdOf, timeLabel, type CloudMeta } from '../cloud/projects';
@@ -16,6 +17,7 @@ import { CLOUD, cloudConfigured, cloudOriginSupported, CLOUD_SITE_URL } from '..
 
 export default function Account() {
   const a = useAuth();
+  const profile = useProfile();
   const { s, mergeCloudProjects, loadProject, setToast } = useApp();
   const sync = useCloudSync();
   const [loginOpen, setLoginOpen] = useState(false);
@@ -55,11 +57,10 @@ export default function Account() {
   useEffect(() => {
     if (!a.user) return;
     setNick(a.user.label === a.user.id ? '' : a.user.label);
-    // 头像优先从 localStorage 读（本地上传的 base64），其次用云端 avatarUrl
-    const localAvatar = (() => { try { return localStorage.getItem(`lunasol_avatar_${a.user.id}`); } catch { return null; } })();
-    setAvatar(localAvatar || a.user.avatarUrl || '');
-    setBirthdayLocal(getBirthday(a.user.id));
-  }, [a.user?.id, a.user?.label, a.user?.avatarUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+    // 头像和生日从云端资料表读取
+    setAvatar(profile.profile?.avatar_url || a.user.avatarUrl || '');
+    setBirthdayLocal(profile.profile?.birthday || '');
+  }, [a.user?.id, a.user?.label, a.user?.avatarUrl, profile.profile?.avatar_url, profile.profile?.birthday]);
 
   const refresh = useCallback(async () => {
     if (!a.user) { setRows(null); setListError(null); return; }
@@ -83,15 +84,15 @@ export default function Account() {
   const saveProfile = async () => {
     if (!a.user) return;
     setSaving(true);
-    // 头像单独存 localStorage（CloudBase API 不接受 base64 data URL）
-    try { localStorage.setItem(`lunasol_avatar_${a.user.id}`, avatar.trim()); } catch { /* */ }
+    // 头像和生日保存到云端
+    await profile.updateAvatar(avatar.trim());
+    await profile.updateBirthday(birthday);
     const r = await a.updateProfile({
       nickName: nick.trim() || undefined,
     });
     setSaving(false);
     if (!r.ok) { setToast(r.message); return; }
-    setBirthday(a.user.id, birthday);
-    setToast('个人资料已保存');
+    setToast('个人资料已保存（云端同步）');
   };
 
   if (!cloudConfigured) {

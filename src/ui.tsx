@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from './cloud/auth';
 import { useSubscription } from './cloud/subscription';
+import { useProfile } from './cloud/profile';
 import { useLang } from './i18n';
 import { applyTheme, readTheme, saveTheme, type Theme } from './theme';
 
@@ -33,6 +34,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   const hash = useHash();
   const auth = useAuth();
   const sub = useSubscription();
+  const profile = useProfile();
   const { lang, setLang, t } = useLang();
   const [open, setOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -159,9 +161,9 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
           <button className={`v4-avatar-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={t('个人中心', 'Account menu')}>
             {auth.user
               ? (() => {
-                  const localAvatar = (() => { try { return localStorage.getItem(`lunasol_avatar_${auth.user.id}`); } catch { return null; } })();
-                  return localAvatar
-                    ? <img src={localAvatar} alt="头像" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+                  const cloudAvatar = profile.profile?.avatar_url || '';
+                  return cloudAvatar
+                    ? <img src={cloudAvatar} alt="头像" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
                     : <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>;
                 })()
               : <span className="v4-avatar v4-avatar-guest" aria-hidden>
@@ -176,9 +178,9 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
             {auth.user ? <>
               <div className="v4-menu-user">
                 {(() => {
-                  const localAvatar = (() => { try { return localStorage.getItem(`lunasol_avatar_${auth.user.id}`); } catch { return null; } })();
-                  return localAvatar
-                    ? <img src={localAvatar} alt="头像" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+                  const cloudAvatar = profile.profile?.avatar_url || '';
+                  return cloudAvatar
+                    ? <img src={cloudAvatar} alt="头像" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
                     : <span className="v4-avatar v4-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>;
                 })()}
                 <div className="v4-menu-user-text"><strong>{auth.user.label}</strong><span>{auth.user.account || t('已登录', 'Signed in')}</span></div>
