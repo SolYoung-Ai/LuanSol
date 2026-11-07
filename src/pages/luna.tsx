@@ -21,11 +21,16 @@ import { parseSize } from '../engine/brief';
 type Msg = { role: 'user' | 'assistant'; text: string; image?: string };
 
 /** 调用云函数 Seedream 图像路由 */
-async function callSeedream(prompt: string, referenceImage?: string, model?: string): Promise<string> {
+async function callSeedream(prompt: string, referenceImage?: string, model?: string, uid?: string): Promise<string> {
   if (!CLOUD.aiBaseUrl || !CLOUD.aiToken) throw new Error('图像服务未配置');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-LunaSol-Token': CLOUD.aiToken,
+  };
+  if (uid) headers['X-CloudBase-Uid'] = uid;
   const r = await fetch(`${CLOUD.aiBaseUrl}/images/generations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-LunaSol-Token': CLOUD.aiToken },
+    headers,
     body: JSON.stringify({
       prompt,
       size: '1024x1024',
@@ -128,8 +133,8 @@ export default function Luna() {
 
     try {
       const ai = loadAI();
-      // 把用户选的对话模型传进去
-      const aiWithModel = { ...ai, textModel: chatModel };
+      // 把用户选的对话模型和 CloudBase UID 传进去
+      const aiWithModel = { ...ai, textModel: chatModel, cloudbaseUid: auth.user?.id || '' };
       const reply = await llmChat([
         { role: 'system', content: SYSTEM_PROMPT + (img ? '\n（用户刚上传了一张参考图，请在回复中提及你已收到这张图，并询问这是产品图还是对标参考。）' : '') },
         ...next.map((m) => ({ role: m.role, content: m.text })),
@@ -179,7 +184,7 @@ export default function Luna() {
         '真实感，高清，专业包装样机，正面视角，影棚灯光。',
       ].filter(Boolean).join('');
       const lastUserImage = [...messages].reverse().find((m) => m.role === 'user' && m.image)?.image;
-      const url = await callSeedream(prompt, lastUserImage, imageTier);
+      const url = await callSeedream(prompt, lastUserImage, imageTier, auth.user?.id);
       // 生图成功后扣减积分
       if (auth.user) {
         const next = await recordUsage(auth.user.id, cost);

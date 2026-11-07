@@ -102,6 +102,8 @@ function authHeaders(s: AISettings): Record<string, string> {
   const m = aiMode(s);
   if (m === 'browser') h.Authorization = `Bearer ${s.apiKey.trim()}`;
   if (m === 'proxy' && s.proxyToken?.trim()) h['X-LunaSol-Token'] = s.proxyToken.trim();
+  // CloudBase 登录态：云函数 guard 校验用
+  if (s.cloudbaseUid?.trim()) h['X-CloudBase-Uid'] = s.cloudbaseUid.trim();
   return h;
 }
 

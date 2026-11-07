@@ -113,6 +113,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(toUser(s));
   }, []);
 
+  // 用户登录/登出时，自动同步 uid 到 AI 配置里，供云函数登录态校验用
+  useEffect(() => {
+    try {
+      const KEY = 'lunasol.ai.v1';
+      const raw = localStorage.getItem(KEY);
+      const cfg = raw ? JSON.parse(raw) : {};
+      const uid = user?.id || '';
+      if (cfg.cloudbaseUid !== uid) {
+        cfg.cloudbaseUid = uid;
+        localStorage.setItem(KEY, JSON.stringify(cfg));
+      }
+    } catch { /* 隐私模式忽略 */ }
+  }, [user?.id]);
+
   useEffect(() => {
     let alive = true;
     let unsubscribe: (() => void) | undefined;

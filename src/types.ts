@@ -199,6 +199,8 @@ export interface AISettings {
   lastTest: { ok: boolean; at: number; message: string } | null;
   /** 配置版本：用于把旧版本「未接入」的默认值升级到已部署的后台代理 */
   rev?: number;
+  /** CloudBase 用户 UID，用于云函数登录态校验 */
+  cloudbaseUid?: string;
 }
 
 export interface UserSettings {
