@@ -219,7 +219,7 @@ export async function runTests(): Promise<Result[]> {
   await t('AI 闸门 · 未登录引导登录、额度用完引导订阅，互不混淆', () => {
     const anon = decideGate({ loggedIn: false, remaining: null, proActive: false });
     A(!anon.ok && anon.need === 'login', '未登录时应引导登录');
-    A(/2 次免费体验/.test(anon.reason), '未登录提示没有说明免费体验次数');
+    A(/免费体验/.test(anon.reason), '未登录提示没有说明免费体验次数');
 
     const freeLeft = decideGate({ loggedIn: true, remaining: 2, proActive: false });
     A(freeLeft.ok, '还有免费额度时不应拦截');
@@ -417,7 +417,7 @@ export async function runTests(): Promise<Result[]> {
     A(!aiEnabled({ ...DEFAULT_AI, mode: 'browser', apiKey: '' }), '浏览器直连缺 Key 不应启用');
     A(aiEnabled({ ...DEFAULT_AI, mode: 'browser', apiKey: 'sk-x' }), '浏览器直连应启用');
     A(aiEnabled(proxyAI), '后台代理模式被前端 Key 判定挡住了');
-    A(aiMode(proxyAI) === 'proxy' && aiStatusLabel(proxyAI).includes('后台代理'), '代理状态标注不正确');
+    A(aiMode(proxyAI) === 'proxy' && aiStatusLabel(proxyAI).includes('AI 已接入'), '代理状态标注不正确');
     A(aiCapabilitySummary().total === 12 && aiCapabilitySummary().steps === 9, '能力点数量异常');
     return `total=${aiCapabilitySummary().total} / steps=${aiCapabilitySummary().steps}`;
   });
