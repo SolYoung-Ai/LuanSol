@@ -203,16 +203,64 @@ export default function Studio() {
     }
   };
 
+  const [generating, setGenerating] = useState(false);
+
+  const callSeedream = async (prompt: string): Promise<string> => {
+    if (!CLOUD.aiBaseUrl || !CLOUD.aiToken) throw new Error('图像服务未配置');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-LunaSol-Token': CLOUD.aiToken,
+    };
+    if (auth.user?.id) headers['X-CloudBase-Uid'] = auth.user.id;
+    const r = await fetch(`${CLOUD.aiBaseUrl}/images/generations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        prompt,
+        size: '1024x1024',
+      }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j?.error?.message || `图像生成失败 ${r.status}`);
+    const url = j.data && j.data[0] && (j.data[0].url || j.data[0].b64_json);
+    if (!url) throw new Error('图像未返回');
+    return url.startsWith('data:') ? url : (url.startsWith('http') ? url : `data:image/png;base64,${url}`);
+  };
+
   const generateMockup = async () => {
     if (!auth.user) {
       go('/luna?login=1');
       return;
     }
-    // TODO: 调用生图 API
-    setLayers([
-      { id: 'bg', type: 'background', name: '背景', x: 0, y: 0, width: 400, height: 500, visible: true },
-      { id: 'text1', type: 'text', name: '产品名称', x: 100, y: 100, width: 200, height: 40, content: brief.product || '产品名称', fontSize: 24, color: '#333' },
-    ]);
+    if (generating) return;
+    setGenerating(true);
+
+    try {
+      // 1. 生成背景材质
+      setMessages((prev) => [...prev, { role: 'assistant', text: '正在生成背景材质...', ts: Date.now() }]);
+      const bgPrompt = `${brief.material || '牛皮纸'}材质纹理，${brief.colors || '米白色'}背景，包装设计底纹，高清，细腻质感`;
+      const bgSrc = await callSeedream(bgPrompt);
+
+      // 2. 生成主视觉插画
+      setMessages((prev) => [...prev, { role: 'assistant', text: '正在生成主视觉插画...', ts: Date.now() }]);
+      const illusPrompt = `${brief.illustration || '山水插画'}，${brief.style || '现代东方风格'}，${brief.product || '茶叶'}主题，包装设计插画，干净背景`;
+      const illusSrc = await callSeedream(illusPrompt);
+
+      // 3. 组装图层
+      setLayers([
+        { id: 'bg', type: 'background', name: '背景材质', x: 0, y: 0, width: 400, height: 500, src: bgSrc, visible: true },
+        { id: 'illus', type: 'image', name: '主视觉插画', x: 50, y: 80, width: 300, height: 250, src: illusSrc, visible: true },
+        { id: 'text1', type: 'text', name: '产品名称', x: 100, y: 350, width: 200, height: 40, content: brief.product || '产品名称', fontSize: 24, color: '#333' },
+        { id: 'text2', type: 'text', name: '品牌名', x: 120, y: 400, width: 160, height: 30, content: brief.brand || '品牌名', fontSize: 16, color: '#666' },
+      ]);
+
+      setMessages((prev) => [...prev, { role: 'assistant', text: '设计方案已生成！你可以点击任意元素进行修改。', ts: Date.now() }]);
+    } catch (e) {
+      const msg = (e as Error).message || '生成失败';
+      setMessages((prev) => [...prev, { role: 'assistant', text: `抱歉，${msg}。请稍后再试。`, ts: Date.now() }]);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const selectedLayerObj = layers.find((l) => l.id === selectedLayer);
@@ -345,19 +393,20 @@ export default function Studio() {
               </div>
               <button
                 onClick={generateMockup}
+                disabled={generating}
                 style={{
                   marginTop: 8,
                   width: '100%',
                   padding: '10px',
-                  background: '#e8f5e9',
+                  background: generating ? '#f5f5f5' : '#e8f5e9',
                   border: '1px solid #4caf50',
                   borderRadius: 8,
-                  cursor: 'pointer',
+                  cursor: generating ? 'not-allowed' : 'pointer',
                   fontSize: 13,
-                  color: '#2e7d32',
+                  color: generating ? '#999' : '#2e7d32',
                 }}
               >
-                ✨ 生成设计方案
+                {generating ? '⏳ 正在生成...' : '✨ 生成设计方案'}
               </button>
             </div>
           </div>
@@ -402,7 +451,13 @@ export default function Studio() {
                   opacity: layer.opacity || 1,
                 }}
               >
-                {layer.type === 'text' ? layer.content : layer.name}
+                {layer.type === 'image' && layer.src ? (
+                  <img src={layer.src} alt={layer.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : layer.type === 'text' ? (
+                  layer.content
+                ) : (
+                  layer.name
+                )}
                 {layer.locked && <span style={{ position: 'absolute', top: 2, right: 4, fontSize: 10 }}>🔒</span>}
               </div>
             ))}
