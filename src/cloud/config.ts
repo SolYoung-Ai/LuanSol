@@ -14,7 +14,10 @@ export const CLOUD = {
   envId: (env.VITE_CLOUDBASE_ENV_ID || '').trim(),
   region: (env.VITE_CLOUDBASE_REGION || 'ap-shanghai').trim(),
   publishableKey: (env.VITE_CLOUDBASE_PUBLISHABLE_KEY || '').trim(),
-  aiBaseUrl: (env.VITE_LUNASOL_AI_BASE_URL || '').trim().replace(/\/+$/, ''),
+  // 本地 dev 走 Vite 代理（相对路径，规避 CORS）；生产构建用完整云函数地址。
+  aiBaseUrl: env.DEV
+    ? '/lunasol-ai'
+    : (env.VITE_LUNASOL_AI_BASE_URL || '').trim().replace(/\/+$/, ''),
   aiToken: (env.VITE_LUNASOL_AI_TOKEN || '').trim(),
 } as const;
 

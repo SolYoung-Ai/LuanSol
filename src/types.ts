@@ -249,3 +249,37 @@ export interface PrepressReport {
   summary: string;
   cmyk: { c: number; m: number; y: number; k: number }[];
 }
+
+/* ============================ Luna 对话 ============================ */
+
+/** 生图三档（对应 Seedream Flash / Lite / Pro） */
+export type ImageTier = 'flash' | 'lite' | 'pro';
+
+/** 单条 Luna 分身对话消息（区别于编辑器内部聊天用的旧 ChatMessage） */
+export interface LunaMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  /** 正文文本 */
+  content: string;
+  /** 思考过程（DeepSeek Reasoner 返回，界面可折叠展示） */
+  reasoning?: string;
+  /** 生成的图片（data URL 或可访问 URL） */
+  image?: string;
+  /** 本条生图所用档位（仅生图消息） */
+  imageTier?: ImageTier;
+  /** 时间戳 */
+  at: number;
+  /** 是否出错（用于展示错误态） */
+  error?: boolean;
+}
+
+/** 一个完整对话 */
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: LunaMessage[];
+  /** 该对话默认生图档位 */
+  imageTier: ImageTier;
+  createdAt: number;
+  updatedAt: number;
+}

@@ -6,6 +6,7 @@ import { useAuth } from './cloud/auth';
 import { LoginDialog } from './cloud/LoginDialog';
 import { SubscriptionProvider } from './cloud/subscription';
 import { ProfileProvider } from './cloud/profile';
+import { ChatStoreProvider } from './cloud/useChatStore';
 import { cloudConfigured } from './cloud/config';
 import { LunaLoader } from './components/LunaLoader';
 
@@ -107,21 +108,23 @@ export default function App() {
 
   return <SubscriptionProvider requestLogin={requestLogin}>
     <ProfileProvider>
-      <div className="app">
-        <Nav onLogin={requestLogin} />
-        <main className="main">
-          {/* 全局返回：非首页都有，优先回上一页，无历史回首页 */}
-          {path !== '/' && <button className="global-back" onClick={() => {
-            if (window.history.length > 1) window.history.back(); else go('/');
-          }} aria-label="返回">← 返回</button>}
-          <Suspense fallback={<PageFallback />}>{page}</Suspense>
-        </main>
-        <Footer />
-        {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
-        <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
-        {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
-        <BetaAnnouncement />
-      </div>
+      <ChatStoreProvider>
+        <div className="app">
+          <Nav onLogin={requestLogin} />
+          <main className="main">
+            {/* 全局返回：非首页都有，优先回上一页，无历史回首页 */}
+            {path !== '/' && <button className="global-back" onClick={() => {
+              if (window.history.length > 1) window.history.back(); else go('/');
+            }} aria-label="返回">← 返回</button>}
+            <Suspense fallback={<PageFallback />}>{page}</Suspense>
+          </main>
+          <Footer />
+          {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
+          <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
+          {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
+          <BetaAnnouncement />
+        </div>
+      </ChatStoreProvider>
     </ProfileProvider>
   </SubscriptionProvider>;
 }

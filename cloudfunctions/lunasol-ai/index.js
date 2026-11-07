@@ -177,11 +177,14 @@ function buildUpstreamPayload(body, withJsonFormat) {
   const payload = {
     model,
     messages,
-    temperature: clampNumber(body.temperature, 0.7, 0, 2),
     max_tokens: Math.round(clampNumber(body.max_tokens, 2048, 1, 4096)),
     stream: false,
   };
-  if (withJsonFormat) payload.response_format = { type: 'json_object' };
+  // deepseek-reasoner 不支持 temperature / response_format 等采样参数，强行传会 400
+  if (model !== 'deepseek-reasoner') {
+    payload.temperature = clampNumber(body.temperature, 0.7, 0, 2);
+    if (withJsonFormat) payload.response_format = { type: 'json_object' };
+  }
   return payload;
 }
 
@@ -421,16 +424,22 @@ async function handleChat(req, res, body) {
         error: { message: safeUpstreamError(r) },
       });
     }
-    const content = r.json.choices && r.json.choices[0] && r.json.choices[0].message && r.json.choices[0].message.content;
+    const message0 = r.json.choices && r.json.choices[0] && r.json.choices[0].message;
+    const content = message0 && message0.content;
     if (typeof content !== 'string') {
       return sendJson(res, 502, { error: { message: '模型未返回文本内容' } });
+    }
+    // 透传 Reasoner 的思考过程；非思考模型没有该字段，留空后序列化时自动省略
+    const outMessage = { role: 'assistant', content };
+    if (message0 && typeof message0.reasoning_content === 'string' && message0.reasoning_content.length) {
+      outMessage.reasoning_content = message0.reasoning_content;
     }
     // 只返回前端需要的最小 OpenAI 兼容结构，不透传上游原始响应头
     return sendJson(res, 200, {
       id: r.json.id,
       object: 'chat.completion',
       model: r.json.model || payload.model,
-      choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: r.json.choices[0].finish_reason || 'stop' }],
+      choices: [{ index: 0, message: outMessage, finish_reason: r.json.choices[0].finish_reason || 'stop' }],
       usage: r.json.usage || undefined,
     });
   } catch (e) {

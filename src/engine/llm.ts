@@ -125,9 +125,18 @@ async function withRetry<T>(fn: () => Promise<T>, retries: number): Promise<T> {
 
 export type LLMMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
-export async function llmChat(messages: LLMMessage[], s: AISettings, json = false): Promise<string> {
+export interface ChatResult {
+  content: string;
+  /** 思考过程；非思考模型返回空串 */
+  reasoning: string;
+}
+
+/** 底层对话请求：返回正文与思考过程，统一处理重试 / 超时 / 错误文案。 */
+async function requestChatRaw(messages: LLMMessage[], s: AISettings, json: boolean): Promise<ChatResult> {
   if (!aiEnabled(s)) throw new Error('尚未启用 AI 接入');
   const model = s.textModel.trim();
+  // Reasoner 不支持 temperature 等采样参数，前端也不发送
+  const isReasoner = model === 'deepseek-reasoner';
   return withRetry(async () => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 120000);
@@ -139,7 +148,7 @@ export async function llmChat(messages: LLMMessage[], s: AISettings, json = fals
           // 代理模式下留空则由后台决定模型，前端不假设具体模型名
           ...(model ? { model } : {}),
           messages,
-          temperature: s.temperature,
+          ...(isReasoner ? {} : { temperature: s.temperature }),
           ...(json ? { response_format: { type: 'json_object' } } : {}),
         }),
         signal: ctrl.signal,
@@ -154,9 +163,11 @@ export async function llmChat(messages: LLMMessage[], s: AISettings, json = fals
         throw new Error(`接口返回 ${res.status}：${t.slice(0, 120)}`);
       }
       const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
+      const msg = data?.choices?.[0]?.message;
+      const content = msg?.content;
       if (typeof content !== 'string') throw new Error('AI 没有返回内容，请换个说法试试');
-      return content;
+      const reasoning = typeof msg?.reasoning_content === 'string' ? msg.reasoning_content : '';
+      return { content, reasoning };
     } catch (e) {
       // 网络错误（Failed to fetch）优化提示
       if (e instanceof TypeError && e.message.includes('Failed to fetch')) {
@@ -168,6 +179,15 @@ export async function llmChat(messages: LLMMessage[], s: AISettings, json = fals
       throw e;
     } finally { clearTimeout(timer); }
   }, s.retries);
+}
+
+export async function llmChat(messages: LLMMessage[], s: AISettings, json = false): Promise<string> {
+  return (await requestChatRaw(messages, s, json)).content;
+}
+
+/** 带思考过程的对话：返回正文 + Reasoner 思考内容。 */
+export async function llmChatWithReasoning(messages: LLMMessage[], s: AISettings): Promise<ChatResult> {
+  return requestChatRaw(messages, s, false);
 }
 
 export async function llmJson<T>(messages: LLMMessage[], s: AISettings): Promise<T> {

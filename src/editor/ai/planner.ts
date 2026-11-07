@@ -2,6 +2,7 @@
  * 只产出 AIPlan（thought + actions），不直接执行；执行由 executor 负责。 */
 import type { AISettings, ChatMessage } from '../../types';
 import { llmJson } from '../../engine/llm';
+import { LUNA_PERSONA_PROMPT } from '../../engine/persona';
 import { toolsReferenceText } from './tools';
 import type { AIAction, AIPlan } from './types';
 
@@ -61,9 +62,9 @@ export async function planFromUser(
   ai: AISettings,
 ): Promise<AIPlan> {
   const system = [
-    '你是 LunaSol 的资深包装设计师，能够通过工具调用直接操作当前设计工程。',
-    '你理解品牌定位、排版、色彩、包装结构、印刷工艺和消费心理。',
+    LUNA_PERSONA_PROMPT,
     '',
+    '现在你在工作台里通过工具调用直接操作当前设计工程，你理解品牌定位、排版、色彩、包装结构、印刷工艺和消费心理。',
     '你可以使用以下工具：',
     toolsReferenceText(),
     '',

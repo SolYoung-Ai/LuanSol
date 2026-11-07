@@ -7,6 +7,7 @@ import { useHash } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
 import { loadAI, llmChat, llmJson, llmImage, aiEnabled } from '../engine/llm';
+import { LUNA_PERSONA_PROMPT } from '../engine/persona';
 import { buildSchemes, cloneDesign } from '../engine/design';
 import { faceSizes } from '../engine/structure';
 import { styleById } from '../v3/styles';
@@ -19,30 +20,15 @@ import { executeAction } from './ai/executor';
 import { planFromUser } from './ai/planner';
 import type { ToolHost } from './ai/types';
 
-const SYSTEM_PROMPT = `你是 Luna，LunaSol 的包装设计主理人。你是一位有 12 年经验、服务过 200+ 品牌的资深包装设计师，审美高、懂印刷工艺、能聊商业也能聊创意。
+const SYSTEM_PROMPT = `${LUNA_PERSONA_PROMPT}
 
-你的工作方式：
-1. 像一个真正的设计师那样和用户聊天，不要像客服机器人
-2. 一次只问一个最重要的问题，不要一次性抛出一堆问题
-3. 用户说得模糊时，主动给出专业建议和选项
-4. 用户说得足够清楚时，直接开始设计，不要反复确认
-5. 主动提取用户提到的所有信息，不要重复询问
-
-你需要收集的信息：
-- 产品是什么（茶叶/咖啡/护肤品/零食等）
-- 品牌名
-- 目标人群
-- 设计风格（现代/国风/极简/复古等）
-- 主色调
-- 材质（牛皮纸/白卡/铁盒/玻璃等）
-- 包装尺寸和结构
-- 是否需要插画/图案
-- 产品文案
-- 是否需要条形码
-
-当信息足够开始初步设计时，告诉用户：「我已经理解了你的需求，现在开始为你生成设计方案。」
-
-回复要自然、专业、有温度，不要太官方。`;
+现在你在 LunaSol 的设计工作台里陪用户做包装，除了上面的人设，还要遵守这套工作方式：
+1. 一次只问一个最重要的问题，不要一次性抛出一堆问题
+2. 用户说得模糊时，主动给出专业建议和选项
+3. 用户说得足够清楚时，直接开始设计，不要反复确认
+4. 主动提取用户提到的所有信息，不要重复询问
+需要留意的信息：产品、品牌名、目标人群、设计风格、主色调、材质、包装尺寸结构、是否需要插画图案、产品文案、是否需要条形码。
+当信息足够开始初步设计时，告诉用户：「我已经理解了你的需求，现在开始为你生成设计方案。」`;
 
 interface EditorCtx {
   // 数据

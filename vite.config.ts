@@ -5,7 +5,24 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: './',
   plugins: [react()],
-  server: { host: '0.0.0.0', allowedHosts: true },
+  server: {
+    host: '0.0.0.0',
+    allowedHosts: true,
+    // 本地开发代理：浏览器同源请求 /lunasol-ai/*，由 Vite 在服务端转发到云函数，
+    // 规避 localhost 不在云函数 CORS 白名单的问题。
+    proxy: {
+      '/lunasol-ai': {
+        target: 'https://solyoung-d4gpp1f7s4e075f6d-1499756427.ap-shanghai.app.tcloudbase.com',
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            // 云函数 guard 只接受白名单 Origin，本地代理统一改写成正式站点 Origin
+            proxyReq.setHeader('Origin', 'https://luna.solyoung.top');
+          });
+        },
+      },
+    },
+  },
   build: {
     target: 'es2020', outDir: 'dist', assetsInlineLimit: 0, sourcemap: false,
     // 关闭 modulepreload：Vite 会把多个动态页面共享的依赖（如 jsPDF）提升为 entry 的

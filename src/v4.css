@@ -772,3 +772,274 @@ img, svg, video, canvas { max-width: 100%; }
   white-space: nowrap;
 }
 .v4-credits-pill:hover { background: #ffecb3; }
+
+/* ============================================================
+   Luna Chat —— Grok 式分身对话界面（lc- 前缀）
+   全部使用 v4 变量，浅色/深色自动适配。
+   ============================================================ */
+.lc-shell {
+  display: flex;
+  height: calc(100vh - 188px);
+  min-height: 540px;
+  width: 100%;
+  border: 1px solid var(--v4-line);
+  background: var(--v4-paper);
+  max-width: var(--v4-maxw);
+  margin: 0 auto;
+}
+
+/* ---------------- 左侧栏 ---------------- */
+.lc-side {
+  width: 268px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--v4-line);
+  background: var(--v4-surface);
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+.lc-new {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--v4-line-strong);
+  background: var(--v4-paper);
+  color: var(--v4-ink);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.lc-new:hover { border-color: var(--v4-ink); }
+.lc-search {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--v4-line);
+  background: var(--v4-paper);
+  color: var(--v4-ink-3);
+}
+.lc-search input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-size: 13px; color: var(--v4-ink);
+}
+.lc-group-label {
+  margin: 16px 4px 8px;
+  font-size: 11px; letter-spacing: 1px;
+  color: var(--v4-ink-3);
+}
+.lc-list { flex: 1; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.lc-item {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 8px;
+  cursor: pointer;
+  color: var(--v4-ink-2);
+  border: 1px solid transparent;
+}
+.lc-item:hover { background: var(--v4-paper); }
+.lc-item.active { background: var(--v4-paper); border-color: var(--v4-line); color: var(--v4-ink); }
+.lc-item-ic { flex-shrink: 0; color: var(--v4-ink-3); }
+.lc-item.active .lc-item-ic { color: var(--v4-ink); }
+.lc-item-title {
+  flex: 1; min-width: 0;
+  font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lc-item-edit {
+  flex: 1; min-width: 0;
+  font-size: 13px;
+  padding: 4px 6px;
+  border: 1px solid var(--v4-line-strong);
+  background: var(--v4-paper);
+  color: var(--v4-ink);
+  outline: none;
+}
+.lc-item-ops { display: none; align-items: center; gap: 2px; flex-shrink: 0; }
+.lc-item:hover .lc-item-ops, .lc-item.active .lc-item-ops { display: flex; }
+.lc-item-ops button {
+  border: none; background: transparent; color: var(--v4-ink-3);
+  padding: 4px; cursor: pointer; display: flex;
+}
+.lc-item-ops button:hover { color: var(--v4-ink); }
+.lc-list-empty { padding: 20px 8px; text-align: center; font-size: 12px; color: var(--v4-ink-3); }
+.lc-side-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--v4-line); }
+.lc-user { display: flex; align-items: center; gap: 10px; }
+.lc-user-avatar {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--v4-solid-bg); color: var(--v4-solid-fg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600;
+  overflow: hidden;
+}
+.lc-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.lc-user-meta { min-width: 0; flex: 1; }
+.lc-user-name {
+  font-size: 13px; font-weight: 500; color: var(--v4-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lc-user-sync { font-size: 11px; color: var(--v4-ink-3); margin-top: 2px; }
+.lc-user-sync.error { color: var(--v4-orange); }
+.lc-user-sync.syncing { color: var(--v4-ink-2); }
+
+/* ---------------- 中间主区 ---------------- */
+.lc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--v4-paper); }
+.lc-scroll { flex: 1; overflow-y: auto; }
+.lc-thread { max-width: 760px; margin: 0 auto; padding: 32px 28px 24px; display: flex; flex-direction: column; gap: 28px; }
+.lc-welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; }
+.lc-welcome h1 { font-size: 30px; font-weight: 600; color: var(--v4-ink); margin: 0 0 14px; }
+.lc-welcome p { font-size: 14px; line-height: 1.8; color: var(--v4-ink-2); max-width: 480px; margin: 0; }
+
+/* ---------------- 消息 ---------------- */
+.lc-msg { display: flex; gap: 12px; align-items: flex-start; }
+.lc-msg.user { flex-direction: row-reverse; }
+.lc-msg-avatar {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+}
+.lc-msg.assistant .lc-msg-avatar { background: var(--v4-solid-bg); color: var(--v4-solid-fg); }
+.lc-msg.user .lc-msg-avatar { background: var(--v4-line-strong); color: var(--v4-ink); }
+.lc-msg-body { min-width: 0; max-width: calc(100% - 44px); }
+.lc-msg.user .lc-msg-body { display: flex; flex-direction: column; align-items: flex-end; }
+.lc-msg-text {
+  font-size: 14px; line-height: 1.8; color: var(--v4-ink);
+  white-space: pre-wrap; word-break: break-word;
+}
+.lc-msg.user .lc-msg-text { background: var(--v4-surface); padding: 10px 14px; border: 1px solid var(--v4-line); }
+.lc-msg-text.error { color: var(--v4-orange); }
+
+/* 思考过程 */
+.lc-reason { border: 1px solid var(--v4-line); background: var(--v4-surface); margin-bottom: 10px; }
+.lc-reason-head {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none; background: transparent;
+  font-size: 12px; color: var(--v4-ink-2);
+  cursor: pointer;
+}
+.lc-reason-chev { margin-left: auto; }
+.lc-reason-body {
+  margin: 0 12px;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--v4-line);
+  font-size: 12.5px; line-height: 1.8; color: var(--v4-ink-3);
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* 图片消息 */
+.lc-msg-imgwrap { margin-top: 10px; max-width: 420px; }
+.lc-msg-img { width: 100%; display: block; border: 1px solid var(--v4-line); cursor: zoom-in; }
+.lc-img-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 11px; color: var(--v4-ink-3); }
+
+/* busy 指示 */
+.lc-busy { display: flex; gap: 5px; padding: 12px 4px; }
+.lc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--v4-ink-3); animation: lc-bounce 1.2s infinite ease-in-out; }
+.lc-dot:nth-child(2) { animation-delay: .15s; }
+.lc-dot:nth-child(3) { animation-delay: .3s; }
+@keyframes lc-bounce { 0%,80%,100% { opacity:.3; transform: translateY(0);} 40% { opacity:1; transform: translateY(-3px);} }
+
+/* ---------------- 输入区 ---------------- */
+.lc-dock { padding: 12px 28px 20px; border-top: 1px solid var(--v4-line); background: var(--v4-paper); }
+.lc-pending {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-bottom: 10px;
+  padding: 6px 8px 6px 6px;
+  border: 1px solid var(--v4-line);
+  background: var(--v4-surface);
+  font-size: 12px; color: var(--v4-ink-2);
+}
+.lc-pending img { width: 30px; height: 30px; object-fit: cover; }
+.lc-pending button { border: none; background: transparent; color: var(--v4-ink-3); cursor: pointer; display: flex; }
+.lc-pending button:hover { color: var(--v4-ink); }
+.lc-composer {
+  display: flex; align-items: flex-end; gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--v4-line-strong);
+  background: var(--v4-paper);
+  transition: border-color .15s;
+}
+.lc-composer:focus-within { border-color: var(--v4-ink); }
+.lc-icon-btn {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border: none; background: transparent;
+  color: var(--v4-ink-2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.lc-icon-btn:hover { background: var(--v4-surface); color: var(--v4-ink); }
+.lc-icon-btn:disabled { opacity: .4; cursor: default; }
+.lc-textarea {
+  flex: 1;
+  border: none; outline: none; resize: none;
+  background: transparent;
+  font-size: 14px; line-height: 1.6;
+  color: var(--v4-ink);
+  padding: 8px 6px;
+  max-height: 200px;
+  font-family: inherit;
+}
+.lc-composer-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+/* 档位下拉 */
+.lc-tier { position: relative; }
+.lc-tier-btn {
+  display: flex; align-items: center; gap: 5px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--v4-line);
+  background: var(--v4-paper);
+  font-size: 12px; color: var(--v4-ink);
+  cursor: pointer;
+}
+.lc-tier-btn:hover { border-color: var(--v4-line-strong); }
+.lc-tier-name { font-weight: 600; }
+.lc-tier-cost { color: var(--v4-ink-3); }
+.lc-backdrop { position: fixed; inset: 0; z-index: 20; }
+.lc-tier-menu {
+  position: absolute; bottom: 40px; right: 0; z-index: 21;
+  min-width: 150px;
+  border: 1px solid var(--v4-line-strong);
+  background: var(--v4-paper);
+  box-shadow: 0 8px 24px rgba(0,0,0,.08);
+}
+.lc-tier-opt {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%;
+  padding: 9px 12px;
+  border: none; background: transparent;
+  font-size: 12.5px; color: var(--v4-ink);
+  cursor: pointer;
+}
+.lc-tier-opt:hover { background: var(--v4-surface); }
+.lc-tier-opt.sel { font-weight: 600; }
+.lc-tier-opt-cost { color: var(--v4-ink-3); }
+.lc-send {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border: none;
+  background: var(--v4-solid-bg); color: var(--v4-solid-fg);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.lc-send:hover { opacity: .85; }
+.lc-send:disabled { opacity: .35; cursor: default; }
+.lc-dock-hint { margin-top: 10px; text-align: center; font-size: 11px; color: var(--v4-ink-3); }
+
+/* lightbox */
+.lc-lightbox {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,.85);
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 32px;
+}
+.lc-lightbox img { max-width: 92vw; max-height: 92vh; border: 1px solid var(--v4-line); }
+
+/* 窄屏 */
+@media (max-width: 860px) {
+  .lc-shell { height: auto; min-height: 0; flex-direction: column; }
+  .lc-side { width: 100%; border-right: none; border-bottom: 1px solid var(--v4-line); }
+  .lc-list { max-height: 220px; }
+  .lc-main { min-height: 60vh; }
+}
