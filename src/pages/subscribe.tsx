@@ -127,9 +127,9 @@ export default function Subscribe() {
             {pro && sub.sub?.period_end && <Tag>{t('有效期至', 'Valid until')} {new Date(sub.sub.period_end).toLocaleDateString()}</Tag>}
             <button
               onClick={() => { setLogsOpen(!logsOpen); if (!logsOpen) { setLogsLoading(true); sub.getCreditLogs(30).then((logs) => { setCreditLogs(logs); setLogsLoading(false); }); } }}
-              style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: 12, background: 'none', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}
+              style={{ marginLeft: 'auto', padding: '6px 16px', fontSize: 13, background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}
             >
-              {logsOpen ? '收起明细' : '查看明细'}
+              {logsOpen ? '收起明细' : '📊 查看积分明细'}
             </button>
           </div>
 
