@@ -88,6 +88,7 @@ export async function listProjects(): Promise<CloudResult<CloudMeta[]>> {
   if (!d) return fail('云服务未配置');
   try {
     const r = await d.from(TABLE).select('id,title,updated_at').order('updated_at', { ascending: false }).limit(100);
+    if (!r) return { ok: true, data: [] }; // SDK 返回 undefined 时降级为空列表
     if (r.error) return fail(`读取失败：${errText(r.error)}`);
     return { ok: true, data: ((r.data || []) as CloudMeta[]) };
   } catch (e) {
@@ -100,6 +101,7 @@ export async function pullProject(id: string): Promise<CloudResult<Project>> {
   if (!d) return fail('云服务未配置');
   try {
     const r = await d.from(TABLE).select('*').eq('id', id).limit(1);
+    if (!r) return fail('读取失败：返回空结果');
     if (r.error) return fail(`读取失败：${errText(r.error)}`);
     const rows = (r.data || []) as CloudRow[];
     if (!rows.length) return fail('云端没有这条项目（可能已被删除，或不属于当前账号）');

@@ -50,7 +50,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const r = await d.from('lunasol_user_profiles').select('*').eq('owner_id', u.id).limit(1);
-      const rows = (r.data || []) as UserProfile[];
+      const rows = (r?.data || []) as UserProfile[];
       if (rows.length) {
         setProfile(rows[0]);
       } else {
@@ -65,7 +65,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         await d.from('lunasol_user_profiles').insert(newProfile);
         // 插入后重新查询
         const r2 = await d.from('lunasol_user_profiles').select('*').eq('owner_id', u.id).limit(1);
-        const rows2 = (r2.data || []) as UserProfile[];
+        const rows2 = (r2?.data || []) as UserProfile[];
         if (rows2.length) {
           setProfile(rows2[0]);
         }

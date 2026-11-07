@@ -88,6 +88,7 @@ export async function getSubscription(uid: string): Promise<CloudResult<Subscrip
   const d = await db(); if (!d) return fail('云服务未配置');
   try {
     const r = await d.from(TABLE).select('*').eq('id', uid).limit(1);
+    if (!r) return fail('读取失败：返回空结果');
     if (r.error) return fail(`读取失败：${errText(r.error)}`);
     const rows = (r.data || []) as Subscription[];
     if (!rows.length) return fail('暂无订阅记录');
@@ -462,14 +463,15 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     const d = await db();
     if (!d) return [];
     try {
-      const { data, error } = await d
+      const r = await d
         .from('lunasol_credit_logs')
         .select('*')
         .eq('owner_id', u.id)
         .order('created_at', { ascending: false })
         .limit(limit);
-      if (error) return [];
-      return (data || []) as CreditLog[];
+      if (!r) return [];
+      if (r.error) return [];
+      return (r.data || []) as CreditLog[];
     } catch {
       return [];
     }
