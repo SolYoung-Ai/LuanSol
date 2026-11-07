@@ -56,6 +56,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       } else {
         // 新用户，创建空资料
         const newProfile = {
+          id: u.id, // 用 uid 作为 id
           owner_id: u.id,
           avatar_url: '',
           birthday: '',
