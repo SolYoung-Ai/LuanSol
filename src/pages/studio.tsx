@@ -137,6 +137,18 @@ export default function Studio() {
   // 智能参考线（拖动时显示）
   const [guides, setGuides] = useState<{ v?: number; h?: number }>({});
 
+  // 画布平移状态
+  const [isPanning, setIsPanning] = useState(false);
+  const panState = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const spacePressed = useRef(false);
+
+  // 旋转拖拽状态
+  const rotateState = useRef<{
+    id: string;
+    centerX: number;
+    centerY: number;
+  } | null>(null);
+
   const onPickChatImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -233,8 +245,32 @@ export default function Studio() {
         setZoom(1);
       }
     };
+    // 空格键按下/抬起（用于画布平移）
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !spacePressed.current) {
+        const target = e.target as HTMLElement;
+        // 输入框里不触发
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        spacePressed.current = true;
+        setIsPanning(true);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spacePressed.current = false;
+        setIsPanning(false);
+        panState.current = null;
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, [undo, redo]);
 
   // 初始化：加载项目或创建新项目
@@ -564,6 +600,25 @@ export default function Studio() {
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
+    // 优先处理旋转
+    if (rotateState.current) {
+      const rs = rotateState.current;
+      if (!face || !design) return;
+      // 计算鼠标相对于图层中心的角度
+      const dx = e.clientX - rs.centerX;
+      const dy = e.clientY - rs.centerY;
+      let angle = Math.atan2(dy, dx) * 180 / Math.PI + 90; // 加 90 度让手柄朝上时为 0
+      // 按住 Shift 吸附 15 度
+      if (e.shiftKey) {
+        angle = Math.round(angle / 15) * 15;
+      }
+      angle = Math.round(angle);
+      const layers = face.layers.map((l) =>
+        l.id === rs.id ? { ...l, rotation: angle } : l
+      );
+      update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers } } } });
+      return;
+    }
     // 优先处理缩放
     if (resizeState.current) {
       onResizeMouseMove(e);
@@ -604,6 +659,7 @@ export default function Studio() {
   const onMouseUp = () => {
     dragState.current = null;
     resizeState.current = null;
+    rotateState.current = null;
     setGuides({});
   };
 
@@ -618,6 +674,18 @@ export default function Studio() {
       origX: layer.x, origY: layer.y,
       origW: layer.w, origH: layer.h,
     };
+  };
+
+  // 旋转手柄按下
+  const onRotateMouseDown = (e: React.MouseEvent, layer: Layer) => {
+    e.stopPropagation();
+    e.preventDefault();
+    pushHistory();
+    // 计算图层中心在屏幕上的位置
+    const canvasRect = (e.currentTarget.closest('.studio-canvas-wrap') as HTMLElement).getBoundingClientRect();
+    const centerX = canvasRect.left + (layer.x + layer.w / 2) * zoom * 3.78;
+    const centerY = canvasRect.top + (layer.y + layer.h / 2) * zoom * 3.78;
+    rotateState.current = { id: layer.id, centerX, centerY };
   };
 
   // 缩放：鼠标移动
@@ -1051,7 +1119,42 @@ export default function Studio() {
         </div>
 
         {/* 画布区域 */}
-        <div className="studio-canvas-wrap" style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div
+          className="studio-canvas-wrap"
+          style={{
+            flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+            cursor: isPanning ? 'grab' : 'default',
+          }}
+          onMouseDown={(e) => {
+            // 中键（button=1）或者空格按住时启动平移
+            if (e.button === 1 || spacePressed.current) {
+              e.preventDefault();
+              const container = e.currentTarget;
+              panState.current = {
+                startX: e.clientX,
+                startY: e.clientY,
+                scrollLeft: container.scrollLeft,
+                scrollTop: container.scrollTop,
+              };
+              if (spacePressed.current) container.style.cursor = 'grabbing';
+            }
+          }}
+          onMouseMove={(e) => {
+            if (!panState.current) return;
+            const container = e.currentTarget;
+            const dx = e.clientX - panState.current.startX;
+            const dy = e.clientY - panState.current.startY;
+            container.scrollLeft = panState.current.scrollLeft - dx;
+            container.scrollTop = panState.current.scrollTop - dy;
+          }}
+          onMouseUp={(e) => {
+            panState.current = null;
+            e.currentTarget.style.cursor = isPanning ? 'grab' : 'default';
+          }}
+          onMouseLeave={() => {
+            panState.current = null;
+          }}
+        >
           {viewMode === '2d' && face && (
             <div
               style={{
@@ -1153,6 +1256,37 @@ export default function Studio() {
                           />
                         );
                       })}
+                      {/* 旋转手柄 */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: '50%',
+                          top: -26,
+                          transform: 'translateX(-50%)',
+                          width: 12, height: 12,
+                          borderRadius: '50%',
+                          background: '#fff',
+                          border: '2px solid #f5c451',
+                          cursor: 'grab',
+                          zIndex: 11,
+                        }}
+                        onMouseDown={(e) => onRotateMouseDown(e, layer)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="拖拽旋转（Shift 吸附 15°）"
+                      />
+                      {/* 连接线 */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: '50%',
+                          top: -14,
+                          width: 1,
+                          height: 8,
+                          background: '#f5c451',
+                          zIndex: 10,
+                          pointerEvents: 'none',
+                        }}
+                      />
                     </>
                   )}
                 </div>
