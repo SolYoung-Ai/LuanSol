@@ -33,31 +33,19 @@ export default function Subscribe() {
   const [redeeming, setRedeeming] = useState(false);
   const [redeemMsg, setRedeemMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // 签到状态：localStorage 记录 lastDate + streak
+  // 签到状态：从数据库读取（已登录用户）
   const today = new Date().toISOString().slice(0, 10);
-  const [checkin, setCheckin] = useState<{ lastDate: string; streak: number }>(() => {
-    try {
-      const raw = localStorage.getItem('lunasol_checkin');
-      return raw ? JSON.parse(raw) : { lastDate: '', streak: 0 };
-    } catch { return { lastDate: '', streak: 0 }; }
-  });
-  const checkedToday = checkin.lastDate === today;
-  const doCheckin = () => {
-    if (checkedToday) return;
+  const { checkedToday, streak: checkinStreak, loading: checkinLoading } = sub.checkinState;
+
+  const doCheckin = async () => {
+    if (checkedToday || checkinLoading) return;
     if (!a.user) {
       setToast('请先登录再签到，积分会绑定到你的账号');
       go('/');
       return;
     }
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const newStreak = checkin.lastDate === yesterday ? checkin.streak + 1 : 1;
-    const bonus = newStreak % 10 === 0 ? 100 : 0;
-    const reward = 10 + bonus;
-    const next = { lastDate: today, streak: newStreak };
-    localStorage.setItem('lunasol_checkin', JSON.stringify(next));
-    setCheckin(next);
-    sub.addLocalCredits(reward);
-    setToast(`签到成功！+${reward} 积分${bonus ? `（连续 ${newStreak} 天额外 +${bonus}）` : ''}`);
+    const r = await sub.doCheckin();
+    setToast(r.message);
   };
 
   const left = sub.usedLeft ?? PRICING.freeTrialUses;
@@ -96,7 +84,7 @@ export default function Subscribe() {
           每天签到 <Coin size={14} />10 积分，可叠加；每连续签到满 10 天，额外送 <Coin size={14} />100 积分。<strong>会员每天签到双倍（20 积分）</strong>，月签到最多 600 积分。
         </div>
         <div style={{ marginTop: 8, fontSize: 13, color: '#8a6d30' }}>
-          已连续签到 <strong>{checkin.streak}</strong> 天
+          已连续签到 <strong>{checkinStreak}</strong> 天
         </div>
       </div>
       <button

@@ -176,6 +176,10 @@ interface SubCtx {
   setPaywall: (open: boolean, reason?: string) => void;
   /** 内测期：签到 / 兑换码直接加到本地积分（localStorage），刷新保留 */
   addLocalCredits: (n: number) => void;
+  /** 签到：从数据库读记录，计算连续天数，插入新记录，返回本次获得的积分 */
+  doCheckin: () => Promise<{ ok: boolean; points: number; streak: number; message: string }>;
+  /** 签到状态：今天是否已签到、连续签到天数 */
+  checkinState: { checkedToday: boolean; streak: number; loading: boolean };
   /** 内测期：尝试兑换码，成功返回 {ok:true, points:n} */
   redeemCode: (code: string) => Promise<{ ok: boolean; points?: number; message: string }>;
 }
@@ -247,9 +251,16 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       setPaywallReason(d.reason); setPaywallNeed(d.need); setPaywallOpen(true);
       return { ok: false, reason: d.reason, need: d.need };
     });
-    registerAIReporter(() => {
+    registerAIReporter((taskId: string) => {
       const u = userRef.current; if (!u) return;
-      void recordUsage(u.id, 1).then((next) => { if (next >= 0) setSub((prev) => (prev ? { ...prev, quota_used: next } : prev)); });
+      // 根据 taskId 扣不同积分：聊天免费，生图按档位扣
+      const cost = taskId === 'imageFlash' ? PRICING.costs.imageFlash
+        : taskId === 'imageLite' ? PRICING.costs.imageLite
+        : taskId === 'imagePro' ? PRICING.costs.imagePro
+        : taskId === 'image' ? PRICING.costs.imageFlash  // 默认 Flash
+        : 0;  // 聊天免费
+      if (cost === 0) return;
+      void recordUsage(u.id, cost).then((next) => { if (next >= 0) setSub((prev) => (prev ? { ...prev, quota_used: next } : prev)); });
     });
     return () => { registerAIGate(null); registerAIReporter(null); };
   }, [metered, requestLogin]);
@@ -283,6 +294,90 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     });
   }, []);
 
+  // ---- 签到：对接 PostgreSQL lunasol_checkin_logs 表 ----
+  const [checkinState, setCheckinState] = useState<{ checkedToday: boolean; streak: number; loading: boolean }>({ checkedToday: false, streak: 0, loading: false });
+
+  // 加载签到状态
+  useEffect(() => {
+    const u = userRef.current;
+    if (!u) { setCheckinState({ checkedToday: false, streak: 0, loading: false }); return; }
+    if (!sdkUsable()) { setCheckinState({ checkedToday: false, streak: 0, loading: false }); return; }
+    let cancelled = false;
+    (async () => {
+      setCheckinState((prev) => ({ ...prev, loading: true }));
+      const d = await db();
+      if (!d) { setCheckinState({ checkedToday: false, streak: 0, loading: false }); return; }
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        // 查最近的签到记录，倒序
+        const r = await d.from('lunasol_checkin_logs').select('checkin_date,streak,bonus').eq('user_id', u.id).order('checkin_date', { ascending: false }).limit(30);
+        if (cancelled) return;
+        const rows = (r.data || []) as { checkin_date: string; streak: number; bonus: number }[];
+        if (!rows.length) {
+          setCheckinState({ checkedToday: false, streak: 0, loading: false });
+          return;
+        }
+        const checkedToday = rows[0].checkin_date === today;
+        const streak = checkedToday ? rows[0].streak : rows[0].streak;
+        setCheckinState({ checkedToday, streak, loading: false });
+      } catch {
+        if (!cancelled) setCheckinState({ checkedToday: false, streak: 0, loading: false });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [auth.user?.id]);
+
+  const doCheckin = useCallback(async (): Promise<{ ok: boolean; points: number; streak: number; message: string }> => {
+    const u = userRef.current;
+    if (!u) return { ok: false, points: 0, streak: 0, message: '请先登录' };
+    if (!sdkUsable()) return { ok: false, points: 0, streak: 0, message: '云服务未连接' };
+    if (checkinState.checkedToday) return { ok: false, points: 0, streak: checkinState.streak, message: '今天已经签到过了' };
+    const d = await db();
+    if (!d) return { ok: false, points: 0, streak: 0, message: '数据库未连接' };
+
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+    // 查上一次签到记录
+    const r = await d.from('lunasol_checkin_logs').select('checkin_date,streak').eq('user_id', u.id).order('checkin_date', { ascending: false }).limit(1);
+    const rows = (r.data || []) as { checkin_date: string; streak: number }[];
+    const lastStreak = rows.length > 0 ? rows[0].streak : 0;
+    const newStreak = rows.length > 0 && rows[0].checkin_date === yesterday ? lastStreak + 1 : 1;
+
+    // 计算积分：基础 10，连续 10 天额外 100，会员双倍
+    const isProUser = isProActive(subRef.current);
+    const basePoints = isProUser ? 20 : 10;
+    const bonus = newStreak % 10 === 0 ? 100 : 0;
+    const totalPoints = basePoints + bonus;
+
+    // 插入签到记录
+    try {
+      await d.from('lunasol_checkin_logs').insert({
+        user_id: u.id,
+        checkin_date: today,
+        streak: newStreak,
+        bonus: totalPoints,
+      });
+    } catch (e) {
+      return { ok: false, points: 0, streak: newStreak, message: '签到失败：' + errText(e) };
+    }
+
+    // 把积分加到 bonus_credits
+    const cur = subRef.current;
+    if (cur) {
+      await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
+      setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
+    }
+
+    setCheckinState({ checkedToday: true, streak: newStreak, loading: false });
+    return {
+      ok: true,
+      points: totalPoints,
+      streak: newStreak,
+      message: `签到成功！+${totalPoints} 积分${bonus ? `（连续 ${newStreak} 天额外 +${bonus}）` : ''}`,
+    };
+  }, [checkinState.checkedToday]);
+
   // 兑换码：从 PostgreSQL 读，校验，加积分到 subscription.bonus_credits
   const redeemCode = useCallback(async (code: string): Promise<{ ok: boolean; points?: number; message: string }> => {
     const c = code.trim().toUpperCase();
@@ -315,8 +410,8 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   const isPro = isProActive(sub);
 
   const value = useMemo<SubCtx>(() => ({
-    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, redeemCode,
-  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, redeemCode]);
+    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode,
+  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode]);
 
   return <Ctx.Provider value={value}>
     {children}
