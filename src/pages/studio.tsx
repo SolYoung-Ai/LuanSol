@@ -105,6 +105,63 @@ export default function Studio() {
   const [zoom, setZoom] = useState(1);
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
 
+  // 拖拽状态
+  const dragState = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
+
+  const onLayerMouseDown = (e: React.MouseEvent, layer: Layer) => {
+    if (layer.locked) return;
+    e.stopPropagation();
+    setSelectedLayer(layer.id);
+    dragState.current = {
+      id: layer.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: layer.x,
+      origY: layer.y,
+    };
+  };
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragState.current) return;
+    const dx = e.clientX - dragState.current.startX;
+    const dy = e.clientY - dragState.current.startY;
+    setLayers((prev) => prev.map((l) =>
+      l.id === dragState.current!.id
+        ? { ...l, x: dragState.current!.origX + dx, y: dragState.current!.origY + dy }
+        : l
+    ));
+  };
+
+  const onMouseUp = () => {
+    dragState.current = null;
+  };
+
+  // 图层操作
+  const toggleLock = (id: string) => {
+    setLayers((prev) => prev.map((l) => l.id === id ? { ...l, locked: !l.locked } : l));
+  };
+
+  const toggleVisible = (id: string) => {
+    setLayers((prev) => prev.map((l) => l.id === id ? { ...l, visible: l.visible === false } : l));
+  };
+
+  const moveLayer = (id: string, direction: 'up' | 'down') => {
+    setLayers((prev) => {
+      const idx = prev.findIndex((l) => l.id === id);
+      if (idx < 0) return prev;
+      const newIdx = direction === 'up' ? idx + 1 : idx - 1;
+      if (newIdx < 0 || newIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+      return next;
+    });
+  };
+
+  const deleteLayer = (id: string) => {
+    setLayers((prev) => prev.filter((l) => l.id !== id));
+    if (selectedLayer === id) setSelectedLayer(null);
+  };
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -307,7 +364,12 @@ export default function Studio() {
         )}
 
         {/* 中间：设计画布 */}
-        <div style={{ flex: 1, overflow: 'auto', position: 'relative', padding: 40 }}>
+        <div
+          style={{ flex: 1, overflow: 'auto', position: 'relative', padding: 40 }}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+        >
           <div style={{
             width: 400,
             height: 500,
@@ -318,9 +380,10 @@ export default function Studio() {
             transform: `scale(${zoom})`,
             transformOrigin: 'top center',
           }}>
-            {layers.map((layer) => (
+            {layers.filter(l => l.visible !== false).map((layer) => (
               <div
                 key={layer.id}
+                onMouseDown={(e) => onLayerMouseDown(e, layer)}
                 onClick={() => setSelectedLayer(layer.id)}
                 style={{
                   position: 'absolute',
@@ -329,16 +392,18 @@ export default function Studio() {
                   width: layer.width,
                   height: layer.height,
                   border: selectedLayer === layer.id ? '2px solid #2196f3' : '1px dashed transparent',
-                  cursor: 'pointer',
+                  cursor: layer.locked ? 'not-allowed' : 'move',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: layer.fontSize || 14,
                   color: layer.color || '#333',
                   background: layer.type === 'background' ? '#f5f0e8' : 'transparent',
+                  opacity: layer.opacity || 1,
                 }}
               >
                 {layer.type === 'text' ? layer.content : layer.name}
+                {layer.locked && <span style={{ position: 'absolute', top: 2, right: 4, fontSize: 10 }}>🔒</span>}
               </div>
             ))}
             {layers.length === 0 && (
@@ -378,18 +443,40 @@ export default function Studio() {
                   key={layer.id}
                   onClick={() => setSelectedLayer(layer.id)}
                   style={{
-                    padding: '10px 12px',
+                    padding: '8px 12px',
                     marginBottom: 4,
                     borderRadius: 6,
                     cursor: 'pointer',
                     background: selectedLayer === layer.id ? '#e3f2fd' : 'transparent',
                     fontSize: 13,
                     display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'space-between',
                   }}
                 >
-                  <span>{layer.name}</span>
-                  <span style={{ color: '#999', fontSize: 12 }}>{layer.type}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); toggleVisible(layer.id); }}
+                      style={{ cursor: 'pointer', fontSize: 14 }}
+                    >
+                      {layer.visible === false ? '👁️' : '👁'}
+                    </span>
+                    <span>{layer.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); toggleLock(layer.id); }}
+                      style={{ cursor: 'pointer', fontSize: 12 }}
+                    >
+                      {layer.locked ? '🔒' : '🔓'}
+                    </span>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
+                      style={{ cursor: 'pointer', fontSize: 12, color: '#f44336' }}
+                    >
+                      ✕
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -400,12 +487,48 @@ export default function Studio() {
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>
                   {selectedLayerObj.name}
                 </h4>
-                <div style={{ fontSize: 12, color: '#666', lineHeight: 2 }}>
-                  <div>X: {selectedLayerObj.x}</div>
-                  <div>Y: {selectedLayerObj.y}</div>
-                  <div>宽: {selectedLayerObj.width}</div>
-                  <div>高: {selectedLayerObj.height}</div>
+
+                {/* 位置和大小 */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#999' }}>X</label>
+                    <input
+                      type="number"
+                      value={Math.round(selectedLayerObj.x)}
+                      onChange={(e) => setLayers((prev) => prev.map((l) => l.id === selectedLayer ? { ...l, x: Number(e.target.value) } : l))}
+                      style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#999' }}>Y</label>
+                    <input
+                      type="number"
+                      value={Math.round(selectedLayerObj.y)}
+                      onChange={(e) => setLayers((prev) => prev.map((l) => l.id === selectedLayer ? { ...l, y: Number(e.target.value) } : l))}
+                      style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#999' }}>宽</label>
+                    <input
+                      type="number"
+                      value={Math.round(selectedLayerObj.width)}
+                      onChange={(e) => setLayers((prev) => prev.map((l) => l.id === selectedLayer ? { ...l, width: Number(e.target.value) } : l))}
+                      style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#999' }}>高</label>
+                    <input
+                      type="number"
+                      value={Math.round(selectedLayerObj.height)}
+                      onChange={(e) => setLayers((prev) => prev.map((l) => l.id === selectedLayer ? { ...l, height: Number(e.target.value) } : l))}
+                      style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                    />
+                  </div>
                 </div>
+
+                {/* 文字属性 */}
                 {selectedLayerObj.type === 'text' && (
                   <div style={{ marginTop: 12 }}>
                     <label style={{ fontSize: 12, color: '#666' }}>文字内容</label>
@@ -421,6 +544,26 @@ export default function Studio() {
                         fontSize: 13,
                       }}
                     />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, color: '#999' }}>字号</label>
+                        <input
+                          type="number"
+                          value={selectedLayerObj.fontSize || 14}
+                          onChange={(e) => setLayers((prev) => prev.map((l) => l.id === selectedLayer ? { ...l, fontSize: Number(e.target.value) } : l))}
+                          style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, color: '#999' }}>颜色</label>
+                        <input
+                          type="color"
+                          value={selectedLayerObj.color || '#333333'}
+                          onChange={(e) => setLayers((prev) => prev.map((l) => l.id === selectedLayer ? { ...l, color: e.target.value } : l))}
+                          style={{ width: '100%', height: 30, border: '1px solid #ddd', borderRadius: 4 }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
                 <button
