@@ -8,7 +8,7 @@
  * 能力：状态筛选 + 包装结构分类 + 搜索排序 + 批量管理（全选 / 批量删除，本地与云端同步）。
  * ============================================================ */
 import React, { useMemo, useState } from 'react';
-import { Empty, Modal, go, useHash } from '../ui';
+import { Empty, Modal, ComingSoonModal, go, useHash } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useCloudSync } from '../cloud/useCloudSync';
@@ -73,6 +73,7 @@ export default function Workspace() {
   const [confirmDel, setConfirmDel] = useState<Project | null>(null);
   const [renaming, setRenaming] = useState<Project | null>(null);
   const [renameTo, setRenameTo] = useState('');
+  const [comingSoon, setComingSoon] = useState(false);
 
   // 批量管理
   const [batchMode, setBatchMode] = useState(false);
@@ -202,13 +203,21 @@ export default function Workspace() {
       </div>
 
       {/* 批量操作条 */}
-      {batchMode && <div style={{
+      {batchMode && <div className="v4-batch-bar" style={{
         display: 'flex', alignItems: 'center', gap: 16,
         background: 'var(--v4-surface)', border: '1px solid var(--v4-line)', padding: '12px 16px',
       }}>
-        <button onClick={toggleSelectAll} style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', paddingLeft: 30, minHeight: 24 }}>
-          <span style={checkBoxStyle(allVisibleSelected)}>
-            {allVisibleSelected && <Icon name="check" size={13} strokeWidth={2.4} />}
+        <button onClick={toggleSelectAll} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}>
+          <span style={{
+            width: 18, height: 18, flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 'var(--v4-r-sm)',
+            background: allVisibleSelected ? 'var(--v4-solid-bg)' : 'transparent',
+            border: `1.5px solid ${allVisibleSelected ? 'var(--v4-solid-bg)' : 'var(--v4-line-strong)'}`,
+            color: 'var(--v4-solid-fg)',
+            transition: 'all var(--v4-dur-fast) var(--v4-ease)',
+          }}>
+            {allVisibleSelected && <Icon name="check" size={12} strokeWidth={2.6} />}
           </span>
           <span style={{ fontSize: 13 }}>{allVisibleSelected ? '取消全选' : '全选'}</span>
         </button>
@@ -276,7 +285,7 @@ export default function Workspace() {
       </div>
       <h3>这里还没有作品</h3>
       <p>从一个想法开始，创建你的第一个包装。</p>
-      <button className="v4-btn-dark" onClick={() => go('/wizard')}>开始设计</button>
+      <button className="v4-btn-dark" onClick={() => setComingSoon(true)}>开始设计</button>
     </div>}
 
     {/* 单个删除确认 */}
@@ -305,5 +314,7 @@ export default function Workspace() {
         <button className="v4-btn-dark" onClick={doRename}>保存</button>
       </div>
     </Modal>
+
+    <ComingSoonModal open={comingSoon} onClose={() => setComingSoon(false)} />
   </div>;
 }

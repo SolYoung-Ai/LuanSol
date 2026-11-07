@@ -82,7 +82,7 @@ function Bubble({ m, isLast }: { m: LunaMessage; isLast: boolean }) {
   const isUser = m.role === 'user';
   return (
     <div className={`lc-msg ${isUser ? 'user' : 'assistant'}`}>
-      <div className="lc-msg-avatar">{isUser ? '我' : 'L'}</div>
+      <div className="lc-msg-avatar">{isUser ? '我' : <img src="./logo.png" alt="Luna" />}</div>
       <div className="lc-msg-body">
         {m.reasoning && <ReasoningBlock reasoning={m.reasoning} defaultOpen={isLast} />}
         {m.content && m.content !== '（参考图）' && (
@@ -280,7 +280,7 @@ export default function Luna() {
               ))}
               {chat.busy && (
                 <div className="lc-msg assistant">
-                  <div className="lc-msg-avatar">L</div>
+                  <div className="lc-msg-avatar"><img src="./logo.png" alt="Luna" /></div>
                   <div className="lc-busy">
                     <span className="lc-dot" />
                     <span className="lc-dot" />
@@ -293,7 +293,7 @@ export default function Luna() {
         ) : (
           <div className="lc-welcome">
             <h1>我们应该探索什么？</h1>
-            <p>我是 Luna，你的专属设计师分身。产品、品牌、包装、海报，任何设计想法都可以丢给我。</p>
+            <p>我是 Luna，你的专属设计师。产品、品牌、包装、海报，任何设计想法都可以丢给我。</p>
           </div>
         )}
 

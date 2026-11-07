@@ -90,6 +90,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     <div className="v4-nav-inner">
       <div className="v4-nav-brand">
         <button className="v4-wordmark" onClick={() => go('/')} aria-label="LunaSol">
+          <img className="v4-nav-logo" src="./logo.png" alt="" />
           <span className="wm-letter">L</span><span className="wm-letter">u</span><span className="wm-letter">n</span><span className="wm-letter">a</span><span className="wm-letter" style={{ color: '#e8783a' }}>S</span><span className="wm-letter" style={{ color: '#e8783a' }}>o</span><span className="wm-letter" style={{ color: '#e8783a' }}>l</span>
         </button>
         <button
@@ -260,4 +261,18 @@ export function Spinner({ label = 'AI 正在工作' }: { label?: string }) {
 
 export function PageHead({ kicker, title, desc, right }: { kicker?: string; title: string; desc?: string; right?: React.ReactNode }) {
   return <div className="page-head"><div>{kicker && <div className="kicker">{kicker}</div>}<h1>{title}</h1>{desc && <p>{desc}</p>}</div>{right && <div className="page-head-right">{right}</div>}</div>;
+}
+
+/** 「开始设计」等尚未开放入口的统一占位弹窗：引导用户先去体验 Luna 对话 */
+export function ComingSoonModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return <Modal open={open} title="功能开发中" onClose={onClose}>
+    <p className="modal-p">
+      这个入口还在加紧打磨中。你可以先去体验 <strong>Luna 对话</strong>——把你的设计想法直接告诉她，
+      她会帮你梳理方向、出配色与结构建议，对话全程免费。
+    </p>
+    <div className="modal-buttons">
+      <button className="v4-btn-line" onClick={onClose}>知道了</button>
+      <button className="v4-btn-dark" onClick={() => { onClose(); go('/luna'); }}>去体验 Luna 对话</button>
+    </div>
+  </Modal>;
 }

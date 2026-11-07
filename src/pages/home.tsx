@@ -7,7 +7,7 @@
  * 唯一保留的交互是「已有草稿时先确认」——这是防止用户误点丢数据的必要保护。
  * ============================================================ */
 import React, { useState } from 'react';
-import { Modal, go } from '../ui';
+import { Modal, ComingSoonModal, go } from '../ui';
 import { useApp } from '../store';
 import { createEmptyBrief } from '../engine/brief';
 import { createEmptyDraft } from '../v3/draft';
@@ -18,6 +18,7 @@ export default function Home() {
   const { s, update, newProject } = useApp();
   const { t } = useLang();
   const [confirmNew, setConfirmNew] = useState(false);
+  const [comingSoon, setComingSoon] = useState(false);
 
   /** 创建一个全新的真实项目（重置工程状态），再进入统一编辑器 */
   const beginFresh = () => {
@@ -26,9 +27,9 @@ export default function Home() {
     go('/studio');
   };
 
-  /** 开始设计：直接进入全新项目 */
+  /** 开始设计：入口暂未开放，弹开发中提示并引导去 Luna 对话 */
   const startWizard = () => {
-    beginFresh();
+    setComingSoon(true);
   };
 
   return <div className="v4-home">
@@ -54,5 +55,6 @@ export default function Home() {
         <button className="v4-btn-dark" onClick={beginFresh}>{t('重新开始', 'Start over')}</button>
       </div>
     </Modal>
+    <ComingSoonModal open={comingSoon} onClose={() => setComingSoon(false)} />
   </div>;
 }
