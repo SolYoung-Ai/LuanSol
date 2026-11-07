@@ -15,17 +15,18 @@ import { WIZARD_STEPS, stepProgress } from '../v3/steps';
 import { useLang } from '../i18n';
 
 export default function Home() {
-  const { s, update } = useApp();
+  const { s, update, newProject } = useApp();
   const { t } = useLang();
   const [confirmNew, setConfirmNew] = useState(false);
 
-  /** 从首页进入 V6 统一工作台 */
+  /** 创建一个全新的真实项目（重置工程状态），再进入统一编辑器 */
   const beginFresh = () => {
     setConfirmNew(false);
+    newProject();
     go('/studio');
   };
 
-  /** 已有进度的草稿会被清空，属于不可撤销操作：先确认，别让用户误点丢数据 */
+  /** 开始设计：直接进入全新项目 */
   const startWizard = () => {
     beginFresh();
   };
