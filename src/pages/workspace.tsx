@@ -158,7 +158,7 @@ export default function Workspace() {
       </div>
       <div className="v4-tools">
         <button className="v4-btn-dark" onClick={() => {
-          if (auth.user?.email === 'solyoungwork@gmail.com') go('/wizard');
+          if (auth.user?.email === 'solyoungwork@gmail.com') go('/new');
           else setComingSoon(true);
         }}>新建设计</button>
       </div>
@@ -289,7 +289,7 @@ export default function Workspace() {
       <h3>这里还没有作品</h3>
       <p>从一个想法开始，创建你的第一个包装。</p>
       <button className="v4-btn-dark" onClick={() => {
-        if (auth.user?.email === 'solyoungwork@gmail.com') go('/wizard');
+        if (auth.user?.email === 'solyoungwork@gmail.com') go('/new');
         else setComingSoon(true);
       }}>开始设计</button>
     </div>}

@@ -46,8 +46,21 @@ export const isDeepSeekProxy = (s: AISettings) =>
  *  但用户之后主动关掉 AI 时（rev 已是新值）必须被尊重。 */
 export const AI_REV = 3;
 
+/** 判断 baseUrl 是否为官方代理（dev 相对路径或生产完整地址），
+ *  避免把用户自定义代理误判为需要同步令牌。 */
+function isOfficialProxyUrl(baseUrl: string): boolean {
+  const b = baseUrl.trim().replace(/\/+$/, '');
+  return b === '/lunasol-ai' || b.endsWith('tcloudbase.com/lunasol-ai');
+}
+
 export function migrateAI(s: AISettings): AISettings {
   const rev = s.rev ?? 1;
+  // 令牌轮换修复（与 rev 无关）：官方代理持有的令牌与当前构建不一致时，
+  // 强制重新应用官方代理，否则老用户会一直拿旧令牌撞 401。
+  if (deepSeekReady && aiMode(s) === 'proxy'
+      && isOfficialProxyUrl(s.baseUrl) && s.proxyToken !== CLOUD.aiToken) {
+    return { ...applyDeepSeekProxy({ ...s, rev: AI_REV }), rev: AI_REV };
+  }
   if (rev >= AI_REV) return s;
   const next: AISettings = { ...s, rev: AI_REV };
   // 强制更新代理令牌：安全加固后轮换了令牌，所有老用户都要重新同步

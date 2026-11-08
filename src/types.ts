@@ -198,6 +198,8 @@ export interface Project {
   createdAt: number;
   updatedAt: number;
   status: 'draft' | 'designing' | 'checked' | 'exported';
+  /** V2 AI 原生工作流数据（聚合）。旧项目无此字段，向后兼容，不覆盖真实数据。 */
+  workflow?: ProjectWorkflow;
 }
 
 /** AI 接入模式：
@@ -282,4 +284,216 @@ export interface Conversation {
   imageTier: ImageTier;
   createdAt: number;
   updatedAt: number;
+}
+
+/* ======================== V2 AI 原生工作流 ======================== */
+
+/** 创作模式（任务书第三部分 C） */
+export type CreationMode = 'referenceStyle' | 'referenceInnovate' | 'fromScratch';
+
+/** 工作流阶段：驱动页面渲染，刷新后据此恢复 */
+export type WorkflowStage = 'entry' | 'analysis' | 'concepts' | 'planning' | 'workflow' | 'assembled';
+
+/** 参考图用途分类 */
+export type ReferenceRole =
+  | 'packaging' | 'product' | 'competitor' | 'logo' | 'brandGuideline'
+  | 'font' | 'material' | 'finishing' | 'sketch' | 'other';
+
+/** 上传的参考图片：真实转 data URL 持久化，非临时显示 */
+export interface ReferenceImage {
+  id: string;
+  /** data URL */
+  src: string;
+  name: string;
+  naturalW: number;
+  naturalH: number;
+  /** 宽高比（前端真实计算） */
+  ratio: number;
+  /** 图片用途分类 */
+  role: ReferenceRole;
+  /** 用户备注：说明这张图参考哪部分 */
+  note: string;
+  /** 前端真实提取的主色 HEX（Canvas 采样，非语义识别） */
+  dominantColors: string[];
+  createdAt: number;
+}
+
+/** 结构化产品信息：首次只要求 description，其余按需补充 */
+export interface ProductInfo {
+  /** 自然语言主描述（核心，允许只填这一句） */
+  description: string;
+  productName: string;
+  brandName: string;
+  productType: string;
+  productIntro: string;
+  audience: string;
+  pricePositioning: string;
+  salesScene: string;
+  packagingType: string;
+  expectedSize: string;
+  brandMainColor: string;
+  specialRequirements: string;
+}
+
+/** 色彩规范条目 */
+export interface ColorSpec {
+  hex: string;
+  rgb: string;
+  role: 'primary' | 'secondary' | 'accent' | 'background' | 'ink';
+  /** 估算占比 0-1（前端可计算时给出） */
+  proportion?: number;
+}
+
+/** 材质分析条目：仅凭图片无法确定，一律标记为推测 */
+export interface MaterialNote {
+  name: string;
+  visualFeature: string;
+  recommendedAlternative: string;
+  inferred: boolean;
+}
+
+/** 印刷工艺条目：光影不等于真实工艺，一律标记为推测 */
+export interface FinishingNote {
+  name: string;
+  visualEvidence: string;
+  inferred: boolean;
+}
+
+/** 图形与插画条目 */
+export interface GraphicNote {
+  element: string;
+  style: string;
+  color: string;
+  usage: string;
+  generationHint: string;
+}
+
+/**
+ * 结构化设计分析报告（任务书 4.2，JSON 持久化，可被后续节点调用）。
+ * source 诚实标注能力来源：
+ *  - vision：真实视觉模型（当前后端无此端点，暂不可用）
+ *  - text-frontend：文本模型基于用户文字 + 前端真实可计算的尺寸/主色（当前真实能力）
+ */
+export interface AnalysisReport {
+  source: 'vision' | 'text-frontend';
+  productUnderstanding: string;
+  structure: {
+    suggestedType: string;
+    shape: string;
+    features: string;
+    confidence: 'low' | 'medium' | 'high';
+    needsConfirmation: string;
+  };
+  materials: MaterialNote[];
+  finishing: FinishingNote[];
+  palette: ColorSpec[];
+  typography: {
+    titleStyle: string;
+    bodyStyle: string;
+    hierarchy: string;
+    suggestions: string;
+  };
+  graphics: GraphicNote[];
+  layout: {
+    logoPosition: string;
+    mainVisual: string;
+    hierarchy: string;
+    whitespace: string;
+  };
+  brandPositioning: {
+    personality: string;
+    positioning: string;
+    audience: string;
+    priceSense: string;
+    emotion: string;
+  };
+  /** 合规信息清单：需要用户补充，AI 不编造生产商/许可证/条码 */
+  requiredInformation: string[];
+  /** 不确定项：区分图上可直接判断与仅靠推测 */
+  uncertainties: string[];
+  designConstraints: string[];
+  /** 用户是否已确认并锁定为设计依据 */
+  confirmed: boolean;
+  at: number;
+}
+
+/** 设计方向（任务书 5.1，三个可选择方案） */
+export interface DesignConcept {
+  id: string;
+  key: 'faithful' | 'brandOptimized' | 'creative';
+  name: string;
+  concept: string;
+  visualKeywords: string[];
+  colors: string[];
+  materialDirection: string;
+  structure: string;
+  typographyDirection: string;
+  illustrationDirection: string;
+  composition: string;
+  expectedEffect: string;
+  referenceRelation: string;
+}
+
+/** 设计任务类型（任务书 5.2） */
+export type DesignTaskType =
+  | 'background' | 'illustration' | 'pattern' | 'texture' | 'decoration'
+  | 'product-image' | 'typography' | 'brand' | 'barcode' | 'structural' | 'assembly';
+
+/** 单个设计任务：P3 自动组装使用，P0 先建立类型底座 */
+export interface DesignTask {
+  id: string;
+  type: DesignTaskType;
+  name: string;
+  face: FaceId | 'all';
+  description: string;
+  prompt: string;
+  model: string;
+  status: 'pending' | 'waiting' | 'running' | 'success' | 'failed' | 'cancelled';
+  /** 生成结果对应的素材 ID */
+  assetId?: string;
+  /** 对应工程图层 ID（自动组装后回填） */
+  layerId?: string;
+  error?: string;
+}
+
+/** 聚合的 V2 工作流数据，挂在 Project.workflow；与项目同一份数据，不另起两套 */
+export interface ProjectWorkflow {
+  version: 1;
+  stage: WorkflowStage;
+  mode: CreationMode;
+  productInfo: ProductInfo;
+  referenceImages: ReferenceImage[];
+  analysis: AnalysisReport | null;
+  concepts: DesignConcept[];
+  selectedConceptId: string | null;
+  tasks: DesignTask[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 空产品信息（首次进入的默认值） */
+export function emptyProductInfo(): ProductInfo {
+  return {
+    description: '',
+    productName: '', brandName: '', productType: '', productIntro: '',
+    audience: '', pricePositioning: '', salesScene: '', packagingType: '',
+    expectedSize: '', brandMainColor: '', specialRequirements: '',
+  };
+}
+
+/** 新建工作流的初始状态 */
+export function createInitialWorkflow(now: number = Date.now()): ProjectWorkflow {
+  return {
+    version: 1,
+    stage: 'entry',
+    mode: 'referenceStyle',
+    productInfo: emptyProductInfo(),
+    referenceImages: [],
+    analysis: null,
+    concepts: [],
+    selectedConceptId: null,
+    tasks: [],
+    createdAt: now,
+    updatedAt: now,
+  };
 }

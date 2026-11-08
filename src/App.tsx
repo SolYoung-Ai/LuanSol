@@ -28,6 +28,7 @@ const Security = lazy(() => import('./pages/security'));
 const Help = lazy(() => import('./pages/help'));
 const Luna = lazy(() => import('./pages/luna'));
 const Studio = lazy(() => import('./pages/studio'));
+const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
 
 function Footer() {
@@ -71,8 +72,8 @@ export default function App() {
   const OLD_FLOW_ROUTES = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
   const isOldFlow = OLD_FLOW_ROUTES.some((p) => path.startsWith(p));
 
-  // 工作台需要登录
-  const needLogin = (isOldFlow || path === '/studio') && auth.ready && !auth.user;
+  // 工作台与 AI 新建设计流程需要登录
+  const needLogin = (isOldFlow || path === '/studio' || path === '/new') && auth.ready && !auth.user;
   if (needLogin) {
     page = <div className="page page-narrow">
       <PageHead kicker="SIGN IN" title="先登录，再开始设计"
@@ -85,6 +86,7 @@ export default function App() {
     page = <OldRouteRedirect />;
   } else if (path === '/') page = <Home />;
   else if (path === '/studio') page = <Studio />;
+  else if (path === '/new') page = <NewDesign />;
   /* 旧灵感库（内容为虚构项目）已下线：统一指向真实可溯源的审美市场 */
   else if (path === '/inspiration') page = <Market />;
   else if (path === '/structures') page = <Structures />;

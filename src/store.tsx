@@ -1,12 +1,13 @@
 /* 全局项目仓库：IndexedDB 优先，localStorage 兜底；所有智能体共享同一份项目数据。 */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { AISettings, Asset, ChatMessage, DesignBrief, DesignDoc, Dieline, PrepressReport, Project, UserSettings, Version } from './types';
+import type { AISettings, Asset, ChatMessage, CreationMode, DesignBrief, DesignDoc, Dieline, PrepressReport, ProductInfo, Project, ProjectWorkflow, ReferenceImage, UserSettings, Version } from './types';
 import { createEmptyBrief } from './engine/brief';
 import { buildDieline } from './engine/structure';
 import { DEFAULT_AI, migrateAI } from './engine/llm';
 import { cloneDesign } from './engine/design';
 import { uid } from './engine/utils';
 import { createEmptyDraft, normalizeDraft, type ProjectDraft } from './v3/draft';
+import { createInitialWorkflow } from './types';
 
 const DB_NAME = 'lunasol-studio';
 const STORE = 'state';
@@ -92,6 +93,15 @@ interface AppCtx {
   deleteProject: (id: string) => void;
   duplicateProject: (id: string) => void;
   newProject: () => void;
+  /** V2：创建带 AI 工作流的真实项目并设为当前项目 */
+  createWorkflowProject: (input: {
+    mode: CreationMode;
+    productInfo: ProductInfo;
+    referenceImages: ReferenceImage[];
+    name?: string;
+  }) => Project;
+  /** V2：局部更新某项目的工作流数据，刷新 updatedAt */
+  patchWorkflow: (projectId: string, patch: Partial<ProjectWorkflow>) => void;
   addVersion: (label: string) => void;
   restoreVersion: (id: string) => void;
   addAsset: (asset: Asset) => void;
@@ -184,6 +194,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         scheme: prev.design?.scheme || 'minimal', design: prev.design ? cloneDesign(prev.design) : null,
         versions, createdAt: old?.createdAt || now, updatedAt: now,
         status: prev.report ? 'checked' : prev.design ? 'designing' : 'draft',
+        // 保留 V2 工作流数据，旧路径保存不丢失
+        workflow: old?.workflow,
       };
       result = proj;
       const others = prev.projects.filter((p) => p.id !== id);
@@ -238,6 +250,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     draft: createEmptyDraft(),
   })), []);
 
+  /** V2：创建带 AI 工作流的真实项目。点「开始 AI 设计」后 stage 直接进入分析阶段。 */
+  const createWorkflowProject = useCallback((input: {
+    mode: CreationMode;
+    productInfo: ProductInfo;
+    referenceImages: ReferenceImage[];
+    name?: string;
+  }): Project => {
+    let result!: Project;
+    setS((prev) => {
+      const now = Date.now();
+      const id = uid('proj');
+      const workflow = createInitialWorkflow(now);
+      workflow.stage = 'analysis';
+      workflow.mode = input.mode;
+      workflow.productInfo = input.productInfo;
+      workflow.referenceImages = input.referenceImages;
+      const proj: Project = {
+        id,
+        name: input.name
+          || input.productInfo.brandName
+          || input.productInfo.productName
+          || '未命名包装项目',
+        brief: createEmptyBrief(),
+        structure: 'tuck',
+        scheme: 'minimal',
+        design: null,
+        versions: [],
+        createdAt: now,
+        updatedAt: now,
+        status: 'draft',
+        workflow,
+      };
+      result = proj;
+      return { ...prev, activeId: id, projects: [proj, ...prev.projects] };
+    });
+    return result;
+  }, []);
+
+  /** V2：局部更新某项目的工作流，同步刷新项目与工作流的 updatedAt。 */
+  const patchWorkflow = useCallback((projectId: string, patch: Partial<ProjectWorkflow>) => {
+    setS((prev) => ({
+      ...prev,
+      projects: prev.projects.map((p) => {
+        if (p.id !== projectId || !p.workflow) return p;
+        const now = Date.now();
+        return {
+          ...p,
+          updatedAt: now,
+          workflow: { ...p.workflow, ...patch, updatedAt: now },
+        };
+      }),
+    }));
+  }, []);
+
   // —— 独立素材库 ——
   const addAsset = useCallback((asset: Asset) => setS((prev) => ({
     ...prev, assets: [asset, ...prev.assets],
@@ -267,7 +333,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppCtx = {
     s, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
-    saveProject, syncProject, loadProject, mergeCloudProjects, deleteProject, duplicateProject, newProject, addVersion, restoreVersion,
+    saveProject, syncProject, loadProject, mergeCloudProjects, deleteProject, duplicateProject, newProject,
+    createWorkflowProject, patchWorkflow,
+    addVersion, restoreVersion,
     addAsset, removeAsset, toggleFavoriteAsset,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

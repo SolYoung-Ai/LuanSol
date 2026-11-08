@@ -29,9 +29,9 @@ export default function Home() {
     go('/studio');
   };
 
-  /** 开始设计：仅内部管理员可直接进入编辑器；其余用户弹开发中提示并引导去 Luna 对话 */
+  /** 开始设计：内部管理员进入 AI 原生新建设计流程；其余用户弹开发中提示。 */
   const startWizard = () => {
-    if (auth.user?.email === 'solyoungwork@gmail.com') beginFresh();
+    if (auth.user?.email === 'solyoungwork@gmail.com') go('/new');
     else setComingSoon(true);
   };
 
