@@ -1,7 +1,7 @@
 /* ============================================================
  * 积分 / 充值页（2026-11 改版）
  * ------------------------------------------------------------
- *  - 积分制：聊天 1/轮、Seedream Flash 4/张、Lite 7/张、Pro 10/张
+ *  - 积分制：聊天免费、Seedream Flash 6/张、Pro 15/张
  *  - 新注册送 100 积分；包月 ¥299 = 3000 积分/月
  *  - 充值包：¥99=1000 / ¥199=2100 / ¥299=3500（支付未开放，先做卡片）
  *  - 底部：兑换码兑换入口
@@ -187,11 +187,6 @@ export default function Subscribe() {
           <div style={{ fontWeight: 600 }}>{t('图像 · Flash', 'Image · Flash')}</div>
           <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imageFlash} {t('/张', '/img')}</div>
           <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Flash · 快</div>
-        </div>
-        <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
-          <div style={{ fontWeight: 600 }}>{t('图像 · Lite', 'Image · Lite')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imageLite} {t('/张', '/img')}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Lite · 平衡</div>
         </div>
         <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
           <div style={{ fontWeight: 600 }}>{t('图像 · Pro', 'Image · Pro')}</div>

@@ -3,7 +3,7 @@
  * ------------------------------------------------------------
  * 左侧：新建对话 + 搜索 + 云端历史对话；中间：欢迎大标题 / 对话流
  * + 底部输入框。对话模型固定 DeepSeek（deepseek-reasoner，带思考过程），
- * 不提供模型选择；生图三档 flash/lite/pro 由用户在输入框切换。
+ * 不提供模型选择；生图两档 flash/pro 由用户在输入框切换。
  * 人设统一来自 engine/persona.ts，全站同一份。
  * ============================================================ */
 import React, { useEffect, useRef, useState } from 'react';
@@ -16,12 +16,12 @@ import { LoginDialog } from '../cloud/LoginDialog';
 import { PRICING } from '../cloud/plans';
 import { CHAT_MODELS } from '../cloud/useChatStore';
 
-const TIERS: ImageTier[] = ['flash', 'lite', 'pro'];
+const TIERS: ImageTier[] = ['flash', 'pro'];
 const tierName = (t: ImageTier) =>
-  t === 'flash' ? 'Seedream-5.0-flash' : t === 'lite' ? 'Seedream-5.0-lite' : 'Seedream-5.0-pro';
-const tierShort = (t: ImageTier) => (t === 'flash' ? 'Flash' : t === 'lite' ? 'Lite' : 'Pro');
+  t === 'flash' ? 'Seedream-5.0-flash' : 'Seedream-5.0-pro';
+const tierShort = (t: ImageTier) => (t === 'flash' ? 'Flash' : 'Pro');
 const tierCost = (t: ImageTier) =>
-  t === 'flash' ? PRICING.costs.imageFlash : t === 'lite' ? PRICING.costs.imageLite : PRICING.costs.imagePro;
+  t === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro;
 
 // 前端按纯文本渲染（不解析 Markdown），把模型偶尔带出的 Markdown 符号清掉，
 // 避免页面上裸露 ** 或 #，同时保留正常换行。

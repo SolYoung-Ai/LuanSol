@@ -116,6 +116,23 @@ const ARK_MODEL_MAP = {
   'glm-5.3': 'glm-5-3-flash-260828',
 };
 
+/**
+ * 方舟部分模型对采样参数有硬性限制。
+ * Kimi-K3.1-Pro 只接受 temperature=1，传其他值会 400。
+ */
+const ARK_MODEL_RULES = {
+  'kimi-k3.1': { temperature: 1 },
+};
+
+/** 按模型约束修正方舟请求参数 */
+function applyArkRules(frontModel, arkPayload) {
+  const rule = ARK_MODEL_RULES[frontModel];
+  if (!rule) return arkPayload;
+  const next = { ...arkPayload };
+  if (typeof rule.temperature === 'number') next.temperature = rule.temperature;
+  return next;
+}
+
 // res 是每次请求独立的对象，把该请求的 CORS 头挂在它上面，避免并发串扰
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
@@ -331,10 +348,9 @@ async function handleImage(req, res, body) {
   const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, 2000) : '';
   if (!prompt) return sendJson(res, 400, { error: { message: '缺少 prompt' } });
 
-  // 前端传 flash/lite/pro，映射到方舟具体模型 ID；缺省走环境变量
+  // 前端传 flash/pro，映射到方舟具体模型 ID；缺省走环境变量
   const TIER_MODEL = {
     flash: 'doubao-seedream-5-0-flash-260915',
-    lite: 'doubao-seedream-5-0-lite-260128',
     pro: 'doubao-seedream-5-0-pro-260628',
   };
   const tier = typeof body.model === 'string' && TIER_MODEL[body.model] ? body.model : 'flash';
@@ -398,26 +414,28 @@ async function handleChat(req, res, body) {
     return sendJson(res, 400, { error: { message: '缺少 messages' } });
   }
 
+  // 统一的上游调用：方舟模型映射真实 ID 并应用参数约束，其余走 DeepSeek
+  const dispatch = (p) => {
+    const frontModel = p.model;
+    if (ARK_MODEL_MAP[frontModel]) {
+      const arkPayload = applyArkRules(frontModel, { ...p, model: ARK_MODEL_MAP[frontModel] });
+      return callArkChat(arkPayload);
+    }
+    return callDeepSeek(p);
+  };
+
   try {
     dayUsed += 1;
-    // 根据模型名路由：方舟模型走 ARK，其他走 DeepSeek
-    const isArkModel = ARK_MODEL_MAP[payload.model];
-    let r;
-    if (isArkModel) {
-      // 方舟模型需要映射到真实模型 ID
-      const arkPayload = { ...payload, model: ARK_MODEL_MAP[payload.model] };
-      r = await callArkChat(arkPayload);
-    } else {
-      r = await callDeepSeek(payload);
-    }
+    let r = await dispatch(payload);
     // 部分模型不接受 response_format：去掉该字段重试一次，不做结果伪装
     if (r.status === 400 && withJsonFormat && /response_format/i.test(r.raw)) {
       payload = buildUpstreamPayload(body, false);
-      if (ARK_MODEL_MAP[payload.model]) {
-        r = await callArkChat({ ...payload, model: ARK_MODEL_MAP[payload.model] });
-      } else {
-        r = await callDeepSeek(payload);
-      }
+      r = await dispatch(payload);
+    }
+    // 部分模型限定 temperature（如 Kimi 只允许 1）：按模型规则修正后重试一次
+    if (r.status === 400 && /temperature/i.test(r.raw) && ARK_MODEL_RULES[payload.model]) {
+      const fixed = applyArkRules(payload.model, { ...payload, model: ARK_MODEL_MAP[payload.model] });
+      r = await callArkChat(fixed);
     }
     if (r.status < 200 || r.status >= 300 || !r.json) {
       return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, {

@@ -2,7 +2,7 @@
  * Luna 对话状态与云端同步
  * ------------------------------------------------------------
  * - 对话模型固定 DeepSeek（deepseek-reasoner，带思考过程），不提供选择；
- * - 生图三档（flash/lite/pro）随对话保存，由用户在输入区切换；
+ * - 生图两档（flash/pro）随对话保存，由用户在输入区切换；
  * - 对话本地持久化 + 登录后云端合并，变更防抖上传，换设备/浏览器可见；
  * - 人设统一引用 engine/persona.ts，全站同一份。
  * ============================================================ */
@@ -68,10 +68,10 @@ function mergeConversations(local: Conversation[], cloud: Conversation[]): Conve
 }
 
 const tierCost = (tier: ImageTier) =>
-  tier === 'flash' ? PRICING.costs.imageFlash : tier === 'lite' ? PRICING.costs.imageLite : PRICING.costs.imagePro;
+  tier === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro;
 
 const tierLabel = (tier: ImageTier) =>
-  tier === 'flash' ? 'Flash' : tier === 'lite' ? 'Lite' : 'Pro';
+  tier === 'flash' ? 'Flash' : 'Pro';
 
 /** 基于对话上下文构造生图提示词。 */
 function buildImagePrompt(c: Conversation): string {

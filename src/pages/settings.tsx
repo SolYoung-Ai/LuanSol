@@ -108,7 +108,7 @@ export function ModelConfig() {
       <Toggle label="启用平台 AI" hint="开启后九步向导由平台大模型提供建议；关闭后改用内置确定性设计引擎（不调用大模型）" checked={enabled} onChange={(v) => setMode(v ? 'proxy' : 'off')} />
       {!deepSeekReady && enabled && <Notice tone="warn">当前构建未配置平台代理地址，开启后也无法实际调用；请在正式站点使用。</Notice>}
       <div className="model-actions"><Button disabled={!enabled || !deepSeekReady} onClick={test}>{testing ? '测试中…' : '测试连接'}</Button></div>
-      <Notice tone="info">代理网关按来源域名与令牌校验，并设有 QPS 限制；生图按 Flash / Lite / Pro 档位扣积分。</Notice>
+      <Notice tone="info">代理网关按来源域名与令牌校验，并设有 QPS 限制；生图按 Flash / Pro 档位扣积分。</Notice>
     </Card>
 
     <Card className="pad-card"><SectionLabel en="AI IN THE FLOW">AI 已融入哪些环节</SectionLabel>
