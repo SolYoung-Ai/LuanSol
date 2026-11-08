@@ -1012,6 +1012,9 @@ img, svg, video, canvas { max-width: 100%; }
   background: transparent;
   overflow: hidden;
 }
+/* 移动端专属顶栏与抽屉遮罩：桌面端默认隐藏 */
+.lc-mobile-top { display: none; }
+.lc-drawer-mask { display: none; }
 .lc-scroll { flex: 1; overflow-y: auto; }
 .lc-thread { max-width: 760px; margin: 0 auto; padding: 32px 28px 24px; display: flex; flex-direction: column; gap: 28px; }
 .lc-welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; }
@@ -1201,10 +1204,69 @@ img, svg, video, canvas { max-width: 100%; }
 
 /* 窄屏 */
 @media (max-width: 860px) {
-  .lc-shell { height: auto; min-height: 0; flex-direction: column; padding: 0; gap: 0; }
-  .lc-side { width: 100%; box-shadow: rgba(16, 18, 22, 0.07) 0 1px 0 0; }
-  .lc-list { max-height: 220px; }
-  .lc-main { min-height: 60vh; }
+  /* 主区全屏，不再纵向堆叠；侧栏改为从左滑出的 fixed 抽屉 */
+  .lc-shell {
+    height: calc(100vh - 64px);
+    height: calc(100dvh - 64px);
+    min-height: 0;
+    flex-direction: row;
+    padding: 0; gap: 0;
+  }
+  .lc-main { min-height: 0; width: 100%; }
+
+  /* 侧栏抽屉：默认藏在屏幕左外，不占文档流 */
+  .lc-side {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100vh;
+    height: 100dvh;
+    width: 82vw;
+    max-width: 320px;
+    transform: translateX(-100%);
+    transition: transform 0.28s var(--v4-ease);
+    box-shadow: none;
+    z-index: 1100;
+    padding: 20px 14px calc(16px + env(safe-area-inset-bottom));
+  }
+  .lc-side.drawer-open { transform: translateX(0); box-shadow: 0 12px 40px rgba(0,0,0,0.18); }
+  /* 移动端不使用桌面的 collapsed 窄条 */
+  .lc-side.collapsed { width: 82vw; max-width: 320px; padding: 20px 14px calc(16px + env(safe-area-inset-bottom)); }
+  .lc-side.collapsed .lc-side-inner { display: flex; }
+  .lc-side-inner { min-width: 0; }
+  .lc-list { max-height: none; }
+
+  /* 抽屉遮罩 */
+  .lc-drawer-mask {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.28s var(--v4-ease), visibility 0.28s;
+    z-index: 1050;
+    border: none;
+  }
+  .lc-drawer-mask.show { opacity: 1; visibility: visible; }
+
+  /* 移动端顶栏：桌面隐藏，这里显示 */
+  .lc-mobile-top { display: flex; align-items: center; gap: 12px; padding: 12px 16px 4px; }
+  .lc-drawer-btn {
+    width: 40px; height: 40px; flex-shrink: 0;
+    border: 1px solid var(--v4-line);
+    border-radius: 50%;
+    background: #ffffff;
+    color: var(--v4-ink);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(16,18,22,0.08);
+  }
+  .lc-drawer-btn:active { transform: scale(0.94); }
+  .lc-mobile-top-title { font-size: 15px; font-weight: 600; color: var(--v4-ink); }
+
+  /* 欢迎区 logo */
+  .lc-welcome-logo { width: 64px; height: 64px; border-radius: 16px; object-fit: cover; margin-bottom: 20px; }
+
+  /* 隐藏整站 footer，避免和输入框挤在一起 */
+  body.on-luna .footer-min { display: none; }
 }
 
 /* ============================================================
@@ -1227,17 +1289,20 @@ img, svg, video, canvas { max-width: 100%; }
   .v4-search { min-width: 0; }
 }
 
-/* 手机：Luna 对话整体收紧，消息不顶边 */
+/* 手机：Luna 全屏留白，输入框独立大圆角，消息不顶边 */
 @media (max-width: 640px) {
-  .lc-shell { border-radius: var(--v4-r-lg) !important; }
+  .lc-shell { border-radius: 0 !important; }
   .lc-main { padding: 0; }
-  .lc-welcome { padding: 24px 8px 8px; }
-  .lc-welcome h1 { font-size: 22px; }
+  .lc-thread { padding: 16px 16px 12px; gap: 22px; }
+  .lc-welcome { padding: 16px 24px 8px; }
+  .lc-welcome h1 { font-size: 24px; }
   .lc-welcome p { font-size: 13px; }
   .lc-msg { gap: 8px; }
   .lc-msg-avatar { width: 26px; height: 26px; }
   .lc-msg-body { max-width: calc(100% - 36px); }
-  .lc-dock { padding: 10px 12px; }
+  .lc-dock { padding: 8px 16px calc(14px + env(safe-area-inset-bottom)); }
+  .lc-composer { border-radius: 22px; padding: 6px; }
+  .lc-dock-hint { margin-top: 8px; }
 }
 
 /* 手机：首页与弹窗不顶边 */

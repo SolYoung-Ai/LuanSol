@@ -157,9 +157,37 @@ export default function Luna() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [sideOpen, setSideOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  /* 跟踪是否移动视口，用于切换「常驻侧栏 / 抽屉侧栏」两套交互 */
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 860px)');
+    const onChg = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    setIsMobile(mq.matches);
+    mq.addEventListener('change', onChg);
+    return () => mq.removeEventListener('change', onChg);
+  }, []);
+
+  /* 移动端在 Luna 页隐藏整站 footer，避免与输入框挤在一起；离开页面恢复 */
+  useEffect(() => {
+    document.body.classList.add('on-luna');
+    return () => document.body.classList.remove('on-luna');
+  }, []);
+
+  /* 抽屉打开时锁定背景滚动，并支持 Esc 关闭 */
+  useEffect(() => {
+    if (!isMobile || !drawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawerOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey); };
+  }, [isMobile, drawerOpen]);
 
   const active = chat.active;
   const messages = active?.messages || [];
@@ -207,6 +235,18 @@ export default function Luna() {
     setEditingId(null);
   };
 
+  /* 桌面端：收起/展开常驻侧栏；移动端：关闭抽屉 */
+  const toggleSide = () => {
+    if (isMobile) setDrawerOpen(false);
+    else setSideOpen((o) => !o);
+  };
+
+  /* 移动端选中某个对话后自动收起抽屉 */
+  const pickConversation = (id: string) => {
+    chat.selectConversation(id);
+    if (isMobile) setDrawerOpen(false);
+  };
+
   const filtered = chat.conversations.filter((c) =>
     query.trim() ? c.title.toLowerCase().includes(query.trim().toLowerCase()) : true);
 
@@ -235,8 +275,8 @@ export default function Luna() {
     <div className="lc-shell">
       <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
 
-      {/* ------------------------------ 左侧栏 ------------------------------ */}
-      <aside className={`lc-side ${sideOpen ? '' : 'collapsed'}`}>
+      {/* ------------------------------ 左侧栏（桌面常驻 / 移动抽屉） ------------------------------ */}
+      <aside className={`lc-side ${sideOpen ? '' : 'collapsed'} ${drawerOpen ? 'drawer-open' : ''}`}>
         <div className="lc-side-inner">
         <button className="lc-new" onClick={chat.newConversation}>
           <Icon name="plus" size={16} />
@@ -258,7 +298,7 @@ export default function Luna() {
             <div
               key={c.id}
               className={`lc-item ${c.id === chat.activeId ? 'active' : ''}`}
-              onClick={() => chat.selectConversation(c.id)}
+              onClick={() => pickConversation(c.id)}
             >
               <Icon name="message" size={15} className="lc-item-ic" />
               {editingId === c.id ? (
@@ -305,19 +345,34 @@ export default function Luna() {
         </div>
         </div>
 
-        {/* 收起/展开按钮：固定在侧栏底部，不占用顶部新建对话区 */}
+        {/* 桌面端收起/展开常驻侧栏；移动端作为关闭抽屉按钮 */}
         <button
           className="lc-side-toggle"
-          onClick={() => setSideOpen((o) => !o)}
-          title={sideOpen ? '收起侧栏' : '展开侧栏'}
+          onClick={toggleSide}
+          title={isMobile ? '关闭菜单' : sideOpen ? '收起侧栏' : '展开侧栏'}
         >
-          <Icon name="panelLeft" size={16} />
-          <span className="lc-side-toggle-text">{sideOpen ? '收起侧栏' : '展开'}</span>
+          <Icon name={isMobile ? 'close' : 'panelLeft'} size={16} />
+          <span className="lc-side-toggle-text">
+            {isMobile ? '关闭菜单' : sideOpen ? '收起侧栏' : '展开'}
+          </span>
         </button>
       </aside>
 
+      {/* 移动端抽屉遮罩：点击空白处关闭 */}
+      <div
+        className={`lc-drawer-mask ${drawerOpen ? 'show' : ''}`}
+        onClick={() => setDrawerOpen(false)}
+      />
+
       {/* ------------------------------ 中间主区 ------------------------------ */}
       <section className="lc-main">
+        {/* 移动端顶栏：打开对话抽屉；桌面端隐藏 */}
+        <div className="lc-mobile-top">
+          <button className="lc-drawer-btn" onClick={() => setDrawerOpen(true)} title="打开对话列表" aria-label="打开对话列表">
+            <Icon name="menu" size={20} />
+          </button>
+          <span className="lc-mobile-top-title">Luna</span>
+        </div>
         {hasThread ? (
           <div className="lc-scroll" ref={scrollRef}>
             <div className="lc-thread">
@@ -338,6 +393,7 @@ export default function Luna() {
           </div>
         ) : (
           <div className="lc-welcome">
+            <img className="lc-welcome-logo" src="./logo.png" alt="Luna" />
             <h1>我们应该探索什么？</h1>
             <p>我是 Luna，你的专属设计师。产品、品牌、包装、海报，任何设计想法都可以丢给我。</p>
           </div>
