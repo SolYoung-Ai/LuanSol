@@ -439,18 +439,33 @@ export type DesignTaskType =
   | 'background' | 'illustration' | 'pattern' | 'texture' | 'decoration'
   | 'product-image' | 'typography' | 'brand' | 'barcode' | 'structural' | 'assembly';
 
-/** 单个设计任务：P3 自动组装使用，P0 先建立类型底座 */
+/** 一次图片生成结果：同任务可保留多版本，不互相覆盖 */
+export interface TaskVariant {
+  src: string;
+  at: number;
+  prompt: string;
+  model: string;
+  naturalW: number;
+  naturalH: number;
+}
+
+/** 单个设计任务：P1 真实运行（提示词→生图→素材），P3 用于自动组装 */
 export interface DesignTask {
   id: string;
   type: DesignTaskType;
   name: string;
   face: FaceId | 'all';
   description: string;
+  /** 提示词：可由 AI 生成、用户可编辑后再运行 */
   prompt: string;
   model: string;
   status: 'pending' | 'waiting' | 'running' | 'success' | 'failed' | 'cancelled';
-  /** 生成结果对应的素材 ID */
+  /** 生成结果对应的素材 ID（当前选中版本） */
   assetId?: string;
+  /** 多版本生成历史，不互相覆盖；支持 A/B 对比与回退 */
+  variants: TaskVariant[];
+  /** 当前选中版本在 variants 中的下标 */
+  selectedVariant: number;
   /** 对应工程图层 ID（自动组装后回填） */
   layerId?: string;
   error?: string;

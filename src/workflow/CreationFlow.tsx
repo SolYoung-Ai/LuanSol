@@ -6,6 +6,7 @@ import { useApp } from '../store';
 import CreationEntry from './CreationEntry';
 import AnalysisStage from './AnalysisStage';
 import ConceptStage from './ConceptStage';
+import WorkflowStageView from './WorkflowStage';
 import { Icon } from '../components/icons';
 
 const STEPS: { stage: WorkflowStage; label: string }[] = [
@@ -115,6 +116,8 @@ export default function CreationFlow() {
       break;
     case 'planning':
     case 'workflow':
+      body = <WorkflowStageView />;
+      break;
     case 'assembled':
       body = <ComingNext stage={wf.stage} />;
       break;
