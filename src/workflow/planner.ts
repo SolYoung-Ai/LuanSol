@@ -43,9 +43,9 @@ const PLANNER_SYSTEM = `你是 LunaSol 的包装设计总监。基于已确认�
 - 只输出需要「AI 生图」的素材任务，类型限定在：background / illustration / pattern / texture / decoration。
 - 不要把产品名称、Logo、条码、文字排版拆成生图任务——这些后续用真实文字对象，不用生图伪造。
 - 任务数量克制：3~6 个最关键的素材，不堆无关任务。
-- 每个任务的生图提示词用英文撰写，专业、具体、可执行：结合设计方向的视觉关键词、色彩（HEX）、材质、风格；明确用途与所在包装面；要求干净、可独立使用、无文字、无 Logo、无水印。
+- 每个任务的生图提示词用中文撰写，专业、具体、可执行：结合设计方向的视觉关键词、色彩（HEX）、材质、风格；明确用途与所在包装面；要求干净、可独立使用、无文字、无 Logo、无水印。用户会直接看到并可修改这段提示词，所以要通顺、易懂、不要堆砌英文。
 - face 从 front / back / left / right / top / all 里选。
-只输出一个 JSON 对象：{ "tasks": [ { "type": "...", "name": "...", "face": "...", "description": "...", "prompt": "英文生图提示词" } ] }`;
+只输出一个 JSON 对象：{ "tasks": [ { "type": "...", "name": "...", "face": "...", "description": "...", "prompt": "中文生图提示词" } ] }`;
 
 interface RawTask {
   type?: string;
@@ -121,7 +121,7 @@ export async function planTasks(
       name: '包装背景底图',
       face: 'front',
       description: '主视觉背景',
-      prompt: 'Minimal premium packaging background, soft paper texture, generous negative space, warm off-white and deep tea green, elegant oriental style, no text, no logo.',
+      prompt: '高级包装背景底图，柔和纸张纹理，大量留白，温暖米白与深茶绿色，东方雅致风格，无文字无Logo',
       imageTier: 'flash',
       status: 'pending',
       variants: [],
