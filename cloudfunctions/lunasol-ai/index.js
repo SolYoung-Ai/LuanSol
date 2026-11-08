@@ -112,8 +112,8 @@ const ARK_MODEL_MAP = {
   'kimi-k3.1': 'kimi-k3-1-pro-261024',
   'doubao-seed-pro': 'doubao-seed-2-1-pro-260915',
   'doubao-seed-lite': 'doubao-seed-2-1-lite-260915',
-  'doubao-seed-turbo': 'doubao-seed-2-1-turbo-260915',
-  'glm-5.3': 'glm-5-3-flash-20250821',
+  'doubao-seed-turbo': 'doubao-seed-2-1-turbo-260628',
+  'glm-5.3': 'glm-5-3-flash-260828',
 };
 
 // res 是每次请求独立的对象，把该请求的 CORS 头挂在它上面，避免并发串扰
