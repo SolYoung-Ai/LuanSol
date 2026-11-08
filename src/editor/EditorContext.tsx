@@ -135,17 +135,25 @@ export const useEditor = () => {
   return c;
 };
 
-export function EditorProvider({ children }: { children: React.ReactNode }) {
+export function EditorProvider({
+  children, projectId: forcedProjectId, initialTool,
+}: {
+  children: React.ReactNode;
+  /** 强制指定项目 ID（嵌入流程时用）；不传则从 URL hash 解析，保持独立 /studio 行为 */
+  projectId?: string;
+  /** 挂载时初始激活的工具（如 'assets' 直接打开素材库） */
+  initialTool?: ToolId;
+}) {
   const { s, dieline, update, patchBrief, addChat, saveProject, loadProject, addVersion, syncProject, addAsset, removeAsset, toggleFavoriteAsset } = useApp();
   const auth = useAuth();
   const sub = useSubscription();
   const hash = useHash();
-  const projectId = new URLSearchParams(hash.split('?')[1] || '').get('id');
+  const projectId = forcedProjectId ?? new URLSearchParams(hash.split('?')[1] || '').get('id');
 
   // 当前包装面
   const [currentFace, setCurrentFace] = useState<FaceId>('front');
   // 工具与视图
-  const [activeTool, setActiveTool] = useState<ToolId>('select');
+  const [activeTool, setActiveTool] = useState<ToolId>(initialTool ?? 'select');
   const [viewMode, setViewMode] = useState<ViewMode>('design');
   // 选中图层
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);

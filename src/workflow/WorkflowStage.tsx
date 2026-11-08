@@ -19,6 +19,7 @@ import { assembleDesign, inferStructure, buildBrief, refineTextColors } from './
 import CanvasView from './CanvasView';
 import { uid } from '../engine/utils';
 import { Icon } from '../components/icons';
+import type { ToolId } from '../editor/constants';
 
 const TYPE_LABEL: Record<DesignTask['type'], string> = {
   background: '背景', illustration: '插画', pattern: '图案',
@@ -48,7 +49,7 @@ function naturalSize(src: string): Promise<{ w: number; h: number }> {
   });
 }
 
-export default function WorkflowStage() {
+export default function WorkflowStage({ onEnterEditor }: { onEnterEditor: (tool: ToolId) => void }) {
   const { s, patchWorkflow, updateProject, setToast, addAsset } = useApp();
   const auth = useAuth();
   const sub = useSubscription();
@@ -277,8 +278,8 @@ export default function WorkflowStage() {
       }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: '#222' }}>素材入库与自动组装</div>
         <p style={{ fontSize: 12, color: '#888', margin: 0, lineHeight: 1.7 }}>
-          已完成 {doneCount}/{tasks.length} 个素材。可一键全部加入素材库（跨项目复用），
-          或直接自动组装成完整包装工程：AI 图片作为独立图层，品牌/产品名/净含量为可编辑文字，不伪造条码与 Logo。
+          已完成 {doneCount}/{tasks.length} 个素材。可一键全部加入素材库（跨项目复用），点「查看素材库」会进入编辑器并直接打开素材库面板；
+          也可自动组装成完整包装工程：AI 图片作为独立图层，品牌/产品名/净含量为可编辑文字，不伪造条码与 Logo。
         </p>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
@@ -287,6 +288,13 @@ export default function WorkflowStage() {
             style={{ padding: '10px 18px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <Icon name="layers" size={15} /> 全部加入素材库
+          </button>
+          <button
+            onClick={() => onEnterEditor('assets')}
+            className="v4-btn-line"
+            style={{ padding: '10px 18px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Icon name="folder" size={15} /> 查看素材库
           </button>
           <button
             onClick={handleAssemble}

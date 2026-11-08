@@ -291,8 +291,9 @@ export interface Conversation {
 /** 创作模式（任务书第三部分 C） */
 export type CreationMode = 'referenceStyle' | 'referenceInnovate' | 'fromScratch';
 
-/** 工作流阶段：驱动页面渲染，刷新后据此恢复 */
-export type WorkflowStage = 'entry' | 'analysis' | 'concepts' | 'planning' | 'workflow' | 'assembled';
+/** 工作流阶段：驱动页面渲染，刷新后据此恢复。
+ *  editor 为流程内嵌入的精细编辑器（自动组装之后），与独立 /studio 复用同一套编辑器组件 */
+export type WorkflowStage = 'entry' | 'analysis' | 'concepts' | 'planning' | 'workflow' | 'assembled' | 'editor';
 
 /** 参考图用途分类 */
 export type ReferenceRole =

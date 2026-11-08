@@ -1360,4 +1360,10 @@ img, svg, video, canvas { max-width: 100%; }
     border-top: 1px solid #e5e5e5;
   }
   .editor-shell .studio-canvas-wrap { min-height: 56vh; }
+  /* 流程内嵌入编辑器：窄屏放开固定高度，让堆叠内容自然展开、页面可滚动 */
+  .embedded-editor {
+    height: auto !important;
+    min-height: 60vh;
+  }
+  .embedded-editor .editor-shell { min-height: 0; }
 }

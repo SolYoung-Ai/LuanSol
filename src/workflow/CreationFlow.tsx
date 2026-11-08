@@ -7,6 +7,9 @@ import CreationEntry from './CreationEntry';
 import AnalysisStage from './AnalysisStage';
 import ConceptStage from './ConceptStage';
 import WorkflowStageView from './WorkflowStage';
+import { EditorProvider } from '../editor/EditorContext';
+import EditorShell from '../editor/EditorShell';
+import type { ToolId } from '../editor/constants';
 import { Icon } from '../components/icons';
 
 const STEPS: { stage: WorkflowStage; label: string }[] = [
@@ -16,11 +19,12 @@ const STEPS: { stage: WorkflowStage; label: string }[] = [
   { stage: 'planning', label: '任务规划' },
   { stage: 'workflow', label: '工作流' },
   { stage: 'assembled', label: '自动组装' },
+  { stage: 'editor', label: '编辑器' },
 ];
 
 /** 根据已存在的数据判断最远可到达的阶段（数据在就能回去，不依赖 currentIdx） */
 function farthestStage(project: Project): WorkflowStage {
-  if (project.design) return 'assembled';
+  if (project.design) return 'editor';
   const wf = project.workflow;
   if (!wf) return 'entry';
   if (wf.tasks.length > 0) return 'workflow';
@@ -109,9 +113,9 @@ function StepBar({
   );
 }
 
-/** 组装结果阶段：展示各面预览 + 进入编辑器 */
-function AssembledStage() {
-  const { s } = useApp();
+/** 组装结果阶段：展示各面预览 + 进入流程内编辑器 */
+function AssembledStage({ onEnterEditor }: { onEnterEditor: (tool: ToolId) => void }) {
+  const { s, patchWorkflow } = useApp();
   const project = s.projects.find((p) => p.id === s.activeId);
   const doc = project?.design;
 
@@ -160,14 +164,14 @@ function AssembledStage() {
       {/* 操作行 */}
       <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <button
-          onClick={() => { window.location.hash = `#/studio?id=${project.id}`; }}
+          onClick={() => onEnterEditor('select')}
           className="v4-btn-dark"
           style={{ padding: '12px 26px', fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 8 }}
         >
           <Icon name="spark" size={16} /> 进入编辑器继续调整
         </button>
         <button
-          onClick={() => { window.location.hash = '#/workflow'; }}
+          onClick={() => patchWorkflow(project.id, { stage: 'workflow' })}
           className="v4-btn-line"
           style={{ padding: '12px 22px', fontSize: 14 }}
         >
@@ -225,13 +229,35 @@ function FaceThumb({ face }: { face: import('../types').Face }) {
   );
 }
 
+/** 流程内嵌入的编辑器：填满导航栏与步骤条之下的整屏，复用编辑器全套组件 */
+function EmbeddedEditor({ projectId, initialTool }: { projectId: string; initialTool: ToolId }) {
+  return (
+    <div className="embedded-editor" style={{
+      height: 'calc(100vh - var(--v4-nav-h, 72px) - 49px)',
+      minHeight: 480,
+    }}>
+      <EditorProvider projectId={projectId} initialTool={initialTool}>
+        <EditorShell embedded />
+      </EditorProvider>
+    </div>
+  );
+}
+
 export default function CreationFlow() {
   const { s, patchWorkflow } = useApp();
   const project = s.projects.find((p) => p.id === s.activeId);
   const wf = project?.workflow;
+  // 进入流程内编辑器时的初始工具（select=正常编辑，assets=直接打开素材库）
+  const [editorTool, setEditorTool] = useState<ToolId>('select');
 
   const goStage = (stage: WorkflowStage) => {
     if (project) patchWorkflow(project.id, { stage });
+  };
+
+  /** 进入流程内编辑器，并指定初始工具 */
+  const enterEditor = (tool: ToolId) => {
+    setEditorTool(tool);
+    if (project) patchWorkflow(project.id, { stage: 'editor' });
   };
 
   const handleSave = () => {
@@ -261,10 +287,13 @@ export default function CreationFlow() {
       break;
     case 'planning':
     case 'workflow':
-      body = <WorkflowStageView />;
+      body = <WorkflowStageView onEnterEditor={enterEditor} />;
       break;
     case 'assembled':
-      body = <AssembledStage />;
+      body = <AssembledStage onEnterEditor={enterEditor} />;
+      break;
+    case 'editor':
+      body = project ? <EmbeddedEditor projectId={project.id} initialTool={editorTool} /> : null;
       break;
     default:
       body = <CreationEntry />;

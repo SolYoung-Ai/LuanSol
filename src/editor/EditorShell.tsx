@@ -8,11 +8,11 @@ import PropertiesPanel from './components/PropertiesPanel';
 import LayersPanel from './components/LayersPanel';
 import PrepressModal from './components/PrepressModal';
 
-export default function EditorShell() {
+export default function EditorShell({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className="editor-shell" style={{
       display: 'flex', flexDirection: 'column',
-      height: '100vh', overflow: 'hidden', background: '#fff',
+      height: embedded ? '100%' : '100vh', overflow: 'hidden', background: '#fff',
     }}>
       {/* 顶部工具栏 */}
       <TopToolbar />

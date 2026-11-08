@@ -90,9 +90,14 @@ export default function Workspace() {
     return sorted;
   }, [s.projects, filter, sort, q, structGroup]);
 
-  const open = (p: Project) => { loadProject(p.id); go(p.design ? '/editor' : '/review'); };
-  const viewSchemes = (p: Project) => { loadProject(p.id); go('/schemes'); };
-  const preview3d = (p: Project) => { loadProject(p.id); go('/preview'); };
+  const open = (p: Project) => {
+    loadProject(p.id);
+    // 新 AI 流程项目回到 /new 流程（按 workflow.stage 恢复到对应阶段）；旧手动项目进独立编辑器
+    if (p.workflow) go('/new');
+    else go(`/studio?id=${p.id}`);
+  };
+  const viewSchemes = (p: Project) => open(p);
+  const preview3d = (p: Project) => open(p);
 
   const doRename = () => {
     if (!renaming) return;
@@ -258,7 +263,7 @@ export default function Workspace() {
                 <button onClick={() => open(p)}>{p.design ? '继续编辑' : '继续填写'}</button>
                 {p.design && <button onClick={() => viewSchemes(p)}>查看方案</button>}
                 {p.design && <button onClick={() => preview3d(p)}>3D 预览</button>}
-                {p.design && <button onClick={() => { loadProject(p.id); go('/export'); }}>导出</button>}
+                {p.design && <button onClick={() => open(p)}>导出</button>}
                 <button onClick={() => duplicateProject(p.id)}>复制</button>
                 <button onClick={() => { setRenaming(p); setRenameTo(p.name); }}>重命名</button>
                 <button className="danger" onClick={() => setConfirmDel(p)}>删除</button>
