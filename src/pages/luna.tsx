@@ -155,6 +155,7 @@ export default function Luna() {
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  const [sideOpen, setSideOpen] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -234,7 +235,11 @@ export default function Luna() {
       <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
 
       {/* ------------------------------ 左侧栏 ------------------------------ */}
-      <aside className="lc-side">
+      <aside className={`lc-side ${sideOpen ? '' : 'collapsed'}`}>
+        <button className="lc-side-toggle" onClick={() => setSideOpen((o) => !o)} title={sideOpen ? '收起侧栏' : '展开侧栏'}>
+          <Icon name={sideOpen ? 'chevronLeft' : 'chevronRight'} size={14} />
+        </button>
+        <div className="lc-side-inner">
         <button className="lc-new" onClick={chat.newConversation}>
           <Icon name="plus" size={16} />
           <span>新建对话</span>
@@ -299,6 +304,7 @@ export default function Luna() {
               <div className={`lc-user-sync ${chat.syncState}`}>{syncLabel}</div>
             </div>
           </div>
+        </div>
         </div>
       </aside>
 

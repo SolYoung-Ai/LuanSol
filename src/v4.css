@@ -815,7 +815,7 @@ img, svg, video, canvas { max-width: 100%; }
   height: calc(100vh - 188px);
   min-height: 540px;
   width: 100%;
-  border: 1px solid var(--v4-line);
+  border: none;
   border-radius: var(--v4-r-xl);
   overflow: hidden;
   background: var(--v4-paper);
@@ -825,39 +825,57 @@ img, svg, video, canvas { max-width: 100%; }
 
 /* ---------------- 左侧栏 ---------------- */
 .lc-side {
+  position: relative;
   width: 268px;
   flex-shrink: 0;
-  border-right: 1px solid var(--v4-line);
+  border-right: none;
   background: var(--v4-surface);
   display: flex;
   flex-direction: column;
   padding: 12px;
+  transition: width var(--v4-dur) var(--v4-ease);
+  overflow: hidden;
 }
+.lc-side.collapsed { width: 40px; padding: 8px 4px; }
+.lc-side-inner { display: flex; flex-direction: column; flex: 1; min-width: 244px; }
+.lc-side.collapsed .lc-side-inner { display: none; }
+.lc-side-toggle {
+  position: absolute;
+  top: 12px; right: 8px;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--v4-r-sm);
+  background: transparent; color: var(--v4-ink-3);
+  cursor: pointer; z-index: 2;
+  transition: background-color var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease);
+}
+.lc-side-toggle:hover { background: var(--v4-paper); color: var(--v4-ink); }
+.lc-side.collapsed .lc-side-toggle { top: 8px; right: 8px; }
 .lc-new {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--v4-line-strong);
+  border: none;
   border-radius: var(--v4-r-md);
   background: var(--v4-paper);
   color: var(--v4-ink);
   font-size: 13px; font-weight: 500;
   cursor: pointer;
-  transition: border-color var(--v4-dur) var(--v4-ease), background-color var(--v4-dur) var(--v4-ease), transform var(--v4-dur-fast) var(--v4-ease);
+  transition: background-color var(--v4-dur) var(--v4-ease), transform var(--v4-dur-fast) var(--v4-ease);
 }
-.lc-new:hover { border-color: var(--v4-ink); background: var(--v4-surface); }
+.lc-new:hover { background: var(--v4-line); }
 .lc-new:active { transform: scale(0.98); }
 .lc-search {
   display: flex; align-items: center; gap: 8px;
   margin-top: 12px;
   padding: 8px 10px;
-  border: 1px solid var(--v4-line);
+  border: none;
   border-radius: var(--v4-r-md);
   background: var(--v4-paper);
   color: var(--v4-ink-3);
-  transition: border-color var(--v4-dur) var(--v4-ease), background-color var(--v4-dur) var(--v4-ease);
+  transition: background-color var(--v4-dur) var(--v4-ease);
 }
-.lc-search:focus-within { border-color: var(--v4-ink-2); }
+.lc-search:focus-within { background: var(--v4-paper); }
 .lc-search input {
   flex: 1; border: none; outline: none; background: transparent;
   font-size: 13px; color: var(--v4-ink);
@@ -879,7 +897,7 @@ img, svg, video, canvas { max-width: 100%; }
   transition: background-color var(--v4-dur-fast) var(--v4-ease), border-color var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease);
 }
 .lc-item:hover { background: var(--v4-paper); }
-.lc-item.active { background: var(--v4-paper); border-color: var(--v4-line); color: var(--v4-ink); }
+.lc-item.active { background: var(--v4-paper); color: var(--v4-ink); }
 .lc-item-ic { flex-shrink: 0; color: var(--v4-ink-3); }
 .lc-item.active .lc-item-ic { color: var(--v4-ink); }
 .lc-item-title {
@@ -905,7 +923,7 @@ img, svg, video, canvas { max-width: 100%; }
 }
 .lc-item-ops button:hover { color: var(--v4-ink); }
 .lc-list-empty { padding: 20px 8px; text-align: center; font-size: 12px; color: var(--v4-ink-3); }
-.lc-side-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--v4-line); }
+.lc-side-foot { margin-top: 12px; padding-top: 12px; border-top: none; }
 .lc-user { display: flex; align-items: center; gap: 10px; }
 .lc-user-avatar {
   width: 34px; height: 34px; flex-shrink: 0;
@@ -987,7 +1005,7 @@ img, svg, video, canvas { max-width: 100%; }
 @keyframes lc-bounce { 0%,80%,100% { opacity:.3; transform: translateY(0);} 40% { opacity:1; transform: translateY(-3px);} }
 
 /* ---------------- 输入区 ---------------- */
-.lc-dock { padding: 12px 28px 20px; border-top: 1px solid var(--v4-line); background: var(--v4-paper); }
+.lc-dock { padding: 12px 28px 20px; border-top: none; background: var(--v4-paper); }
 .lc-pending {
   display: inline-flex; align-items: center; gap: 8px;
   margin-bottom: 10px;

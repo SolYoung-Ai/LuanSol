@@ -112,8 +112,8 @@ export default function App() {
         <div className="app">
           <Nav onLogin={requestLogin} />
           <main className="main">
-            {/* 全局返回：非首页都有，优先回上一页，无历史回首页 */}
-            {path !== '/' && <button className="global-back" onClick={() => {
+            {/* 全局返回：非首页且非 Luna 对话页显示 */}
+            {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
               if (window.history.length > 1) window.history.back(); else go('/');
             }} aria-label="返回">← 返回</button>}
             <Suspense fallback={<PageFallback />}>{page}</Suspense>
