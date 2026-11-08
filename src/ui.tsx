@@ -15,7 +15,7 @@ export const go = (path: string) => { window.location.hash = path.startsWith('/'
 export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?: () => void }) {
   return <button className="logo" onClick={onClick || (() => go('/'))} aria-label="LunaSol 首页">
     <span className="logo-word">Luna<span style={{ color: '#e8783a' }}>Sol</span></span>
-    {!compact && <span className="logo-sub">在 AI 时代，人人都能成为设计师</span>}
+    {!compact && <span className="logo-sub">人人都能成为设计师</span>}
   </button>;
 }
 
