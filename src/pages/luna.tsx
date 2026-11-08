@@ -237,9 +237,6 @@ export default function Luna() {
 
       {/* ------------------------------ 左侧栏 ------------------------------ */}
       <aside className={`lc-side ${sideOpen ? '' : 'collapsed'}`}>
-        <button className="lc-side-toggle" onClick={() => setSideOpen((o) => !o)} title={sideOpen ? '收起侧栏' : '展开侧栏'}>
-          <Icon name={sideOpen ? 'chevronLeft' : 'chevronRight'} size={14} />
-        </button>
         <div className="lc-side-inner">
         <button className="lc-new" onClick={chat.newConversation}>
           <Icon name="plus" size={16} />
@@ -307,6 +304,16 @@ export default function Luna() {
           </div>
         </div>
         </div>
+
+        {/* 收起/展开按钮：固定在侧栏底部，不占用顶部新建对话区 */}
+        <button
+          className="lc-side-toggle"
+          onClick={() => setSideOpen((o) => !o)}
+          title={sideOpen ? '收起侧栏' : '展开侧栏'}
+        >
+          <Icon name="panelLeft" size={16} />
+          <span className="lc-side-toggle-text">{sideOpen ? '收起侧栏' : '展开'}</span>
+        </button>
       </aside>
 
       {/* ------------------------------ 中间主区 ------------------------------ */}

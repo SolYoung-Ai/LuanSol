@@ -12,7 +12,7 @@ export type IconName =
   | 'chevronLeft' | 'chevronRight' | 'alignLeft' | 'alignHCenter' | 'alignRight'
   | 'alignTop' | 'alignVCenter' | 'alignBottom' | 'distH' | 'distV'
   | 'folder' | 'imageOff' | 'square' | 'clock' | 'refresh' | 'zoomIn' | 'zoomOut'
-  | 'search' | 'send' | 'message' | 'brain';
+  | 'search' | 'send' | 'message' | 'brain' | 'panelLeft';
 
 // 每个图标的内部 SVG 路径（viewBox 0 0 24 24）
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -116,6 +116,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   message: <path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z" />,
   // 思考（灯泡）
   brain: <><path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.2 1 2V18h6v-1.3c0-.8.4-1.5 1-2A7 7 0 0012 2z" /></>,
+  panelLeft: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" /></>,
 };
 
 interface IconProps {

@@ -56,31 +56,27 @@
   --v4-gutter: clamp(20px, 4vw, 64px);
 
   /* —— iOS 玻璃拟态（glassmorphism）：半透明底 + 背景模糊 + 内高光 + 多层投影 —— */
-  --v4-glass-bg: rgba(255, 255, 255, 0.58);
-  --v4-glass-bg-strong: rgba(255, 255, 255, 0.74);
-  --v4-glass-bg-soft: rgba(255, 255, 255, 0.42);
-  --v4-glass-border: rgba(15, 15, 20, 0.1);
-  --v4-glass-border-hi: rgba(255, 255, 255, 0.75);
-  --v4-glass-blur: blur(30px) saturate(180%);
-  --v4-glass-blur-menu: blur(24px) saturate(180%);
+  --v4-glass-bg: rgba(252, 252, 253, 0.78);
+  --v4-glass-bg-strong: rgba(255, 255, 255, 0.92);
+  --v4-glass-bg-soft: rgba(248, 248, 250, 0.6);
+  --v4-glass-border: rgba(15, 15, 20, 0.06);
+  --v4-glass-border-hi: rgba(255, 255, 255, 0.8);
+  --v4-glass-blur: blur(24px) saturate(150%);
+  --v4-glass-blur-menu: blur(20px) saturate(150%);
   /* 顶部内高光 + 近距小影 + 远距大柔影，浮起感的核心 */
   --v4-glass-shadow:
     rgba(255, 255, 255, 0.9) 0 1px 0 0 inset,
-    rgba(16, 18, 22, 0.06) 0 1px 2px 0,
-    rgba(16, 18, 22, 0.22) 0 20px 44px -20px;
+    rgba(16, 18, 22, 0.07) 1px 0 0 0;
   --v4-glass-shadow-lift:
     rgba(255, 255, 255, 0.9) 0 1px 0 0 inset,
-    rgba(16, 18, 22, 0.08) 0 2px 4px 0,
-    rgba(16, 18, 22, 0.32) 0 28px 56px -24px;
+    rgba(16, 18, 22, 0.1) 0 8px 24px -10px;
   /* iOS 系统灰选中态（半透明） */
-  --v4-ios-fill: rgba(120, 120, 128, 0.14);
-  --v4-ios-fill-hover: rgba(120, 120, 128, 0.2);
-  /* 玻璃舞台背景：柔和渐变 + 彩色光晕，让毛玻璃有层次可透 */
-  --v4-stage-bg:
-    radial-gradient(1100px 620px at 6% -12%, rgba(217, 96, 44, 0.18), transparent 62%),
-    radial-gradient(1000px 720px at 102% -4%, rgba(80, 116, 224, 0.16), transparent 58%),
-    radial-gradient(900px 600px at 50% 112%, rgba(140, 140, 150, 0.12), transparent 60%),
-    linear-gradient(180deg, #f3f3f6 0%, #e7e7ec 100%);
+  --v4-ios-fill: rgba(120, 120, 128, 0.12);
+  --v4-ios-fill-hover: rgba(120, 120, 128, 0.18);
+  /* 页面整体极简纯白，无彩色渐变，与网站融合 */
+  --v4-stage-bg: #ffffff;
+  /* 侧栏液态玻璃背景：无彩色冷白微渐变 */
+  --v4-side-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(246, 246, 249, 0.72) 100%);
 
   /* —— 覆盖 V1/V3 遗留变量，让工具页同步到新体系 —— */
   --ink: #171717;
@@ -613,25 +609,22 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
   --warm: #171716;
 
   /* 玻璃拟态深色版：深色半透明底 + 浅色描边 + 深色投影 */
-  --v4-glass-bg: rgba(38, 36, 34, 0.62);
-  --v4-glass-bg-strong: rgba(46, 44, 41, 0.82);
-  --v4-glass-bg-soft: rgba(30, 29, 27, 0.5);
-  --v4-glass-border: rgba(255, 255, 255, 0.1);
-  --v4-glass-border-hi: rgba(255, 255, 255, 0.18);
+  --v4-glass-bg: rgba(34, 33, 31, 0.72);
+  --v4-glass-bg-strong: rgba(42, 40, 38, 0.92);
+  --v4-glass-bg-soft: rgba(28, 27, 25, 0.6);
+  --v4-glass-border: rgba(255, 255, 255, 0.08);
+  --v4-glass-border-hi: rgba(255, 255, 255, 0.14);
   --v4-glass-shadow:
     rgba(255, 255, 255, 0.06) 0 1px 0 0 inset,
-    rgba(0, 0, 0, 0.4) 0 1px 2px 0,
-    rgba(0, 0, 0, 0.6) 0 18px 40px -20px;
+    rgba(0, 0, 0, 0.35) 1px 0 0 0;
   --v4-glass-shadow-lift:
     rgba(255, 255, 255, 0.08) 0 1px 0 0 inset,
-    rgba(0, 0, 0, 0.45) 0 1px 2px 0,
-    rgba(0, 0, 0, 0.75) 0 24px 48px -24px;
+    rgba(0, 0, 0, 0.5) 0 8px 24px -10px;
   --v4-ios-fill: rgba(255, 255, 255, 0.08);
   --v4-ios-fill-hover: rgba(255, 255, 255, 0.14);
-  --v4-stage-bg:
-    radial-gradient(1200px 600px at 8% -10%, rgba(224, 118, 63, 0.12), transparent 60%),
-    radial-gradient(1000px 700px at 100% 0%, rgba(110, 130, 220, 0.1), transparent 55%),
-    linear-gradient(180deg, #161513 0%, #0e0e0d 100%);
+  --v4-stage-bg: #0e0e0d;
+  /* 侧栏深色液态玻璃：无彩色深灰微渐变 */
+  --v4-side-bg: linear-gradient(180deg, rgba(42, 40, 38, 0.82) 0%, rgba(26, 25, 23, 0.72) 100%);
 }
 
 [data-theme="dark"] body { background: var(--v4-paper); color: var(--v4-ink); }
@@ -860,16 +853,14 @@ img, svg, video, canvas { max-width: 100%; }
    ============================================================ */
 .lc-shell {
   display: flex;
-  gap: 14px;
   height: calc(100vh - 188px);
   min-height: 540px;
   width: 100%;
-  padding: 14px;
-  border: 1px solid var(--v4-glass-border);
-  border-radius: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
   overflow: hidden;
-  background: var(--v4-stage-bg);
-  box-shadow: var(--v4-glass-shadow);
+  background: transparent;
   max-width: var(--v4-maxw);
   margin: 0 auto;
 }
@@ -879,33 +870,47 @@ img, svg, video, canvas { max-width: 100%; }
   position: relative;
   width: 268px;
   flex-shrink: 0;
-  border: 1px solid var(--v4-glass-border);
-  border-radius: 18px;
-  background: var(--v4-glass-bg);
+  border: none;
+  border-radius: 0;
+  /* 液态玻璃：无彩色微渐变，配合背景模糊与顶部内高光，贴左竖条 */
+  background: var(--v4-side-bg);
   -webkit-backdrop-filter: var(--v4-glass-blur);
   backdrop-filter: var(--v4-glass-blur);
+  /* 右侧一条极淡分隔，不浮起、不凸出 */
   box-shadow: var(--v4-glass-shadow);
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 16px 12px 14px;
   transition: width var(--v4-dur) var(--v4-ease);
   overflow: hidden;
 }
-.lc-side.collapsed { width: 52px; padding: 10px 6px; }
+.lc-side.collapsed { width: 56px; padding: 16px 8px 14px; }
 .lc-side-inner { display: flex; flex-direction: column; flex: 1; min-width: 244px; }
 .lc-side.collapsed .lc-side-inner { display: none; }
 .lc-side-toggle {
-  position: absolute;
-  top: 12px; right: 8px;
-  width: 24px; height: 24px;
-  display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: var(--v4-r-sm);
-  background: transparent; color: var(--v4-ink-3);
-  cursor: pointer; z-index: 2;
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 12px;
+  width: 100%;
+  height: 36px;
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--v4-glass-border);
+  border-radius: var(--v4-r-md);
+  background: var(--v4-ios-fill);
+  color: var(--v4-ink-2);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
   transition: background-color var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease);
 }
 .lc-side-toggle:hover { background: var(--v4-ios-fill-hover); color: var(--v4-ink); }
-.lc-side.collapsed .lc-side-toggle { top: 8px; right: 8px; }
+.lc-side-toggle-text { white-space: nowrap; }
+.lc-side.collapsed .lc-side-toggle {
+  margin-top: auto;
+  height: 40px; padding: 0;
+  justify-content: center;
+}
+.lc-side.collapsed .lc-side-toggle-text { display: none; }
 .lc-new {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%;
@@ -1002,12 +1007,9 @@ img, svg, video, canvas { max-width: 100%; }
 .lc-main {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column;
-  border: 1px solid var(--v4-glass-border);
-  border-radius: 18px;
-  background: var(--v4-glass-bg-soft);
-  -webkit-backdrop-filter: var(--v4-glass-blur);
-  backdrop-filter: var(--v4-glass-blur);
-  box-shadow: var(--v4-glass-shadow);
+  border: none;
+  border-radius: 0;
+  background: transparent;
   overflow: hidden;
 }
 .lc-scroll { flex: 1; overflow-y: auto; }
@@ -1086,15 +1088,13 @@ img, svg, video, canvas { max-width: 100%; }
 .lc-composer {
   display: flex; align-items: flex-end; gap: 6px;
   padding: 8px;
-  border: 1px solid var(--v4-glass-border);
-  border-radius: 18px;
-  background: var(--v4-glass-bg-strong);
-  -webkit-backdrop-filter: var(--v4-glass-blur);
-  backdrop-filter: var(--v4-glass-blur);
-  box-shadow: var(--v4-glass-shadow);
+  border: 1px solid var(--v4-line);
+  border-radius: var(--v4-r-lg);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 18, 22, 0.04);
   transition: border-color var(--v4-dur) var(--v4-ease), box-shadow var(--v4-dur) var(--v4-ease);
 }
-.lc-composer:focus-within { border-color: var(--v4-line-strong); box-shadow: var(--v4-glass-shadow-lift); }
+.lc-composer:focus-within { border-color: var(--v4-line-strong); box-shadow: 0 2px 8px rgba(16, 18, 22, 0.08); }
 .lc-icon-btn {
   width: 34px; height: 34px; flex-shrink: 0;
   border: none; border-radius: var(--v4-r-sm); background: transparent;
@@ -1138,12 +1138,10 @@ img, svg, video, canvas { max-width: 100%; }
   position: absolute; bottom: 40px; right: 0; z-index: 21;
   min-width: 150px;
   padding: 4px;
-  border: 1px solid var(--v4-glass-border);
+  border: 1px solid var(--v4-line);
   border-radius: var(--v4-r-lg);
-  background: var(--v4-glass-bg-strong);
-  -webkit-backdrop-filter: var(--v4-glass-blur-menu);
-  backdrop-filter: var(--v4-glass-blur-menu);
-  box-shadow: var(--v4-glass-shadow-lift);
+  background: #ffffff;
+  box-shadow: 0 12px 32px -8px rgba(16, 18, 22, 0.18), 0 1px 2px rgba(16, 18, 22, 0.06);
 }
 .lc-tier-opt {
   display: flex; align-items: center; justify-content: space-between;
@@ -1179,11 +1177,9 @@ img, svg, video, canvas { max-width: 100%; }
 .lc-chatmodel-menu {
   position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
   z-index: 21; min-width: 180px; padding: 4px;
-  background: var(--v4-glass-bg-strong);
-  -webkit-backdrop-filter: var(--v4-glass-blur-menu);
-  backdrop-filter: var(--v4-glass-blur-menu);
-  border: 1px solid var(--v4-glass-border); border-radius: var(--v4-r-md);
-  box-shadow: var(--v4-glass-shadow-lift);
+  background: #ffffff;
+  border: 1px solid var(--v4-line); border-radius: var(--v4-r-md);
+  box-shadow: 0 12px 32px -8px rgba(16, 18, 22, 0.18), 0 1px 2px rgba(16, 18, 22, 0.06);
   display: flex; flex-direction: column;
 }
 .lc-chatmodel-opt {
@@ -1205,8 +1201,8 @@ img, svg, video, canvas { max-width: 100%; }
 
 /* 窄屏 */
 @media (max-width: 860px) {
-  .lc-shell { height: auto; min-height: 0; flex-direction: column; padding: 10px; gap: 10px; }
-  .lc-side { width: 100%; }
+  .lc-shell { height: auto; min-height: 0; flex-direction: column; padding: 0; gap: 0; }
+  .lc-side { width: 100%; box-shadow: rgba(16, 18, 22, 0.07) 0 1px 0 0; }
   .lc-list { max-height: 220px; }
   .lc-main { min-height: 60vh; }
 }
