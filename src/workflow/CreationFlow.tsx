@@ -1,7 +1,7 @@
 /* AI 创作流程容器：按 workflow.stage 渲染对应阶段，刷新后可从同一阶段恢复。
  * 未实现的节点工作流/组装阶段做诚实降级，不放假按钮。 */
-import React from 'react';
-import type { WorkflowStage } from '../types';
+import React, { useEffect, useState } from 'react';
+import type { ProjectWorkflow, WorkflowStage } from '../types';
 import { useApp } from '../store';
 import CreationEntry from './CreationEntry';
 import AnalysisStage from './AnalysisStage';
@@ -18,8 +18,41 @@ const STEPS: { stage: WorkflowStage; label: string }[] = [
   { stage: 'assembled', label: '自动组装' },
 ];
 
-function StepBar({ current, onStepClick }: { current: WorkflowStage; onStepClick: (s: WorkflowStage) => void }) {
+/** 根据已存在的数据判断最远可到达的阶段（数据在就能回去，不依赖 currentIdx） */
+function farthestStage(wf: ProjectWorkflow): WorkflowStage {
+  if (wf.tasks.length > 0) return 'workflow';
+  if (wf.selectedConceptId) return 'planning';
+  if (wf.concepts.length > 0) return 'concepts';
+  if (wf.analysis) return 'analysis';
+  return 'entry';
+}
+
+function StepBar({
+  current,
+  farthest,
+  onStepClick,
+  onSave,
+}: {
+  current: WorkflowStage;
+  farthest: WorkflowStage;
+  onStepClick: (s: WorkflowStage) => void;
+  onSave: () => void;
+}) {
   const currentIdx = STEPS.findIndex((s) => s.stage === current);
+  const farthestIdx = STEPS.findIndex((s) => s.stage === farthest);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved(false), 2000);
+    return () => clearTimeout(t);
+  }, [saved]);
+
+  const handleSave = () => {
+    onSave();
+    setSaved(true);
+  };
+
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 4,
@@ -29,14 +62,14 @@ function StepBar({ current, onStepClick }: { current: WorkflowStage; onStepClick
       {STEPS.map((step, i) => {
         const done = i < currentIdx;
         const active = i === currentIdx;
-        const clickable = i <= currentIdx;
+        const clickable = i <= farthestIdx;
         return (
           <React.Fragment key={step.stage}>
             <span
               onClick={() => clickable && onStepClick(step.stage)}
               style={{
                 fontSize: 12, whiteSpace: 'nowrap',
-                color: active ? '#222' : done ? '#666' : '#ccc',
+                color: active ? '#222' : done ? '#666' : clickable ? '#999' : '#ccc',
                 fontWeight: active ? 700 : 500,
                 cursor: clickable ? 'pointer' : 'default',
                 textDecoration: done ? 'underline dotted' : 'none',
@@ -53,6 +86,22 @@ function StepBar({ current, onStepClick }: { current: WorkflowStage; onStepClick
           </React.Fragment>
         );
       })}
+
+      <div style={{ flex: 1 }} />
+      <span style={{ fontSize: 11, color: '#aaa', marginRight: 10, whiteSpace: 'nowrap' }}>
+        已自动保存草稿
+      </span>
+      <button
+        onClick={handleSave}
+        style={{
+          fontSize: 12, whiteSpace: 'nowrap',
+          padding: '5px 12px', borderRadius: 6,
+          border: '1px solid #ddd', background: saved ? '#f0fdf4' : '#fff',
+          color: saved ? '#16a34a' : '#444', cursor: 'pointer',
+        }}
+      >
+        {saved ? '✓ 已保存草稿' : '保存草稿'}
+      </button>
     </div>
   );
 }
@@ -104,11 +153,15 @@ export default function CreationFlow() {
     if (project) patchWorkflow(project.id, { stage });
   };
 
+  const handleSave = () => {
+    if (project) patchWorkflow(project.id, { updatedAt: Date.now() });
+  };
+
   // 无工作流 = 创作入口
   if (!wf) {
     return (
       <div>
-        <StepBar current="entry" onStepClick={() => {}} />
+        <StepBar current="entry" farthest="entry" onStepClick={() => {}} onSave={handleSave} />
         <CreationEntry />
       </div>
     );
@@ -138,7 +191,7 @@ export default function CreationFlow() {
 
   return (
     <div>
-      <StepBar current={wf.stage} onStepClick={goStage} />
+      <StepBar current={wf.stage} farthest={farthestStage(wf)} onStepClick={goStage} onSave={handleSave} />
       {body}
     </div>
   );
