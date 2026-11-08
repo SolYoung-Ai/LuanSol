@@ -247,6 +247,12 @@ export default function Luna() {
     if (isMobile) setDrawerOpen(false);
   };
 
+  /* 新建对话：移动端同时收起抽屉，进入空白欢迎页 */
+  const makeNew = () => {
+    chat.newConversation();
+    if (isMobile) setDrawerOpen(false);
+  };
+
   const filtered = chat.conversations.filter((c) =>
     query.trim() ? c.title.toLowerCase().includes(query.trim().toLowerCase()) : true);
 
@@ -278,7 +284,7 @@ export default function Luna() {
       {/* ------------------------------ 左侧栏（桌面常驻 / 移动抽屉） ------------------------------ */}
       <aside className={`lc-side ${sideOpen ? '' : 'collapsed'} ${drawerOpen ? 'drawer-open' : ''}`}>
         <div className="lc-side-inner">
-        <button className="lc-new" onClick={chat.newConversation}>
+        <button className="lc-new" onClick={makeNew}>
           <Icon name="plus" size={16} />
           <span>新建对话</span>
         </button>
