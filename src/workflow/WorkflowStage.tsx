@@ -14,6 +14,7 @@ import { useAuth } from '../cloud/auth';
 import type { AssetCategory, DesignTask, TaskVariant } from '../types';
 import { llmImage } from '../engine/llm';
 import { planTasks } from './planner';
+import CanvasView from './CanvasView';
 import { uid } from '../engine/utils';
 import { Icon } from '../components/icons';
 
@@ -56,6 +57,7 @@ export default function WorkflowStage() {
   const [planning, setPlanning] = useState(false);
   const [planError, setPlanError] = useState('');
   const [preview, setPreview] = useState<TaskVariant | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'canvas'>('list');
 
   if (!wf || !project) return null;
   const tasks = wf.tasks || [];
@@ -156,24 +158,45 @@ export default function WorkflowStage() {
   // —— 任务运行列表 ——
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '24px 20px 80px' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <h2 style={{ fontSize: 20, margin: 0, color: '#222' }}>节点工作流</h2>
-        <span style={{ fontSize: 12, color: '#888' }}>{doneCount}/{tasks.length} 已完成</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 12, color: '#888' }}>{doneCount}/{tasks.length} 已完成</span>
+          <div style={{ display: 'flex', gap: 4, background: '#f0f0f0', borderRadius: 8, padding: 2 }}>
+            {(['list', 'canvas'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setViewMode(m)}
+                style={{
+                  fontSize: 11, padding: '4px 12px', border: 'none', borderRadius: 6, cursor: 'pointer',
+                  background: viewMode === m ? '#fff' : 'transparent', color: viewMode === m ? '#222' : '#888',
+                  boxShadow: viewMode === m ? '0 1px 3px rgba(0,0,0,.1)' : 'none',
+                }}
+              >
+                {m === 'list' ? '列表' : '画布'}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {tasks.map((task, idx) => (
-          <TaskCard
-            key={task.id}
-            index={idx}
-            task={task}
-            onRun={() => runTask(task.id)}
-            onPatch={(patch) => patchTask(task.id, patch)}
-            onPreview={(v) => setPreview(v)}
-            onAddToAsset={() => addToAsset(task)}
-          />
-        ))}
-      </div>
+      {viewMode === 'canvas' ? (
+        <CanvasView tasks={tasks} onRun={runTask} onPreview={(v) => setPreview(v)} />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {tasks.map((task, idx) => (
+            <TaskCard
+              key={task.id}
+              index={idx}
+              task={task}
+              onRun={() => runTask(task.id)}
+              onPatch={(patch) => patchTask(task.id, patch)}
+              onPreview={(v) => setPreview(v)}
+              onAddToAsset={() => addToAsset(task)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* 大图预览 */}
       {preview && (
