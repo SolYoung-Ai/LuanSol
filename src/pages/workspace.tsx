@@ -8,7 +8,7 @@
  * 能力：状态筛选 + 包装结构分类 + 搜索排序 + 批量管理（全选 / 批量删除，本地与云端同步）。
  * ============================================================ */
 import React, { useMemo, useState } from 'react';
-import { Empty, Modal, ComingSoonModal, go, useHash } from '../ui';
+import { Empty, Modal, go, useHash } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useCloudSync } from '../cloud/useCloudSync';
@@ -73,7 +73,6 @@ export default function Workspace() {
   const [confirmDel, setConfirmDel] = useState<Project | null>(null);
   const [renaming, setRenaming] = useState<Project | null>(null);
   const [renameTo, setRenameTo] = useState('');
-  const [comingSoon, setComingSoon] = useState(false);
 
   // 批量管理
   const [batchMode, setBatchMode] = useState(false);
@@ -157,10 +156,7 @@ export default function Workspace() {
         <p className="v4-sub">你的每一个想法，都在这里留下作品。</p>
       </div>
       <div className="v4-tools">
-        <button className="v4-btn-dark" onClick={() => {
-          if (auth.user?.email === 'solyoungwork@gmail.com') go('/new');
-          else setComingSoon(true);
-        }}>新建设计</button>
+        <button className="v4-btn-dark" onClick={() => go('/new')}>新建设计</button>
       </div>
     </div>
 
@@ -288,10 +284,7 @@ export default function Workspace() {
       </div>
       <h3>这里还没有作品</h3>
       <p>从一个想法开始，创建你的第一个包装。</p>
-      <button className="v4-btn-dark" onClick={() => {
-        if (auth.user?.email === 'solyoungwork@gmail.com') go('/new');
-        else setComingSoon(true);
-      }}>开始设计</button>
+      <button className="v4-btn-dark" onClick={() => go('/new')}>开始设计</button>
     </div>}
 
     {/* 单个删除确认 */}
@@ -321,6 +314,5 @@ export default function Workspace() {
       </div>
     </Modal>
 
-    <ComingSoonModal open={comingSoon} onClose={() => setComingSoon(false)} />
   </div>;
 }

@@ -7,20 +7,17 @@
  * 唯一保留的交互是「已有草稿时先确认」——这是防止用户误点丢数据的必要保护。
  * ============================================================ */
 import React, { useState } from 'react';
-import { Modal, ComingSoonModal, go } from '../ui';
+import { Modal, go } from '../ui';
 import { useApp } from '../store';
 import { createEmptyBrief } from '../engine/brief';
 import { createEmptyDraft } from '../v3/draft';
 import { WIZARD_STEPS, stepProgress } from '../v3/steps';
 import { useLang } from '../i18n';
-import { useAuth } from '../cloud/auth';
 
 export default function Home() {
   const { s, update, newProject } = useApp();
   const { t } = useLang();
-  const auth = useAuth();
   const [confirmNew, setConfirmNew] = useState(false);
-  const [comingSoon, setComingSoon] = useState(false);
 
   /** 创建一个全新的真实项目（重置工程状态），再进入统一编辑器 */
   const beginFresh = () => {
@@ -29,10 +26,9 @@ export default function Home() {
     go('/studio');
   };
 
-  /** 开始设计：内部管理员进入 AI 原生新建设计流程；其余用户弹开发中提示。 */
+  /** 开始设计：进入 AI 原生新建设计流程（未登录由路由层要求登录）。 */
   const startWizard = () => {
-    if (auth.user?.email === 'solyoungwork@gmail.com') go('/new');
-    else setComingSoon(true);
+    go('/new');
   };
 
   return <div className="v4-home">
@@ -58,6 +54,5 @@ export default function Home() {
         <button className="v4-btn-dark" onClick={beginFresh}>{t('重新开始', 'Start over')}</button>
       </div>
     </Modal>
-    <ComingSoonModal open={comingSoon} onClose={() => setComingSoon(false)} />
   </div>;
 }
