@@ -5,8 +5,6 @@
 
 线上地址：<https://luna.solyoung.top/>（GitHub Pages 承载；`solyoung-ai.github.io/LuanSol/` 会 301 跳到这里）
 
-> **接手开发请先读 [docs/HANDOVER.md](docs/HANDOVER.md)** —— 资产清单、机制原理、部署手册、已知问题、决策记录都在那一份里。本文只讲产品能力。
-
 仓库名按指令使用 `LuanSol`；产品品牌名为 `LunaSol`。
 
 ---
