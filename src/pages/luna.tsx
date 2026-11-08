@@ -14,9 +14,12 @@ import { useChatStore } from '../cloud/useChatStore';
 import { useApp } from '../store';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { PRICING } from '../cloud/plans';
+import { CHAT_MODELS } from '../cloud/useChatStore';
 
 const TIERS: ImageTier[] = ['flash', 'lite', 'pro'];
-const tierName = (t: ImageTier) => (t === 'flash' ? 'Flash' : t === 'lite' ? 'Lite' : 'Pro');
+const tierName = (t: ImageTier) =>
+  t === 'flash' ? 'Seedream-5.0-flash' : t === 'lite' ? 'Seedream-5.0-lite' : 'Seedream-5.0-pro';
+const tierShort = (t: ImageTier) => (t === 'flash' ? 'Flash' : t === 'lite' ? 'Lite' : 'Pro');
 const tierCost = (t: ImageTier) =>
   t === 'flash' ? PRICING.costs.imageFlash : t === 'lite' ? PRICING.costs.imageLite : PRICING.costs.imagePro;
 
@@ -51,7 +54,7 @@ function TierMenu({ tier, onTier }: { tier: ImageTier; onTier: (t: ImageTier) =>
   return (
     <div className="lc-tier">
       <button className="lc-tier-btn" onClick={() => setOpen((o) => !o)} title="生图档位">
-        <span className="lc-tier-name">{tierName(tier)}</span>
+        <span className="lc-tier-name">{tierShort(tier)}</span>
         <span className="lc-tier-cost">{tierCost(tier)}积分</span>
         <Icon name="chevronDown" size={13} />
       </button>
@@ -67,6 +70,36 @@ function TierMenu({ tier, onTier }: { tier: ImageTier; onTier: (t: ImageTier) =>
               >
                 <span>{tierName(t)}</span>
                 <span className="lc-tier-opt-cost">{tierCost(t)}积分</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* --------------------------- 对话模型下拉 --------------------------- */
+function ChatModelMenu({ model, onModel }: { model: string; onModel: (m: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const current = CHAT_MODELS.find((m) => m.id === model) || CHAT_MODELS[0];
+  return (
+    <div className="lc-chatmodel">
+      <button className="lc-chatmodel-btn" onClick={() => setOpen((o) => !o)} title="对话模型">
+        <span>对话由 {current.label} 驱动</span>
+        <Icon name="chevronDown" size={11} />
+      </button>
+      {open && (
+        <>
+          <div className="lc-backdrop" onClick={() => setOpen(false)} />
+          <div className="lc-chatmodel-menu">
+            {CHAT_MODELS.map((m) => (
+              <button
+                key={m.id}
+                className={`lc-chatmodel-opt ${m.id === model ? 'sel' : ''}`}
+                onClick={() => { onModel(m.id); setOpen(false); }}
+              >
+                {m.label}
               </button>
             ))}
           </div>
@@ -98,7 +131,7 @@ function Bubble({ m, isLast }: { m: LunaMessage; isLast: boolean }) {
             />
             {m.imageTier && (
               <span className="lc-img-tag">
-                <Icon name="image" size={12} /> {tierName(m.imageTier)} · {tierCost(m.imageTier)}积分
+                <Icon name="image" size={12} /> {tierShort(m.imageTier)} · {tierCost(m.imageTier)}积分
               </span>
             )}
           </div>
@@ -341,7 +374,10 @@ export default function Luna() {
               </button>
             </div>
           </div>
-          <div className="lc-dock-hint">对话由 DeepSeek 驱动 · 生图按档位消耗积分，对话免费</div>
+          <div className="lc-dock-hint">
+            <ChatModelMenu model={chat.chatModel} onModel={chat.setChatModel} />
+            <span>· 生图按档位消耗积分，对话免费</span>
+          </div>
         </div>
       </section>
     </div>

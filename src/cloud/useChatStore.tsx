@@ -31,13 +31,29 @@ interface ChatStore {
   syncState: ChatSyncState;
   syncMessage: string;
   booted: boolean;
+  chatModel: string;
   newConversation: () => string;
   selectConversation: (id: string) => void;
   deleteConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => void;
   setTier: (tier: ImageTier) => void;
+  setChatModel: (m: string) => void;
   sendText: (text: string, image?: string) => Promise<void>;
   generateImage: () => Promise<void>;
+}
+
+/** 对话大模型列表（前端模型名，云函数 ALLOWED_MODELS 白名单对应） */
+export const CHAT_MODELS = [
+  { id: 'deepseek-chat', label: 'DeepSeek-V4' },
+  { id: 'deepseek-reasoner', label: 'DeepSeek-R1 思考' },
+  { id: 'kimi-k3.1', label: 'Kimi-K3.1-Pro' },
+  { id: 'doubao-seed-lite', label: 'Doubao-Seed-2.1-lite' },
+  { id: 'doubao-seed-turbo', label: 'Doubao-Seed-2.1-turbo' },
+  { id: 'glm-5.3', label: 'GLM-5.3-Flash' },
+] as const;
+const CHAT_MODEL_KEY = 'lunasol.chatModel';
+function loadChatModel(): string {
+  try { return localStorage.getItem(CHAT_MODEL_KEY) || 'deepseek-chat'; } catch { return 'deepseek-chat'; }
 }
 
 /** 按 id 合并两组对话：同 id 取 updatedAt 更新的一方，最后按更新时间倒序。 */
@@ -81,6 +97,11 @@ function useChatStoreState(): ChatStore {
   const [syncState, setSyncState] = useState<ChatSyncState>('off');
   const [syncMessage, setSyncMessage] = useState('');
   const [booted, setBooted] = useState(false);
+  const [chatModel, setChatModelState] = useState<string>(loadChatModel);
+  const setChatModel = useCallback((m: string) => {
+    setChatModelState(m);
+    try { localStorage.setItem(CHAT_MODEL_KEY, m); } catch { /* ignore */ }
+  }, []);
 
   const conversationsRef = useRef<Conversation[]>(conversations);
   conversationsRef.current = conversations;
@@ -237,7 +258,7 @@ function useChatStoreState(): ChatStore {
 
     setBusy(true);
     try {
-      const ai = { ...loadAI(), textModel: 'deepseek-reasoner', cloudbaseUid: user?.id || '' };
+      const ai = { ...loadAI(), textModel: chatModel, cloudbaseUid: user?.id || '' };
       const llmMessages = [
         {
           role: 'system' as const,
@@ -269,7 +290,7 @@ function useChatStoreState(): ChatStore {
     } finally {
       setBusy(false);
     }
-  }, [activeId, updateConv, user]);
+  }, [activeId, updateConv, user, chatModel]);
 
   /* ----------------------------- 生成图片 ----------------------------- */
   const generateImage = useCallback(async () => {
@@ -320,9 +341,9 @@ function useChatStoreState(): ChatStore {
   const active = conversations.find((c) => c.id === activeId) || null;
 
   return {
-    conversations, activeId, active, busy, syncState, syncMessage, booted,
+    conversations, activeId, active, busy, syncState, syncMessage, booted, chatModel,
     newConversation, selectConversation, deleteConversation, renameConversation,
-    setTier, sendText, generateImage,
+    setTier, setChatModel, sendText, generateImage,
   };
 }
 
