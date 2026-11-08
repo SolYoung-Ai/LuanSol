@@ -334,7 +334,7 @@ async function handleImage(req, res, body) {
   // 前端传 flash/lite/pro，映射到方舟具体模型 ID；缺省走环境变量
   const TIER_MODEL = {
     flash: 'doubao-seedream-5-0-flash-260915',
-    lite: 'doubao-seedream-4-5-251128',
+    lite: 'doubao-seedream-5-0-lite-260128',
     pro: 'doubao-seedream-5-0-pro-260628',
   };
   const tier = typeof body.model === 'string' && TIER_MODEL[body.model] ? body.model : 'flash';
