@@ -18,7 +18,7 @@ const STEPS: { stage: WorkflowStage; label: string }[] = [
   { stage: 'assembled', label: '自动组装' },
 ];
 
-function StepBar({ current }: { current: WorkflowStage }) {
+function StepBar({ current, onStepClick }: { current: WorkflowStage; onStepClick: (s: WorkflowStage) => void }) {
   const currentIdx = STEPS.findIndex((s) => s.stage === current);
   return (
     <div style={{
@@ -29,13 +29,20 @@ function StepBar({ current }: { current: WorkflowStage }) {
       {STEPS.map((step, i) => {
         const done = i < currentIdx;
         const active = i === currentIdx;
+        const clickable = i <= currentIdx;
         return (
           <React.Fragment key={step.stage}>
-            <span style={{
-              fontSize: 12, whiteSpace: 'nowrap',
-              color: active ? '#222' : done ? '#888' : '#bbb',
-              fontWeight: active ? 700 : 500,
-            }}>
+            <span
+              onClick={() => clickable && onStepClick(step.stage)}
+              style={{
+                fontSize: 12, whiteSpace: 'nowrap',
+                color: active ? '#222' : done ? '#666' : '#ccc',
+                fontWeight: active ? 700 : 500,
+                cursor: clickable ? 'pointer' : 'default',
+                textDecoration: done ? 'underline dotted' : 'none',
+                textUnderlineOffset: 3,
+              }}
+            >
               {step.label}
             </span>
             {i < STEPS.length - 1 && (
@@ -89,15 +96,19 @@ function ComingNext({ stage }: { stage: WorkflowStage }) {
 }
 
 export default function CreationFlow() {
-  const { s } = useApp();
+  const { s, patchWorkflow } = useApp();
   const project = s.projects.find((p) => p.id === s.activeId);
   const wf = project?.workflow;
+
+  const goStage = (stage: WorkflowStage) => {
+    if (project) patchWorkflow(project.id, { stage });
+  };
 
   // 无工作流 = 创作入口
   if (!wf) {
     return (
       <div>
-        <StepBar current="entry" />
+        <StepBar current="entry" onStepClick={() => {}} />
         <CreationEntry />
       </div>
     );
@@ -127,7 +138,7 @@ export default function CreationFlow() {
 
   return (
     <div>
-      <StepBar current={wf.stage} />
+      <StepBar current={wf.stage} onStepClick={goStage} />
       {body}
     </div>
   );

@@ -2,34 +2,22 @@
  * P1 任务规划与工作流运行器（任务书第五部分 5.2 / 5.3）
  * ------------------------------------------------------------
  * 已确认设计方向后：
- *   1) AI 把方案拆成可独立运行的设计任务清单（真实 chat）
- *   2) 每个任务独立运行：提示词可编辑 → Seedream 生图 → 多版本结果
+ *   1) AI 把方案拆成可独立运行的设计任务清单（真实 chat，文本免费）
+ *   2) 每个任务独立运行：选 Flash/Pro → Seedream 生图 → 真实扣积分
  *   3) 结果可预览、切换版本、加入素材库（真实 Asset，可持久化恢复）
  * 状态机真实：pending / running / success / failed，失败可重试。
- * 不做假进度、不放假按钮。
  * ============================================================ */
 import React, { useState } from 'react';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
-import type { AssetCategory, DesignTask, TaskVariant } from '../types';
-import { llmImage } from '../engine/llm';
+import { useSubscription, recordUsage } from '../cloud/subscription';
+import { PRICING } from '../cloud/plans';
+import type { DesignTask, TaskVariant, ImageTier } from '../types';
+import { callSeedream } from '../engine/seedream';
 import { planTasks } from './planner';
 import CanvasView from './CanvasView';
 import { uid } from '../engine/utils';
 import { Icon } from '../components/icons';
-
-/** 任务类型 → 素材库分类 */
-function toAssetCategory(type: DesignTask['type']): AssetCategory {
-  switch (type) {
-    case 'background': return 'background';
-    case 'illustration': return 'illustration';
-    case 'pattern': return 'pattern';
-    case 'texture': return 'texture';
-    case 'decoration': return 'sticker';
-    case 'product-image': return 'product';
-    default: return 'other';
-  }
-}
 
 const TYPE_LABEL: Record<DesignTask['type'], string> = {
   background: '背景', illustration: '插画', pattern: '图案',
@@ -47,10 +35,22 @@ const STATUS_LABEL: Record<DesignTask['status'], string> = {
   success: '已完成', failed: '失败', cancelled: '已取消',
 };
 
+const tierCost = (t: ImageTier) => t === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro;
+
+/** 加载 dataURL 获取真实尺寸 */
+function naturalSize(src: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
 export default function WorkflowStage() {
   const { s, patchWorkflow, setToast, addAsset } = useApp();
   const auth = useAuth();
-  const aiWithUid = { ...s.ai, cloudbaseUid: auth.user?.id || '' };
+  const sub = useSubscription();
   const project = s.projects.find((p) => p.id === s.activeId);
   const wf = project?.workflow;
 
@@ -69,16 +69,17 @@ export default function WorkflowStage() {
     patchWorkflow(project.id, { tasks: next });
   };
 
-  /** AI 拆分任务 */
+  /** AI 拆分任务（文本，免费） */
   const handlePlan = async () => {
     if (!wf.analysis) { setPlanError('缺少分析报告，请先返回完成 AI 分析'); return; }
     if (!concept) { setPlanError('缺少设计方案，请先返回选择方案'); return; }
     setPlanning(true);
     setPlanError('');
     try {
+      const aiWithUid = { ...s.ai, cloudbaseUid: auth.user?.id || '' };
       const newTasks = await planTasks(wf.analysis, concept, wf.productInfo, aiWithUid);
       patchWorkflow(project.id, { tasks: newTasks, stage: 'workflow' });
-      setToast(`已拆出 ${newTasks.length} 个设计任务`);
+      setToast(`已拆出 ${newTasks.length} 个设计任务（文本分析免费）`);
     } catch (e: any) {
       setPlanError(e.message || '任务拆分失败');
     } finally {
@@ -86,16 +87,29 @@ export default function WorkflowStage() {
     }
   };
 
-  /** 运行单个任务：真实生图，追加为新版本，不覆盖旧版本 */
+  /** 运行单个任务：真实生图，检查余额，扣积分，追加为新版本 */
   const runTask = async (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    const tier = task.imageTier;
+    const cost = tierCost(tier);
+    const balance = sub.usedLeft ?? 0;
+    if (balance < cost) {
+      setToast(`积分不足：${tier === 'flash' ? 'Flash' : 'Pro'} 生图需要 ${cost} 积分，当前余额 ${balance}。`);
+      window.location.hash = '#/subscribe';
+      return;
+    }
     patchTask(taskId, { status: 'running', error: '' });
     try {
-      const result = await llmImage(task.prompt, aiWithUid);
+      const src = await callSeedream(task.prompt, { tier, uid: auth.user?.id });
+      const { w, h } = await naturalSize(src);
+      if (auth.user) {
+        await recordUsage(auth.user.id, cost, 'image');
+        sub.refresh();
+      }
       const variant: TaskVariant = {
-        src: result.src, at: Date.now(), prompt: task.prompt,
-        model: task.model, naturalW: result.naturalW, naturalH: result.naturalH,
+        src, at: Date.now(), prompt: task.prompt, model: tier, tier,
+        naturalW: w, naturalH: h,
       };
       patchTask(taskId, {
         status: 'success',
@@ -144,6 +158,7 @@ export default function WorkflowStage() {
         >
           {planning ? 'AI 拆分中…' : 'AI 拆分设计任务'}
         </button>
+        <p style={{ fontSize: 11, color: '#aaa', marginTop: 10 }}>文本分析免费，不扣积分</p>
         {planError && (
           <div style={{ marginTop: 16, color: '#c0392b', fontSize: 13 }}>
             <Icon name="alert" size={14} /> {planError}
@@ -155,10 +170,9 @@ export default function WorkflowStage() {
 
   const doneCount = tasks.filter((t) => t.status === 'success').length;
 
-  // —— 任务运行列表 ——
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '24px 20px 80px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <h2 style={{ fontSize: 20, margin: 0, color: '#222' }}>节点工作流</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 12, color: '#888' }}>{doneCount}/{tasks.length} 已完成</span>
@@ -179,6 +193,9 @@ export default function WorkflowStage() {
           </div>
         </div>
       </div>
+      <p style={{ fontSize: 11, color: '#aaa', margin: '0 0 16px' }}>
+        文本分析免费 · 生图 Flash {PRICING.costs.imageFlash} 积分/张 · Pro {PRICING.costs.imagePro} 积分/张 · 当前余额 {sub.usedLeft ?? 0}
+      </p>
 
       {viewMode === 'canvas' ? (
         <CanvasView tasks={tasks} onRun={runTask} onPreview={(v) => setPreview(v)} />
@@ -239,16 +256,10 @@ function TaskCard({
     }}>
       {/* 头部 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-        <span style={{
-          fontSize: 11, fontWeight: 600, color: '#888',
-          background: '#f4f4f4', borderRadius: 6, padding: '2px 8px',
-        }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#888', background: '#f4f4f4', borderRadius: 6, padding: '2px 8px' }}>
           {String(index + 1).padStart(2, '0')}
         </span>
-        <span style={{
-          fontSize: 11, fontWeight: 600, color: '#5b6cff',
-          background: '#eef0ff', borderRadius: 6, padding: '2px 8px',
-        }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#5b6cff', background: '#eef0ff', borderRadius: 6, padding: '2px 8px' }}>
           {TYPE_LABEL[task.type]}
         </span>
         <span style={{ fontSize: 11, color: '#999' }}>{FACE_LABEL[task.face] || task.face}</span>
@@ -274,6 +285,24 @@ function TaskCard({
         placeholder="生图提示词，可自行调整后再运行"
       />
 
+      {/* 模型档位选择 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
+        {(['flash', 'pro'] as ImageTier[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => onPatch({ imageTier: t })}
+            style={{
+              fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+              border: task.imageTier === t ? '1px solid #222' : '1px solid #eee',
+              background: task.imageTier === t ? '#222' : '#fff',
+              color: task.imageTier === t ? '#fff' : '#888',
+            }}
+          >
+            {t === 'flash' ? `Flash ${PRICING.costs.imageFlash}积分` : `Pro ${PRICING.costs.imagePro}积分`}
+          </button>
+        ))}
+      </div>
+
       {/* 操作行 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
         <button
@@ -283,7 +312,7 @@ function TaskCard({
           style={{ padding: '7px 16px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
           <Icon name="spark" size={14} />
-          {running ? '生成中…' : task.variants.length ? '再生成一版' : '运行生成'}
+          {running ? '生成中…' : task.variants.length ? `再生成一版（${tierCost(task.imageTier)}积分）` : `运行生成（${tierCost(task.imageTier)}积分）`}
         </button>
         {task.status === 'success' && (
           <button
@@ -333,7 +362,7 @@ function TaskCard({
 }
 
 function StatusBadge({ status, error }: { status: DesignTask['status']; error?: string }) {
-  const map: Record<string, { c: string; bg: string; icon?: React.ReactNode }> = {
+  const map: Record<string, { c: string; bg: string }> = {
     pending: { c: '#888', bg: '#f4f4f4' },
     waiting: { c: '#888', bg: '#f4f4f4' },
     running: { c: '#5b6cff', bg: '#eef0ff' },
@@ -352,4 +381,17 @@ function StatusBadge({ status, error }: { status: DesignTask['status']; error?: 
       {STATUS_LABEL[status]}
     </span>
   );
+}
+
+/** 任务类型 → 素材库分类 */
+function toAssetCategory(type: DesignTask['type']): import('../types').AssetCategory {
+  switch (type) {
+    case 'background': return 'background';
+    case 'illustration': return 'illustration';
+    case 'pattern': return 'pattern';
+    case 'texture': return 'texture';
+    case 'decoration': return 'sticker';
+    case 'product-image': return 'product';
+    default: return 'other';
+  }
 }

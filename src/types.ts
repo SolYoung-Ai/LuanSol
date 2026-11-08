@@ -445,6 +445,7 @@ export interface TaskVariant {
   at: number;
   prompt: string;
   model: string;
+  tier: ImageTier;
   naturalW: number;
   naturalH: number;
 }
@@ -458,7 +459,8 @@ export interface DesignTask {
   description: string;
   /** 提示词：可由 AI 生成、用户可编辑后再运行 */
   prompt: string;
-  model: string;
+  /** 生图档位：flash(6积分) / pro(10积分)，用户可选 */
+  imageTier: ImageTier;
   status: 'pending' | 'waiting' | 'running' | 'success' | 'failed' | 'cancelled';
   /** 生成结果对应的素材 ID（当前选中版本） */
   assetId?: string;
