@@ -47,24 +47,36 @@ export type RawUser = {
   user_metadata?: { name?: string; username?: string; nickName?: string; avatarUrl?: string };
 };
 export type RawSession = { access_token?: string; user?: RawUser } | null;
+
+/** 通用 {data,error} 结果（CloudBase v3 为 Supabase 风格，字段可能为 null） */
+type AuthEnvelope = { data?: Record<string, any> | null; error?: Err };
 export type VerifyResult = { data?: { user?: RawUser; session?: RawSession }; error?: Err };
-export type VerifyFn = (p: { token: string }) => Promise<VerifyResult>;
+/** 发码后返回的验证码回调（注册/免密登录）：SDK 自动带 messageId */
+export type OtpCallback = (p: { token: string | number; messageId?: string }) => Promise<VerifyResult>;
+
+/** reauthenticate 返回的改密回调：nonce=验证码，password=新密码 */
+export type ReauthUpdate = (p: { nonce: string | number; password: string }) => Promise<VerifyResult>;
+/** updateUser 绑定邮箱/手机返回的验证码回调 */
+export type LinkVerifyCallback = (p: { token: string | number; email?: string; phone?: string; messageId?: string }) => Promise<AuthEnvelope>;
 
 export interface CloudAuthApi {
-  signInWithPassword(p: Record<string, string>): Promise<{ data?: { user?: RawUser; session?: RawSession }; error?: Err }>;
-  signUp(p: Record<string, string>): Promise<{ data?: { verifyOtp?: VerifyFn }; error?: Err }>;
-  signInWithOtp(p: Record<string, string>): Promise<{ data?: { verifyOtp?: VerifyFn }; error?: Err }>;
+  signInWithPassword(p: Record<string, string>): Promise<VerifyResult>;
+  signUp(p: Record<string, string>): Promise<{ data?: { user?: RawUser; session?: RawSession; verifyOtp?: OtpCallback } | null; error?: Err }>;
+  signInWithOtp(p: Record<string, string>): Promise<{ data?: { user?: RawUser; session?: RawSession; verifyOtp?: OtpCallback; messageId?: string } | null; error?: Err }>;
   /** 第三方 OAuth 登录（如微信网页授权）：调用后会被重定向到授权页，不会立即返回会话。 */
   signInWithOAuth(p: { provider: string; redirectTo?: string }): Promise<{ data?: unknown; error?: Err }>;
-  getSession(): Promise<{ data?: { session?: RawSession; user?: RawUser }; error?: Err }>;
+  getSession(): Promise<VerifyResult>;
+  /** 拉取最新用户资料 */
+  getUser?(isRefresh?: boolean): Promise<{ data?: { user?: RawUser }; error?: Err }>;
+  /** 改密第一步：向注册邮箱/手机发验证码，返回 updateUser 回调 */
+  reauthenticate(): Promise<{ data?: { updateUser?: ReauthUpdate } | null; error?: Err }>;
+  /** 已登录且知道旧密码时直接改密 */
+  resetPasswordForOld(p: { old_password: string; new_password: string }): Promise<VerifyResult>;
+  /** 绑定/换绑邮箱或手机：传 email/phone 会发验证码，返回 verifyOtp 回调 */
+  updateUser(p: { email?: string; phone?: string; [k: string]: unknown }): Promise<{ data?: { verifyOtp?: LinkVerifyCallback; messageId?: string; user?: RawUser } | null; error?: Err }>;
   /** 更新昵称/头像（直接生效，不需要验证码） */
-  updateUserBasicInfo?(p: { nickName?: string; avatarUrl?: string }): Promise<{ error?: Err }>;
-  /** 更新邮箱/手机：会先要求验证码，返回 verifyOtp 回调 */
-  updateUser?(p: { email?: string; phone?: string }): Promise<{ data?: { verifyOtp?: (params: { token: string | number; messageId?: string }) => Promise<{ data?: { user?: RawUser; session?: RawSession }; error?: Err }>; messageId?: string | number }; error?: Err }>;
-  /** 修改密码：需要旧密码 */
-  updatePassword?(newPassword: string, oldPassword: string): Promise<{ error?: Err }>;
-  getUser?(): Promise<{ data?: { user?: RawUser }; error?: Err }>;
-  signOut(): Promise<{ error?: Err }>;
+  updateUserBasicInfo?(p: { nickName?: string; avatarUrl?: string }): Promise<{ error?: Err } | null>;
+  signOut(p?: unknown): Promise<AuthEnvelope>;
   onAuthStateChange(cb: (event: string, session: RawSession) => void): { data?: { subscription?: { unsubscribe?: () => void } } };
 }
 

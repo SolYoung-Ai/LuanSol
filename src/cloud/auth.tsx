@@ -10,7 +10,7 @@
  *    走 CloudBase 默认短信通道；邮件通道需要环境侧配置后才能收到信。
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { authApi, type Err, type RawSession, type RawUser, type VerifyFn } from './sdk';
+import { authApi, type Err, type RawSession, type RawUser, type OtpCallback, type ReauthUpdate, type LinkVerifyCallback } from './sdk';
 import { cloudConfigured, cloudOriginSupported } from './config';
 import { accountKey, otpTarget } from './keys';
 
@@ -49,12 +49,20 @@ interface AuthCtx {
   signOut: () => Promise<ActionResult>;
   /** 更新昵称 / 头像（真改 CloudBase user_metadata） */
   updateProfile: (p: { nickName?: string; avatarUrl?: string }) => Promise<ActionResult>;
-  /** 设置密码：已登录会话即身份验证，手机验证码登录可直接设置 */
-  changePassword: (newPassword: string, oldPassword?: string) => Promise<ActionResult>;
+  /** 改密第一步：向注册邮箱/手机发验证码（reauthenticate） */
+  startPasswordChange: () => Promise<ActionResult>;
+  /** 改密第二步：验证码 + 新密码完成设置 */
+  confirmPasswordChange: (nonce: string, newPassword: string) => Promise<ActionResult>;
+  /** 退出改密流程 */
+  cancelPasswordChange: () => void;
+  /** 改密验证码是否已发送（等待输入验证码与新密码） */
+  reauthPending: boolean;
   /** 绑定/换绑邮箱或手机：第一步发验证码 */
   startLink: (kind: 'email' | 'phone', target: string) => Promise<ActionResult>;
   /** 绑定/换绑：校验验证码完成绑定 */
   verifyLink: (token: string) => Promise<ActionResult>;
+  /** 退出绑定/换绑流程 */
+  cancelLink: () => void;
   refreshUser: () => Promise<void>;
   linkPending: { kind: 'email' | 'phone'; target: string } | null;
   clearError: () => void;
@@ -102,9 +110,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<{ kind: CodeKind; target: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const verifyRef = useRef<VerifyFn | null>(null);
-  const linkVerifyRef = useRef<((p: { token: string | number; messageId?: string }) => Promise<{ data?: { user?: RawUser; session?: RawSession }; error?: Err }>) | null>(null);
+  const verifyRef = useRef<OtpCallback | null>(null);
+  const reauthUpdateRef = useRef<ReauthUpdate | null>(null);
+  const linkVerifyRef = useRef<LinkVerifyCallback | null>(null);
   const [linkPending, setLinkPending] = useState<{ kind: 'email' | 'phone'; target: string } | null>(null);
+  const [reauthPending, setReauthPending] = useState(false);
   const configured = cloudConfigured;
   const originOk = cloudOriginSupported();
 
@@ -276,17 +286,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) { return { ok: false, message: errorMessage(e, '更新失败') }; } finally { setBusy(false); }
   }, [apply, session]);
 
-  const changePassword = useCallback(async (newPassword: string, _oldPassword?: string): Promise<ActionResult> => {
+  // 改密第一步：向注册邮箱/手机发送身份验证码（reauthenticate）
+  const startPasswordChange = useCallback(async (): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth?.updatePassword) return { ok: false, message: unavailable('设置密码') };
+    if (!auth?.reauthenticate) return { ok: false, message: unavailable('修改密码') };
+    setBusy(true); setError(null);
+    try {
+      const r = await auth.reauthenticate();
+      if (r.error) return { ok: false, message: r.error.message || '验证码发送失败' };
+      if (!r.data?.updateUser) return { ok: false, message: '改密服务未返回验证入口' };
+      reauthUpdateRef.current = r.data.updateUser;
+      setReauthPending(true);
+      return { ok: true, message: '身份验证码已发送到注册邮箱或手机' };
+    } catch (e) {
+      return { ok: false, message: errorMessage(e, '验证码发送失败') };
+    } finally { setBusy(false); }
+  }, []);
+
+  // 改密第二步：校验验证码并设置新密码
+  const confirmPasswordChange = useCallback(async (nonce: string, newPassword: string): Promise<ActionResult> => {
+    if (!reauthUpdateRef.current) return { ok: false, message: '请先获取身份验证码' };
+    if (!/^\d{4,8}$/.test(nonce.trim())) return { ok: false, message: '验证码格式不正确' };
     if (newPassword.length < 8) return { ok: false, message: '新密码至少 8 位' };
     setBusy(true); setError(null);
     try {
-      // 已登录会话即身份验证，直接设置新密码（兼容手机验证码登录无旧密码的账号）
-      const r = await auth.updatePassword(newPassword, _oldPassword || '');
+      const r = await reauthUpdateRef.current({ nonce: nonce.trim(), password: newPassword });
       if (r.error) return { ok: false, message: r.error.message || '设置失败' };
-      return { ok: true, message: '密码已设置，下次登录可使用手机号+密码或验证码登录' };
-    } catch (e) { return { ok: false, message: errorMessage(e, '设置失败') }; } finally { setBusy(false); }
+      if (r.data?.session) apply(r.data.session as RawSession);
+      setReauthPending(false); reauthUpdateRef.current = null;
+      return { ok: true, message: '密码已更新，下次可用手机号或邮箱+密码登录' };
+    } catch (e) {
+      return { ok: false, message: errorMessage(e, '设置失败') };
+    } finally { setBusy(false); }
+  }, [apply]);
+
+  const cancelPasswordChange = useCallback(() => {
+    setReauthPending(false); reauthUpdateRef.current = null; setError(null);
   }, []);
 
   const startLink = useCallback(async (kind: 'email' | 'phone', target: string): Promise<ActionResult> => {
@@ -310,14 +345,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!linkPending) return { ok: false, message: '请先发送验证码' };
     setBusy(true); setError(null);
     try {
-      const r = await linkVerifyRef.current?.({ token: token.trim() });
+      const arg = linkPending.kind === 'email'
+        ? { token: token.trim(), email: linkPending.target }
+        : { token: token.trim(), phone: linkPending.target };
+      const r = await linkVerifyRef.current?.(arg);
       if (!r) return { ok: false, message: '验证码已失效，请重新发送' };
       if (r.error) return { ok: false, message: r.error.message || '绑定失败' };
-      if (r.data?.session) apply(r.data.session);
+      // 绑定成功后拉取最新会话，刷新顶部绑定状态
+      const g = await authApi();
+      const latest = await g?.getSession?.();
+      if (latest?.data?.session) apply(latest.data.session as RawSession);
       setLinkPending(null); linkVerifyRef.current = null;
       return { ok: true, message: '绑定成功' };
     } catch (e) { return { ok: false, message: errorMessage(e, '绑定失败') }; } finally { setBusy(false); }
   }, [linkPending, apply]);
+
+  const cancelLink = useCallback(() => {
+    setLinkPending(null); linkVerifyRef.current = null; setError(null);
+  }, []);
 
   const refreshUser = useCallback(async () => {
     const auth = await authApi();
@@ -326,11 +371,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [apply, session]);
 
   const value = useMemo<AuthCtx>(() => ({
-    ready, configured, originOk, user, session, pending, busy, error, linkPending,
+    ready, configured, originOk, user, session, pending, busy, error, linkPending, reauthPending,
     signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut,
-    updateProfile, changePassword, startLink, verifyLink, refreshUser,
+    updateProfile, startPasswordChange, confirmPasswordChange, cancelPasswordChange, startLink, verifyLink, cancelLink, refreshUser,
     clearError: () => setError(null),
-  }), [ready, configured, originOk, user, session, pending, busy, error, linkPending, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut, updateProfile, changePassword, startLink, verifyLink, refreshUser]);
+  }), [ready, configured, originOk, user, session, pending, busy, error, linkPending, reauthPending, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut, updateProfile, startPasswordChange, confirmPasswordChange, cancelPasswordChange, startLink, verifyLink, cancelLink, refreshUser]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

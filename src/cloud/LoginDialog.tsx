@@ -27,11 +27,12 @@ export function LoginDialog({ open, onClose, onDone }: {
   const [tab, setTab] = useState<Tab>('password');
   const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [code, setCode] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    if (!open) { setMsg(null); setCode(''); setPassword(''); a.cancelCode(); }
+    if (!open) { setMsg(null); setCode(''); setPassword(''); setConfirmPassword(''); a.cancelCode(); }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 出现提示（尤其错误）时自动滚动到可见区，避免手机端提示落在视口外看似「没反应」
@@ -52,6 +53,10 @@ export function LoginDialog({ open, onClose, onDone }: {
   };
 
   const sendSignup = async () => {
+    if (password !== confirmPassword) {
+      setMsg({ ok: false, text: '两次输入的密码不一致，请重新确认' });
+      return;
+    }
     const r = await a.startSignup(account, password);
     setMsg({ ok: r.ok, text: r.message });
   };
@@ -109,6 +114,11 @@ export function LoginDialog({ open, onClose, onDone }: {
             autoComplete={tab === 'signup' ? 'new-password' : 'current-password'}
             placeholder={tab === 'signup' ? '至少 8 位' : '你的登录密码'}
             onKeyDown={(e) => { if (e.key === 'Enter' && tab === 'password') void submitPassword(); }} /></label>}
+
+        {tab === 'signup' && <label className="field"><span className="field-label">确认密码</span>
+          <input className="input" type="password" value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password" placeholder="再次输入密码" /></label>}
 
         {tab === 'signup' && <p className="modal-hint">注册需要手机号或邮箱：手机号走短信验证码，邮箱走邮件验证码。用户名可在注册后用于密码登录。</p>}
         {tab === 'code' && <p className="modal-hint">已注册的手机号或邮箱可以用验证码免密登录，不需要记密码。</p>}
