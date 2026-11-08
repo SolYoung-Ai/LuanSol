@@ -373,22 +373,19 @@ input, textarea, select { border-radius: var(--v4-r-md); transition: border-colo
 
 .v4-site-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1px; background: var(--v4-line); margin-top: 1px; border: 1px solid var(--v4-line); border-radius: var(--v4-r-lg); overflow: hidden; }
 .v4-site {
-  background: var(--v4-paper); padding: 0 0 18px;
+  background: var(--v4-paper); padding: 22px 20px 18px;
   display: flex; flex-direction: column; gap: 10px;
   text-align: left; transition: background .18s ease;
   min-width: 0;
 }
 .v4-site:hover { background: var(--v4-surface); }
-.v4-site-cover { display: block; width: 100%; aspect-ratio: 8 / 5; overflow: hidden; background: var(--v4-surface); cursor: pointer; border: none; padding: 0; }
-.v4-site-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.v4-site-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 20px; }
+.v4-site-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .v4-site-name { font-size: 15px; font-weight: 500; letter-spacing: .01em; }
 .v4-site-country { font-size: 10px; letter-spacing: .12em; color: var(--v4-ink-3); white-space: nowrap; }
-.v4-site-desc { font-size: 12.5px; line-height: 1.75; color: var(--v4-ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; padding: 0 20px; }
-.v4-site-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding: 0 20px; }
+.v4-site-desc { font-size: 12.5px; line-height: 1.75; color: var(--v4-ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.v4-site-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
 .v4-tag { font-size: 10px; letter-spacing: .08em; color: var(--v4-ink-2); border: 1px solid var(--v4-line); border-radius: var(--v4-r-sm); padding: 2px 8px; }
-.v4-site-why { font-size: 11.5px; color: var(--v4-ink-3); border-top: 1px solid var(--v4-line); padding: 10px 20px 0; }
-.v4-detail-actions { padding: 0 20px; }
+.v4-site-why { font-size: 11.5px; color: var(--v4-ink-3); border-top: 1px solid var(--v4-line); padding-top: 10px; }
 
 .v4-work-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: clamp(20px, 2.4vw, 32px); margin-top: var(--v4-s5); }
 .v4-case { text-align: left; display: flex; flex-direction: column; gap: 10px; min-width: 0; }

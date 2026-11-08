@@ -237,9 +237,6 @@ export default function Market() {
         ? <div className="v4-empty"><h3>这个组合下没有站点</h3><p>换一个分组或清空筛选。</p><button className="v4-btn-dark" onClick={clearAll}>清空筛选</button></div>
         : <div className="v4-site-grid">
           {sites.map((s) => <div key={s.id} className="v4-site">
-            <button className="v4-site-cover" onClick={() => go(`/market/site/${s.id}`)}>
-              <img src={`./market-thumbs/${s.id}.jpg`} alt={s.title} loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-            </button>
             <div className="v4-site-top">
               <button className="v4-site-name" onClick={() => go(`/market/site/${s.id}`)}>{s.title}</button>
               <span className="v4-site-country">{s.country}</span>
