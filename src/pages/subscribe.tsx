@@ -112,7 +112,17 @@ export default function Subscribe() {
 
     {/* 当前积分余额 */}
     <Card className="pad-card sub-status-card">
-      <SectionLabel en={lang === 'en' ? '' : 'BALANCE'}>{t('我的积分', 'My credits')}</SectionLabel>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <SectionLabel en={lang === 'en' ? '' : 'BALANCE'}>{t('我的积分', 'My credits')}</SectionLabel>
+        {a.user && (
+          <button
+            onClick={() => { setLogsOpen(!logsOpen); if (!logsOpen) { setLogsLoading(true); sub.getCreditLogs(30).then((logs) => { setCreditLogs(logs); setLogsLoading(false); }); } }}
+            style={{ fontSize: 12, color: '#0284c7', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            {logsOpen ? '收起明细' : '明细'}
+          </button>
+        )}
+      </div>
       {!a.user
         ? <Notice tone="warn">{t('登录后查看积分余额。', 'Sign in to view your credit balance.')}</Notice>
         : <>
@@ -126,14 +136,6 @@ export default function Subscribe() {
             <Tag tone="green">{pro ? t(`会员 · ¥${PRICING.proMonthlyPriceRMB}/月`, `Member · ¥${PRICING.proMonthlyPriceRMB}/mo`) : t('免费版', 'Free')}</Tag>
             {pro && sub.sub?.period_end && <Tag>{t('有效期至', 'Valid until')} {new Date(sub.sub.period_end).toLocaleDateString()}</Tag>}
           </div>
-          <div style={{ marginTop: 16 }}>
-            <button
-              onClick={() => { setLogsOpen(!logsOpen); if (!logsOpen) { setLogsLoading(true); sub.getCreditLogs(30).then((logs) => { setCreditLogs(logs); setLogsLoading(false); }); } }}
-              style={{ width: '100%', padding: '12px', fontSize: 14, background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}
-            >
-              {logsOpen ? '↑ 收起积分明细' : '📊 查看积分明细（签到、消费、充值记录）'}
-            </button>
-          </div>
 
           {/* 积分明细（展开） */}
           {logsOpen && (
@@ -144,7 +146,9 @@ export default function Subscribe() {
                 <div style={{ padding: 20, textAlign: 'center', color: '#999', fontSize: 14 }}>暂无积分记录</div>
               ) : (
                 <div style={{ maxHeight: 240, overflowY: 'auto' }}>
-                  {creditLogs.map((log) => (
+                  {creditLogs.map((log) => {
+                    const isConsume = log.change_type === 'consume';
+                    return (
                     <div key={log.id} style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       padding: '8px 0', borderBottom: '1px solid #f5f5f5',
@@ -157,12 +161,12 @@ export default function Subscribe() {
                       </div>
                       <div style={{
                         fontSize: 14, fontWeight: 600,
-                        color: log.amount > 0 ? '#22c55e' : '#ef4444',
+                        color: isConsume ? '#ef4444' : '#22c55e',
                       }}>
-                        {log.amount > 0 ? '+' : ''}{log.amount}
+                        {isConsume ? '-' : '+'}{log.amount}
                       </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               )}
             </div>
