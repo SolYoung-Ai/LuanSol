@@ -399,9 +399,8 @@ export default function Luna() {
           </div>
         ) : (
           <div className="lc-welcome">
-            <img className="lc-welcome-logo" src="./logo.png" alt="Luna" />
-            <h1>我们应该探索什么？</h1>
-            <p>我是 Luna，你的专属设计师。产品、品牌、包装、海报，任何设计想法都可以丢给我。</p>
+            <h1>我是 Luna，你的专属设计师。</h1>
+            <p>产品、品牌、包装、海报，任何设计想法都可以丢给我。</p>
           </div>
         )}
 
