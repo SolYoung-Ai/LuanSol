@@ -155,11 +155,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [apply]);
 
   const signInWithPassword = useCallback(async (account: string, password: string): Promise<ActionResult> => {
-    const auth = await authApi();
-    if (!auth) return { ok: false, message: unavailable('登录') };
+    // 先做本地校验并立即进入加载态，避免等待 SDK 动态下载期间按钮无反馈
     if (!account.trim() || !password) return { ok: false, message: '请填写账号与密码' };
     setBusy(true); setError(null);
     try {
+      const auth = await authApi();
+      if (!auth) { const m = unavailable('登录'); setError(m); return { ok: false, message: m }; }
       const r = await auth.signInWithPassword({ ...accountKey(account), password });
       if (r.error) { const m = r.error.message || '登录失败'; setError(m); return { ok: false, message: m }; }
       if (!r.data?.session) { const m = '登录服务未返回会话，请重试'; setError(m); return { ok: false, message: m }; }

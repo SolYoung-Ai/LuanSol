@@ -34,6 +34,13 @@ export function LoginDialog({ open, onClose, onDone }: {
     if (!open) { setMsg(null); setCode(''); setPassword(''); a.cancelCode(); }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 出现提示（尤其错误）时自动滚动到可见区，避免手机端提示落在视口外看似「没反应」
+  useEffect(() => {
+    if (!msg) return;
+    const el = document.querySelector('.login-msg');
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [msg]);
+
   // 登录/注册成功后直接关闭弹窗：不再弹「账号」面板（已登录信息页已能查看），
   // 用户留在原地继续干活。
   const done = (text: string) => { setMsg({ ok: true, text }); onDone?.(text); onClose(); };
