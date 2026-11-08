@@ -1,7 +1,7 @@
 /* ============================================================
  * 积分 / 充值页（2026-11 改版）
  * ------------------------------------------------------------
- *  - 积分制：聊天免费、Seedream Flash 6/张、Pro 15/张
+ * 积分制：聊天免费、Seedream Flash 6/张、Pro 10/张
  *  - 新注册送 100 积分；包月 ¥299 = 3000 积分/月
  *  - 充值包：¥99=1000 / ¥199=2100 / ¥299=3500（支付未开放，先做卡片）
  *  - 底部：兑换码兑换入口
@@ -178,20 +178,23 @@ export default function Subscribe() {
     <Card className="pad-card">
       <SectionLabel en={lang === 'en' ? '' : 'RATES'}>{t('积分单价', 'Credit rates')}</SectionLabel>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-        <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
-          <div style={{ fontWeight: 600 }}>{t('对话', 'Chat')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}>{t('免费', 'Free')}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>DeepSeek / Kimi / Doubao-Seed</div>
+        <div style={{ padding: 14, background: 'var(--v4-ios-fill)', border: '1px solid var(--v4-glass-border)', borderRadius: 10 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('对话', 'Chat')}</div>
+          <div style={{ color: '#171717', fontSize: 15, fontWeight: 600 }}>{t('免费', 'Free')}</div>
+          <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>DeepSeek / Kimi / Doubao-Seed / GLM</div>
         </div>
-        <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
-          <div style={{ fontWeight: 600 }}>{t('图像 · Flash', 'Image · Flash')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imageFlash} {t('/张', '/img')}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Flash · 快</div>
+        <div style={{ padding: 14, background: 'var(--v4-ios-fill)', border: '1px solid var(--v4-glass-border)', borderRadius: 10 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('图像 · Flash', 'Image · Flash')}</div>
+          <div style={{ color: '#171717', fontSize: 15, fontWeight: 600 }}><Coin size={14} />{PRICING.costs.imageFlash} {t('/张', '/img')}</div>
+          <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>Seedream 5.0 Flash · 快速出图</div>
         </div>
-        <div style={{ padding: 12, background: '#fafafa', borderRadius: 8 }}>
-          <div style={{ fontWeight: 600 }}>{t('图像 · Pro', 'Image · Pro')}</div>
-          <div style={{ color: '#666', fontSize: 13 }}><Coin size={14} />≈{PRICING.costs.imagePro} {t('/张', '/img')}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>Seedream 5.0 Pro · 精细</div>
+        <div style={{ padding: 14, background: 'var(--v4-glass-bg-strong)', border: '1px solid var(--v4-glass-border)', borderRadius: 10, boxShadow: 'var(--v4-glass-shadow)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontWeight: 600 }}>{t('图像 · Pro', 'Image · Pro')}</span>
+            <Tag tone="green">{t('精细', 'Pro')}</Tag>
+          </div>
+          <div style={{ color: '#171717', fontSize: 15, fontWeight: 600 }}><Coin size={14} />{PRICING.costs.imagePro} {t('/张', '/img')}</div>
+          <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>Seedream 5.0 Pro · 高细节，仅比 Flash 多 4 积分</div>
         </div>
       </div>
       <p style={{ color: '#999', fontSize: 12, marginTop: 12 }}>
@@ -233,7 +236,7 @@ export default function Subscribe() {
       <SectionLabel en={lang === 'en' ? '' : 'TOP-UP'}>{t('充值积分包', 'Top-up packs')}</SectionLabel>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
         {PRICING.recharge.map((p) => (
-          <div key={p.price} style={{ padding: 16, border: '2px solid #eee', borderRadius: 12, textAlign: 'center' }}>
+          <div key={p.price} style={{ padding: 16, background: 'var(--v4-ios-fill)', border: '1px solid var(--v4-glass-border)', borderRadius: 12, textAlign: 'center' }}>
             <div style={{ fontSize: 12, color: '#999' }}>{p.tag}</div>
             <div style={{ fontSize: 28, fontWeight: 700, margin: '8px 0' }}>¥{p.price}</div>
             <div style={{ color: '#666' }}><Coin size={16} />{p.points}</div>

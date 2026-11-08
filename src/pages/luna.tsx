@@ -34,8 +34,9 @@ const toPlainText = (s: string) =>
     .trim();
 
 /* --------------------------- 思考过程折叠块 --------------------------- */
-function ReasoningBlock({ reasoning, defaultOpen }: { reasoning: string; defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+function ReasoningBlock({ reasoning }: { reasoning: string }) {
+  // 默认折叠，避免一大串思考内容刷屏；用户点击标题可自行展开
+  const [open, setOpen] = useState(false);
   return (
     <div className="lc-reason">
       <button className="lc-reason-head" onClick={() => setOpen((o) => !o)}>
@@ -109,14 +110,14 @@ function ChatModelMenu({ model, onModel }: { model: string; onModel: (m: string)
 }
 
 /* --------------------------- 单条消息 --------------------------- */
-function Bubble({ m, isLast }: { m: LunaMessage; isLast: boolean }) {
+function Bubble({ m }: { m: LunaMessage }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const isUser = m.role === 'user';
   return (
     <div className={`lc-msg ${isUser ? 'user' : 'assistant'}`}>
       <div className="lc-msg-avatar">{isUser ? '我' : <img src="./logo.png" alt="Luna" />}</div>
       <div className="lc-msg-body">
-        {m.reasoning && <ReasoningBlock reasoning={m.reasoning} defaultOpen={isLast} />}
+        {m.reasoning && <ReasoningBlock reasoning={m.reasoning} />}
         {m.content && m.content !== '（参考图）' && (
           <div className={`lc-msg-text ${m.error ? 'error' : ''}`}>{toPlainText(m.content)}</div>
         )}
@@ -314,7 +315,7 @@ export default function Luna() {
           <div className="lc-scroll" ref={scrollRef}>
             <div className="lc-thread">
               {messages.map((m, i) => (
-                <Bubble key={m.id} m={m} isLast={i === messages.length - 1} />
+                <Bubble key={m.id} m={m} />
               ))}
               {chat.busy && (
                 <div className="lc-msg assistant">
