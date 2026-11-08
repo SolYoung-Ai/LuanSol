@@ -1047,8 +1047,7 @@ img, svg, video, canvas { max-width: 100%; }
   transition: border-color var(--v4-dur-fast) var(--v4-ease), background-color var(--v4-dur-fast) var(--v4-ease);
 }
 .lc-tier-btn:hover { border-color: var(--v4-line-strong); background: var(--v4-surface); }
-.lc-tier-name { font-weight: 600; }
-.lc-tier-cost { color: var(--v4-ink-3); }
+.lc-tier-brand { font-weight: 600; font-size: 12px; }
 .lc-backdrop { position: fixed; inset: 0; z-index: 20; }
 .lc-tier-menu {
   position: absolute; bottom: 40px; right: 0; z-index: 21;

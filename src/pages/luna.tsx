@@ -54,8 +54,7 @@ function TierMenu({ tier, onTier }: { tier: ImageTier; onTier: (t: ImageTier) =>
   return (
     <div className="lc-tier">
       <button className="lc-tier-btn" onClick={() => setOpen((o) => !o)} title="生图档位">
-        <span className="lc-tier-name">{tierShort(tier)}</span>
-        <span className="lc-tier-cost">{tierCost(tier)}积分</span>
+        <span className="lc-tier-brand">Seedream 5.0</span>
         <Icon name="chevronDown" size={13} />
       </button>
       {open && (
@@ -68,7 +67,7 @@ function TierMenu({ tier, onTier }: { tier: ImageTier; onTier: (t: ImageTier) =>
                 className={`lc-tier-opt ${t === tier ? 'sel' : ''}`}
                 onClick={() => { onTier(t); setOpen(false); }}
               >
-                <span>{tierName(t)}</span>
+                <span>{tierShort(t)}</span>
                 <span className="lc-tier-opt-cost">{tierCost(t)}积分</span>
               </button>
             ))}
