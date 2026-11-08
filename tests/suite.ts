@@ -19,6 +19,9 @@ import { DEFAULT_AI, aiEnabled, aiMode, aiStatusLabel } from '../src/engine/llm'
 import { AI_TASKS, TASK_FOR_STEP } from '../src/ai/tasks';
 import { buildAIContext, contextText } from '../src/ai/context';
 import { runAITask, registerAITransport, resetAITransport, aiCapabilitySummary } from '../src/ai/provider';
+import { assembleDesign, inferStructure } from '../src/workflow/assembler';
+import { createInitialWorkflow } from '../src/types';
+import type { DesignTask, ProjectWorkflow } from '../src/types';
 
 export interface Result { name: string; ok: boolean; detail: string }
 const A = (cond: unknown, msg: string) => { if (!cond) throw new Error(msg); };
@@ -481,6 +484,92 @@ export async function runTests(): Promise<Result[]> {
     return 'local / ai / fallback / 合规拦截 四条路径均正确';
   });
 
+  /* ---------------- P3 自动组装引擎 ---------------- */
+  /** 构造一个带成功任务的工作流（盒类） */
+  function sampleWorkflow(): ProjectWorkflow {
+    const wf = createInitialWorkflow();
+    wf.productInfo = {
+      ...wf.productInfo,
+      description: '桂花乌龙茶礼盒，深茶绿底，净含量 200g',
+      productName: '桂花乌龙茶', brandName: '山隐茶集', productType: '茶叶',
+      packagingType: '包装盒', expectedSize: '200 × 150 × 80mm',
+    };
+    wf.analysis = {
+      productSummary: '桂花乌龙茶礼盒', category: '茶叶', keyFeatures: [],
+      palette: [
+        { hex: '#20463a', rgb: '32,70,58', role: 'background' },
+        { hex: '#c8a86b', rgb: '200,168,107', role: 'accent' },
+        { hex: '#f3eee4', rgb: '243,238,228', role: 'ink' },
+      ],
+      materials: [], finishing: [], structureSuggestion: 'tuck',
+      visualDirection: '', risks: [], opportunities: [],
+    } as never;
+    const bgTask: DesignTask = {
+      id: 't1', type: 'background', name: '深茶绿底纹', face: 'all',
+      description: '', prompt: '深茶绿底纹', imageTier: 'flash', status: 'success',
+      variants: [{
+        src: 'data:image/png;base64,AAAA', at: 1, prompt: '深茶绿底纹',
+        model: 'flash', tier: 'flash', naturalW: 1024, naturalH: 1024,
+      }],
+      selectedVariant: 0,
+    };
+    const pendingTask: DesignTask = {
+      id: 't2', type: 'illustration', name: '桂花插画', face: 'front',
+      description: '', prompt: '桂花插画', imageTier: 'flash', status: 'pending', variants: [], selectedVariant: 0,
+    };
+    wf.tasks = [bgTask, pendingTask];
+    return wf;
+  }
+
+  await t('结构推断 · 按包装形态识别 7 种结构', () => {
+    const mk = (packagingType: string) => {
+      const wf = createInitialWorkflow();
+      wf.productInfo = { ...wf.productInfo, packagingType };
+      return wf;
+    };
+    A(inferStructure(mk('自立袋')) === 'pouch', '自立袋识别错误');
+    A(inferStructure(mk('产品标签')) === 'labelRect', '标签识别错误');
+    A(inferStructure(mk('天地盖盒')) === 'topBottom', '天地盖识别错误');
+    A(inferStructure(mk('抽屉盒')) === 'drawer', '抽屉识别错误');
+    A(inferStructure(mk('包装盒')) === 'tuck', '默认盒识别错误');
+    return '5 类结构推断正确';
+  });
+
+  await t('自动组装 · 成功任务成图层、文字独立可编辑、未成功任务不造假', () => {
+    const doc = assembleDesign(sampleWorkflow());
+    const faceList = Object.values(doc.faces);
+    A(faceList.length >= 5, `盒类应含 5 个面，实际 ${faceList.length}`);
+    // 每个面都应纳入通用背景图（满版 cover）
+    for (const f of faceList) {
+      const imgs = f.layers.filter((l) => l.type === 'image');
+      A(imgs.length === 1, `面 ${f.id} 应只有 1 个背景图层，实际 ${imgs.length}`);
+      const bg = imgs[0] as import('../src/types').ImageLayer;
+      A(bg.fit === 'cover' && bg.w === f.w && bg.h === f.h, '背景图未满版 cover');
+    }
+    // 正面额外有 3 个真实文字图层（品牌/产品/规格）
+    const front = doc.faces.front!;
+    const texts = front.layers.filter((l) => l.type === 'text') as import('../src/types').TextLayer[];
+    A(texts.length === 3, `正面应有 3 个文字图层，实际 ${texts.length}`);
+    A(texts.some((x) => x.text === '山隐茶集'), '品牌名未作为文字图层');
+    A(texts.some((x) => x.text === '桂花乌龙茶'), '产品名未作为文字图层');
+    A(texts.some((x) => /200g/.test(x.text)), '净含量未提取');
+    // pending 的插画任务不应产生图层
+    A(!front.layers.some((l) => l.type === 'image' && l.name === '桂花插画'), '未成功任务被造假图层');
+    // 配色取自分析报告
+    A(doc.palette.bg === '#20463a', '背景色未取自分析报告');
+    return `${faceList.length} 面 / 正面 ${texts.length} 文字层 / 无假图层`;
+  });
+
+  await t('自动组装 · 无分析报告时给真实兜底不崩溃', () => {
+    const wf = sampleWorkflow();
+    wf.analysis = null;
+    const doc = assembleDesign(wf);
+    A(!!doc.palette.bg && /^#/.test(doc.palette.bg), '兜底配色缺失');
+    A(Object.values(doc.faces).length >= 5, '兜底面数量异常');
+    return '缺分析报告仍能组装，配色与文字走兜底';
+  });
+
+  /* ---------------- 云账号 · 用户名/邮箱/手机号分别归一化 ---------------- */
   await t('云账号 · 用户名/邮箱/手机号分别归一化，注册只认手机号或邮箱', () => {
     A(accountKey('lunasol_user').username === 'lunasol_user', '用户名归一化错误');
     A(accountKey('a@b.com').email === 'a@b.com', '邮箱归一化错误');

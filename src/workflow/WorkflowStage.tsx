@@ -15,6 +15,7 @@ import { PRICING } from '../cloud/plans';
 import type { DesignTask, TaskVariant, ImageTier } from '../types';
 import { callSeedream } from '../engine/seedream';
 import { planTasks } from './planner';
+import { assembleDesign, inferStructure, buildBrief, refineTextColors } from './assembler';
 import CanvasView from './CanvasView';
 import { uid } from '../engine/utils';
 import { Icon } from '../components/icons';
@@ -48,7 +49,7 @@ function naturalSize(src: string): Promise<{ w: number; h: number }> {
 }
 
 export default function WorkflowStage() {
-  const { s, patchWorkflow, setToast, addAsset } = useApp();
+  const { s, patchWorkflow, updateProject, setToast, addAsset } = useApp();
   const auth = useAuth();
   const sub = useSubscription();
   const project = s.projects.find((p) => p.id === s.activeId);
@@ -58,6 +59,7 @@ export default function WorkflowStage() {
   const [planError, setPlanError] = useState('');
   const [preview, setPreview] = useState<TaskVariant | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'canvas'>('list');
+  const [assembling, setAssembling] = useState(false);
 
   if (!wf || !project) return null;
   const tasks = wf.tasks || [];
@@ -141,6 +143,59 @@ export default function WorkflowStage() {
     setToast(`「${task.name}」已加入素材库`);
   };
 
+  /** 批量把所有已完成且未入库的素材加入素材库（跳过已入库的，避免重复） */
+  const addAllToLibrary = () => {
+    const done = tasks.filter((t) => t.status === 'success' && !t.assetId);
+    if (!done.length) { setToast('没有需要新增的素材（已完成的都已入库）'); return; }
+    const nextTasks = tasks.map((t) => {
+      if (t.status !== 'success' || t.assetId) return t;
+      const v = t.variants[t.selectedVariant];
+      if (!v) return t;
+      const assetId = uid('asset');
+      addAsset({
+        id: assetId,
+        name: t.name,
+        src: v.src,
+        kind: 'generated',
+        category: toAssetCategory(t.type),
+        naturalW: v.naturalW,
+        naturalH: v.naturalH,
+        favorite: false,
+        projectId: project.id,
+        sourcePrompt: v.prompt,
+        createdAt: Date.now(),
+      });
+      return { ...t, assetId };
+    });
+    patchWorkflow(project.id, { tasks: nextTasks });
+    setToast(`已把 ${done.length} 个素材加入素材库`);
+  };
+
+  /** 自动组装：把成功任务 + 真实文字图层组装成 DesignDoc，按真实背景修正文字颜色，写入项目并进入组装阶段 */
+  const handleAssemble = async () => {
+    const done = tasks.filter((t) => t.status === 'success');
+    if (!done.length) { setToast('请先生成至少一个素材，再进行自动组装'); return; }
+    setAssembling(true);
+    try {
+      const doc = assembleDesign(wf);
+      // 采样真实满版背景图，修正文字颜色，避免深底配深字看不清
+      await refineTextColors(doc);
+      updateProject(project.id, {
+        design: doc,
+        brief: buildBrief(wf),
+        structure: inferStructure(wf),
+        scheme: 'minimal',
+        status: 'designing',
+      });
+      patchWorkflow(project.id, { stage: 'assembled' });
+      setToast('已自动组装成包装工程，可进入编辑器继续调整');
+    } catch (e: any) {
+      setToast(e.message || '自动组装失败');
+    } finally {
+      setAssembling(false);
+    }
+  };
+
   // —— 空态：AI 拆分任务 ——
   if (tasks.length === 0) {
     return (
@@ -214,6 +269,36 @@ export default function WorkflowStage() {
           ))}
         </div>
       )}
+
+      {/* 底部操作：批量入库 + 自动组装 */}
+      <div style={{
+        marginTop: 24, padding: 20, borderRadius: 12, background: '#fafafa',
+        border: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#222' }}>素材入库与自动组装</div>
+        <p style={{ fontSize: 12, color: '#888', margin: 0, lineHeight: 1.7 }}>
+          已完成 {doneCount}/{tasks.length} 个素材。可一键全部加入素材库（跨项目复用），
+          或直接自动组装成完整包装工程：AI 图片作为独立图层，品牌/产品名/净含量为可编辑文字，不伪造条码与 Logo。
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={addAllToLibrary}
+            className="v4-btn-line"
+            style={{ padding: '10px 18px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Icon name="layers" size={15} /> 全部加入素材库
+          </button>
+          <button
+            onClick={handleAssemble}
+            disabled={assembling || doneCount === 0}
+            className="v4-btn-dark"
+            style={{ padding: '10px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Icon name="spark" size={15} />
+            {assembling ? '组装中…' : '自动组装包装工程'}
+          </button>
+        </div>
+      </div>
 
       {/* 大图预览 */}
       {preview && (

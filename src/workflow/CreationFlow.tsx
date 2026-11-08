@@ -1,7 +1,7 @@
 /* AI 创作流程容器：按 workflow.stage 渲染对应阶段，刷新后可从同一阶段恢复。
  * 未实现的节点工作流/组装阶段做诚实降级，不放假按钮。 */
 import React, { useEffect, useState } from 'react';
-import type { ProjectWorkflow, WorkflowStage } from '../types';
+import type { Project, ProjectWorkflow, WorkflowStage } from '../types';
 import { useApp } from '../store';
 import CreationEntry from './CreationEntry';
 import AnalysisStage from './AnalysisStage';
@@ -19,7 +19,10 @@ const STEPS: { stage: WorkflowStage; label: string }[] = [
 ];
 
 /** 根据已存在的数据判断最远可到达的阶段（数据在就能回去，不依赖 currentIdx） */
-function farthestStage(wf: ProjectWorkflow): WorkflowStage {
+function farthestStage(project: Project): WorkflowStage {
+  if (project.design) return 'assembled';
+  const wf = project.workflow;
+  if (!wf) return 'entry';
   if (wf.tasks.length > 0) return 'workflow';
   if (wf.selectedConceptId) return 'planning';
   if (wf.concepts.length > 0) return 'concepts';
@@ -106,39 +109,117 @@ function StepBar({
   );
 }
 
-/** 未实现阶段的诚实面板 */
-function ComingNext({ stage }: { stage: WorkflowStage }) {
+/** 组装结果阶段：展示各面预览 + 进入编辑器 */
+function AssembledStage() {
   const { s } = useApp();
   const project = s.projects.find((p) => p.id === s.activeId);
-  const concept = project?.workflow?.concepts.find((c) => c.id === project.workflow?.selectedConceptId);
+  const doc = project?.design;
+
+  if (!project || !doc) {
+    return (
+      <div className="page" style={{ maxWidth: 560, margin: '0 auto', padding: '70px 20px', textAlign: 'center' }}>
+        <h2 style={{ fontSize: 18 }}>还没有组装结果</h2>
+        <p style={{ color: '#888', fontSize: 13 }}>请先在工作流生成素材并自动组装。</p>
+      </div>
+    );
+  }
+
+  const faceEntries = Object.entries(doc.faces);
+  const totalLayers = faceEntries.reduce((n, [, f]) => n + f.layers.length, 0);
 
   return (
-    <div className="page" style={{ maxWidth: 640, margin: '0 auto', padding: '70px 20px', textAlign: 'center' }}>
-      <div style={{ color: '#888', marginBottom: 18 }}><Icon name="brain" size={36} /></div>
-      <h2 style={{ fontSize: 20, color: '#222', margin: '0 0 10px' }}>节点工作流正在开发中</h2>
-      <p style={{ color: '#888', fontSize: 13, lineHeight: 1.8, margin: 0 }}>
-        你已确认设计方向
-        {concept ? `「${concept.name}」` : ''}
-        。下一步的任务拆分、节点式 AI 素材生成与自动组装属于 P1–P3 阶段，当前版本尚未开放，不会用假按钮演示。
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 20px 80px' }}>
+      <h2 style={{ fontSize: 20, margin: '0 0 6px', color: '#222' }}>AI 自动组装完成</h2>
+      <p style={{ fontSize: 13, color: '#888', lineHeight: 1.8, margin: '0 0 20px' }}>
+        共 {faceEntries.length} 个面、{totalLayers} 个图层。AI 图片均为独立图层，品牌/产品名/净含量为可编辑文字图层，
+        未用整张图片充当印刷稿，未伪造条码与 Logo。进入编辑器后可逐图层调整文字、位置、尺寸与配色。
       </p>
 
-      <div style={{ marginTop: 28, display: 'flex', justifyContent: 'center', gap: 12 }}>
+      {/* 各面预览 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+        {faceEntries.map(([fid, face]) => (
+          <div key={fid} style={{ border: '1px solid #eee', borderRadius: 12, padding: 12, background: '#fff' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#444', marginBottom: 8 }}>
+              {FACE_NAME[fid] || fid}
+              <span style={{ color: '#bbb', fontWeight: 400, marginLeft: 6 }}>
+                {Math.round(face.w)}×{Math.round(face.h)}mm · {face.layers.length}层
+              </span>
+            </div>
+            <FaceThumb face={face} />
+          </div>
+        ))}
+      </div>
+
+      {/* 组装说明 */}
+      {doc.rationale && (
+        <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: '#fafafa', border: '1px solid #eee', fontSize: 12, color: '#777', lineHeight: 1.8 }}>
+          {doc.rationale}
+        </div>
+      )}
+
+      {/* 操作行 */}
+      <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => { window.location.hash = `#/studio?id=${project.id}`; }}
+          className="v4-btn-dark"
+          style={{ padding: '12px 26px', fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+        >
+          <Icon name="spark" size={16} /> 进入编辑器继续调整
+        </button>
+        <button
+          onClick={() => { window.location.hash = '#/workflow'; }}
+          className="v4-btn-line"
+          style={{ padding: '12px 22px', fontSize: 14 }}
+        >
+          返回工作流
+        </button>
         <button
           onClick={() => { window.location.hash = '#/workspace'; }}
           className="v4-btn-line"
-          style={{ padding: '11px 22px' }}
+          style={{ padding: '12px 22px', fontSize: 14 }}
         >
           返回工作台
         </button>
-        {project && (
-          <button
-            onClick={() => { window.location.hash = `#/studio?id=${project.id}`; }}
-            className="v4-btn-dark"
-            style={{ padding: '11px 24px' }}
-          >
-            进入现有包装编辑器
-          </button>
-        )}
+      </div>
+    </div>
+  );
+}
+
+const FACE_NAME: Record<string, string> = {
+  front: '正面', back: '背面', left: '左侧面', right: '右侧面', top: '顶面',
+};
+
+/** 单面缩略图：固定渲染宽度后整体缩放，保证 mm 坐标与字号比例一致 */
+const RENDER_W = 240;
+function FaceThumb({ face }: { face: import('../types').Face }) {
+  const scale = RENDER_W / face.w;
+  return (
+    <div style={{ width: '100%', position: 'relative', paddingTop: `${(face.h / face.w) * 100}%`, overflow: 'hidden', borderRadius: 8 }}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <div style={{ width: face.w, height: face.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'relative', background: face.bg, overflow: 'hidden' }}>
+          {face.layers.map((l) => {
+            const base: React.CSSProperties = {
+              position: 'absolute', left: l.x, top: l.y, width: l.w, height: l.h,
+              opacity: l.opacity, transform: l.rotation ? `rotate(${l.rotation}deg)` : undefined,
+            };
+            if (l.type === 'image') {
+              return <img key={l.id} src={l.src} alt={l.name} style={{ ...base, objectFit: l.fit }} />;
+            }
+            if (l.type === 'text') {
+              return (
+                <div key={l.id} style={{
+                  ...base, color: l.color, fontSize: l.fontSize, fontWeight: l.fontWeight,
+                  fontFamily: l.fontFamily, textAlign: l.align, letterSpacing: l.letterSpacing,
+                  lineHeight: l.lineHeight, display: 'flex', flexDirection: 'column',
+                  justifyContent: 'center', alignItems: l.align === 'center' ? 'center' : l.align === 'right' ? 'flex-end' : 'flex-start',
+                }}>
+                  {l.text}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
       </div>
     </div>
   );
@@ -183,7 +264,7 @@ export default function CreationFlow() {
       body = <WorkflowStageView />;
       break;
     case 'assembled':
-      body = <ComingNext stage={wf.stage} />;
+      body = <AssembledStage />;
       break;
     default:
       body = <CreationEntry />;
@@ -191,7 +272,7 @@ export default function CreationFlow() {
 
   return (
     <div>
-      <StepBar current={wf.stage} farthest={farthestStage(wf)} onStepClick={goStage} onSave={handleSave} />
+      <StepBar current={wf.stage} farthest={farthestStage(project)} onStepClick={goStage} onSave={handleSave} />
       {body}
     </div>
   );

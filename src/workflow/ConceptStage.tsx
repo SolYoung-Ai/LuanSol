@@ -52,7 +52,7 @@ export default function ConceptStage() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+      <div className="concept-grid" style={{ display: 'grid', gap: 14 }}>
         {concepts.map((c) => {
           const selected = selectedId === c.id;
           return (

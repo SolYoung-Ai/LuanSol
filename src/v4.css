@@ -1313,3 +1313,51 @@ img, svg, video, canvas { max-width: 100%; }
   .modal-buttons .v4-btn-line,
   .modal-buttons .v4-btn-dark { width: 100%; }
 }
+
+/* ============================================================
+ * AI 原生创作流程（/new）移动端适配
+ * ============================================================ */
+/* 设计方案卡片：桌面 3 列，平板 2 列，手机 1 列 */
+.concept-grid { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) {
+  .concept-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .concept-grid { grid-template-columns: 1fr; }
+}
+
+/* 分析报告内的两列表单在极窄屏改为单列，避免输入框挤压 */
+@media (max-width: 480px) {
+  .page .field-grid-2 { grid-template-columns: 1fr !important; }
+}
+
+/* 工作流页面与组装结果在手机上收紧内边距，按钮占满整行便于点按 */
+@media (max-width: 600px) {
+  .page { padding-left: 14px; padding-right: 14px; }
+  .concept-grid .v4-btn-line,
+  .concept-grid .v4-btn-dark { width: 100%; }
+}
+
+/* ============================================================
+ * 编辑器（/studio）移动端：桌面三栏改为可堆叠，保证不横向溢出
+ * 左侧工具条保持窄列，AI 面板与右侧面板在窄屏可横向收起
+ * ============================================================ */
+@media (max-width: 860px) {
+  /* 内联样式优先级高，必须用 !important 才能覆盖 100vh/overflow:hidden */
+  .editor-shell {
+    height: auto !important;
+    min-height: 100vh;
+    overflow: visible !important;
+  }
+  .editor-body {
+    flex: none !important;
+    flex-direction: column;
+  }
+  .editor-ai-panel { width: 100% !important; border-right: none !important; border-bottom: 1px solid #e5e5e5; }
+  .editor-ai-panel > div { width: 100% !important; }
+  .editor-right-panel {
+    width: 100% !important; border-left: none !important;
+    border-top: 1px solid #e5e5e5;
+  }
+  .editor-shell .studio-canvas-wrap { min-height: 56vh; }
+}

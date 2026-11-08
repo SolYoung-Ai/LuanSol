@@ -18,18 +18,20 @@ export default function EditorShell() {
       <TopToolbar />
 
       {/* 主体工作区 */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+      <div className="editor-body" style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* 左侧纵向工具栏 */}
         <LeftToolbar />
 
         {/* AI 对话面板 */}
-        <AIAssistant />
+        <div className="editor-ai-panel" style={{ display: 'flex', minWidth: 0 }}>
+          <AIAssistant />
+        </div>
 
         {/* 中间画布 */}
         <DesignCanvas />
 
         {/* 右侧属性 + 图层 */}
-        <div style={{
+        <div className="editor-right-panel" style={{
           width: 300, borderLeft: '1px solid #e5e5e5',
           display: 'flex', flexDirection: 'column', background: '#fff', minWidth: 0,
         }}>

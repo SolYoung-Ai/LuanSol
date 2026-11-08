@@ -102,6 +102,8 @@ interface AppCtx {
   }) => Project;
   /** V2：局部更新某项目的工作流数据，刷新 updatedAt */
   patchWorkflow: (projectId: string, patch: Partial<ProjectWorkflow>) => void;
+  /** V2：更新项目顶层字段（如组装后的 design、structure），刷新 updatedAt */
+  updateProject: (projectId: string, patch: Partial<Project>) => void;
   addVersion: (label: string) => void;
   restoreVersion: (id: string) => void;
   addAsset: (asset: Asset) => void;
@@ -304,6 +306,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  /** V2：更新项目顶层字段（如组装后的 design、structure），同步刷新 updatedAt。 */
+  const updateProject = useCallback((projectId: string, patch: Partial<Project>) => {
+    setS((prev) => ({
+      ...prev,
+      projects: prev.projects.map((p) =>
+        p.id === projectId ? { ...p, ...patch, updatedAt: Date.now() } : p,
+      ),
+    }));
+  }, []);
+
   // —— 独立素材库 ——
   const addAsset = useCallback((asset: Asset) => setS((prev) => ({
     ...prev, assets: [asset, ...prev.assets],
@@ -334,7 +346,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value: AppCtx = {
     s, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
     saveProject, syncProject, loadProject, mergeCloudProjects, deleteProject, duplicateProject, newProject,
-    createWorkflowProject, patchWorkflow,
+    createWorkflowProject, patchWorkflow, updateProject,
     addVersion, restoreVersion,
     addAsset, removeAsset, toggleFavoriteAsset,
   };
