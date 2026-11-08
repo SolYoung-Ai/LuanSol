@@ -59,7 +59,7 @@ python3 -m http.server 8765 --bind 127.0.0.1
 
 未配置模型时，需求解析与视觉素材由**内置确定性引擎**完成，界面明确标注「内置解析 / 内置基础引擎」，不会把模拟结果伪装成 AI 生成。可手动创建项目、生成方案、编辑文字、上传图片、保存恢复、导出基础印刷文件。
 
-配置自己的 OpenAI 兼容接口后启用真实 AI：需求深度理解、对话修改补丁、真实图像模型生成原创插画素材。详见 [docs/AI_SETUP.md](docs/AI_SETUP.md)。
+配置自己的 OpenAI 兼容接口后启用真实 AI：需求深度理解、对话修改补丁、真实图像模型生成原创插画素材。
 
 ## 目录
 
@@ -71,9 +71,7 @@ src/
   store.tsx    全局项目仓库（IndexedDB）
   App.tsx      hash 路由（无需服务端 rewrite）
 tests/         suite.ts（Node + 浏览器共用断言）/ browser.html / e2e.html
-docs/          AI_SETUP.md / DEPLOY.md / TEST_REPORT.md
-docs/deploy-workflow.yml   GitHub Pages 自动部署工作流模板
-.github/workflows/         本地同内容副本（需具备 workflow 权限的令牌才能推送）
+.github/workflows/         GitHub Pages 自动部署工作流
 ```
 
 ## 明确的边界（重要）
@@ -84,5 +82,3 @@ docs/deploy-workflow.yml   GitHub Pages 自动部署工作流模板
 - **食品 / 化妆品等标签的法规信息需用户自行核实**：系统只检查信息完整性与排版，占位文字会被明确标红提示，不宣称合规。
 - **结构校验由几何计算完成**，不由模型判断能否生产；极端比例会给出警告。
 - **无自有后端**：项目数据保存在用户浏览器，跨设备用 JSON 导入导出；不依赖虚构服务。
-
-更多交付说明见 [docs/TEST_REPORT.md](docs/TEST_REPORT.md)，部署见 [docs/DEPLOY.md](docs/DEPLOY.md)。
