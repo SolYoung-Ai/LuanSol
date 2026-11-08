@@ -73,14 +73,12 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     { label: t('我的工作台', 'Workspace'), path: '/workspace' },
     { label: t('账号信息', 'Account'), path: '/account' },
     { label: t('订阅与会员', 'Membership'), path: '/subscribe' },
-    { label: t('个人设置', 'Preferences'), path: '/settings' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
   ];
   const userItems: { label: string; path?: string; action?: () => void; adminOnly?: boolean }[] = [
     { label: t('个人资料', 'Profile'), path: '/account' },
     { label: t('积分与充值', 'Credits & Recharge'), path: '/subscribe' },
     { label: t('账号安全', 'Security'), path: '/security' },
-    { label: t('设计偏好', 'Preferences'), path: '/settings' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
     { label: t('开发者管理', 'Developer'), path: '/admin', adminOnly: true },
   ];

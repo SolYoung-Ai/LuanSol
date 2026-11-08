@@ -61,7 +61,7 @@ export default function Subscribe() {
     setToast(r.message);
   };
 
-  const left = sub.usedLeft ?? PRICING.freeTrialUses;
+  const left = sub.usedLeft;
   const pro = sub.isPro;
 
   const redeem = async () => {
@@ -118,10 +118,10 @@ export default function Subscribe() {
         : <>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '12px 0' }}>
             <Coin size={36} />
-            <strong style={{ fontSize: 40, lineHeight: 1 }}>{left}</strong>
+            <strong style={{ fontSize: 40, lineHeight: 1 }}>{left ?? '…'}</strong>
             <span style={{ color: '#888' }}>{t('积分可用', 'credits available')}</span>
           </div>
-          <div className="quota-bar"><span style={{ width: `${Math.min(100, (left / Math.max(1, pro ? PRICING.proMonthlyQuota : PRICING.freeTrialUses)) * 100)}%` }} /></div>
+          <div className="quota-bar"><span style={{ width: `${left == null ? 0 : Math.min(100, (left / Math.max(1, pro ? PRICING.proMonthlyQuota : PRICING.freeTrialUses)) * 100)}%` }} /></div>
           <div style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <Tag tone="green">{pro ? t(`会员 · ¥${PRICING.proMonthlyPriceRMB}/月`, `Member · ¥${PRICING.proMonthlyPriceRMB}/mo`) : t('免费版', 'Free')}</Tag>
             {pro && sub.sub?.period_end && <Tag>{t('有效期至', 'Valid until')} {new Date(sub.sub.period_end).toLocaleDateString()}</Tag>}

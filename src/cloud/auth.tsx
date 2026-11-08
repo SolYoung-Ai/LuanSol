@@ -49,8 +49,8 @@ interface AuthCtx {
   signOut: () => Promise<ActionResult>;
   /** 更新昵称 / 头像（真改 CloudBase user_metadata） */
   updateProfile: (p: { nickName?: string; avatarUrl?: string }) => Promise<ActionResult>;
-  /** 修改密码：需要旧密码 */
-  changePassword: (oldPassword: string, newPassword: string) => Promise<ActionResult>;
+  /** 设置密码：已登录会话即身份验证，手机验证码登录可直接设置 */
+  changePassword: (newPassword: string, oldPassword?: string) => Promise<ActionResult>;
   /** 绑定/换绑邮箱或手机：第一步发验证码 */
   startLink: (kind: 'email' | 'phone', target: string) => Promise<ActionResult>;
   /** 绑定/换绑：校验验证码完成绑定 */
@@ -275,16 +275,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) { return { ok: false, message: errorMessage(e, '更新失败') }; } finally { setBusy(false); }
   }, [apply, session]);
 
-  const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<ActionResult> => {
+  const changePassword = useCallback(async (newPassword: string, _oldPassword?: string): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth?.updatePassword) return { ok: false, message: unavailable('修改密码') };
+    if (!auth?.updatePassword) return { ok: false, message: unavailable('设置密码') };
     if (newPassword.length < 8) return { ok: false, message: '新密码至少 8 位' };
     setBusy(true); setError(null);
     try {
-      const r = await auth.updatePassword(newPassword, oldPassword);
-      if (r.error) return { ok: false, message: r.error.message || '修改失败' };
-      return { ok: true, message: '密码已修改，下次登录请使用新密码' };
-    } catch (e) { return { ok: false, message: errorMessage(e, '修改失败') }; } finally { setBusy(false); }
+      // 已登录会话即身份验证，直接设置新密码（兼容手机验证码登录无旧密码的账号）
+      const r = await auth.updatePassword(newPassword, _oldPassword || '');
+      if (r.error) return { ok: false, message: r.error.message || '设置失败' };
+      return { ok: true, message: '密码已设置，下次登录可使用手机号+密码或验证码登录' };
+    } catch (e) { return { ok: false, message: errorMessage(e, '设置失败') }; } finally { setBusy(false); }
   }, []);
 
   const startLink = useCallback(async (kind: 'email' | 'phone', target: string): Promise<ActionResult> => {

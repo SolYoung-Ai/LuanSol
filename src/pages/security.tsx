@@ -16,8 +16,7 @@ export default function Security() {
   const { setToast } = useApp();
   const [loginOpen, setLoginOpen] = useState(false);
 
-  // 修改密码
-  const [oldPwd, setOldPwd] = useState('');
+  // 设置密码
   const [newPwd, setNewPwd] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
 
@@ -44,9 +43,9 @@ export default function Security() {
 
   const submitChangePwd = async () => {
     if (newPwd !== confirmPwd) { setToast('两次输入的新密码不一致'); return; }
-    const r = await a.changePassword(oldPwd, newPwd);
+    const r = await a.changePassword(newPwd);
     setToast(r.message);
-    if (r.ok) { setOldPwd(''); setNewPwd(''); setConfirmPwd(''); }
+    if (r.ok) { setNewPwd(''); setConfirmPwd(''); }
   };
 
   const sendLinkCode = async () => {
@@ -76,15 +75,14 @@ export default function Security() {
     </Card>
 
     <Card className="pad-card">
-      <SectionLabel en="CHANGE PASSWORD">修改密码</SectionLabel>
-      <label className="field"><span className="field-label">当前密码</span>
-        <input className="input" type="password" value={oldPwd} onChange={(e) => setOldPwd(e.target.value)} autoComplete="current-password" /></label>
+      <SectionLabel en="SET PASSWORD">设置登录密码</SectionLabel>
+      <p style={{ margin: '0 0 12px', color: '#888', fontSize: 13 }}>手机验证码登录后可设置密码，下次用手机号+密码登录。</p>
       <label className="field"><span className="field-label">新密码</span>
         <input className="input" type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} autoComplete="new-password" placeholder="至少 8 位" /></label>
       <label className="field"><span className="field-label">确认新密码</span>
         <input className="input" type="password" value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} autoComplete="new-password" /></label>
       <div className="acct-actions" style={{ marginTop: 12 }}>
-        <Button size="sm" onClick={submitChangePwd} disabled={a.busy || !oldPwd || !newPwd}>{a.busy ? '提交中…' : '修改密码'}</Button>
+        <Button size="sm" onClick={submitChangePwd} disabled={a.busy || !newPwd}>{a.busy ? '提交中…' : '设置密码'}</Button>
       </div>
     </Card>
 
