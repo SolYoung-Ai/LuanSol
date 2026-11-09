@@ -33,6 +33,10 @@ export default function RequirementsStage() {
 
   if (!project || !wf || !info) return null;
 
+  /* 旧草稿里的 productInfo 是加 themeColors 之前存的，这个键根本不存在。
+   * store 载入时已统一迁移，这里再兜一层：渲染阶段绝不假设数组一定存在。 */
+  const colors = Array.isArray(info.themeColors) ? info.themeColors : [];
+
   /** 写入草稿（输入即存，刷新不丢） */
   const set = (patch: Partial<ProductInfo>) => {
     if (!info) return;
@@ -47,8 +51,8 @@ export default function RequirementsStage() {
   };
 
   const toggleColor = (hex: string) => {
-    const has = info.themeColors.includes(hex);
-    set({ themeColors: has ? info.themeColors.filter((c) => c !== hex) : [...info.themeColors, hex] });
+    const has = colors.includes(hex);
+    set({ themeColors: has ? colors.filter((c) => c !== hex) : [...colors, hex] });
   };
 
   const onLogoFile = (file?: File) => {
@@ -104,7 +108,7 @@ export default function RequirementsStage() {
           <span className="wf-hint">点选主色，可多选</span></div>
         <div className="wf-swatches">
           {PRESET_COLORS.map((hex) => {
-            const on = info.themeColors.includes(hex);
+            const on = colors.includes(hex);
             return (
               <button key={hex} className={`wf-swatch ${on ? 'on' : ''}`} onClick={() => toggleColor(hex)}
                 title={hex} style={{ background: hex }}>
@@ -117,13 +121,13 @@ export default function RequirementsStage() {
             <Icon name="plus" size={15} />
             <span>自定义</span>
           </label>
-          <button className="wf-mini-btn" onClick={() => { if (!info.themeColors.includes(customColor)) toggleColor(customColor); }}>
+          <button className="wf-mini-btn" onClick={() => { if (!colors.includes(customColor)) toggleColor(customColor); }}>
             加入 {customColor}
           </button>
         </div>
-        {info.themeColors.length > 0 &&
+        {colors.length > 0 &&
           <div className="wf-chosen-colors">
-            {info.themeColors.map((c) => <span key={c} className="wf-chosen-color" style={{ background: c }} title={c} />)}
+            {colors.map((c) => <span key={c} className="wf-chosen-color" style={{ background: c }} title={c} />)}
             <button className="wf-clear" onClick={() => set({ themeColors: [] })}>清空</button>
           </div>}
 

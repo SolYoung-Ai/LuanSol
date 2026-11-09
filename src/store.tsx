@@ -8,6 +8,7 @@ import { cloneDesign } from './engine/design';
 import { uid } from './engine/utils';
 import { createEmptyDraft, normalizeDraft, type ProjectDraft } from './v3/draft';
 import { createInitialWorkflow } from './types';
+import { migrateProject } from './migrations';
 
 const DB_NAME = 'lunasol-studio';
 const STORE = 'state';
@@ -136,12 +137,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     idbLoad().then((v) => {
-      if (v && typeof v === 'object') setS((prev) => ({
-        ...prev, ...(v as Partial<Persisted>),
-        settings: { ...DEFAULT_SETTINGS, ...(v as Persisted).settings },
-        ai: migrateAI({ ...DEFAULT_AI, ...(v as Persisted).ai }),
-        draft: normalizeDraft((v as Persisted).draft),
-      }));
+      if (v && typeof v === 'object') setS((prev) => {
+        const loaded = v as Partial<Persisted>;
+        return {
+          ...prev,
+          ...loaded,
+          // 旧草稿的 workflow 可能缺后续新增字段，必须在进入 React 之前补全
+          projects: Array.isArray(loaded.projects) ? loaded.projects.map(migrateProject) : prev.projects,
+          settings: { ...DEFAULT_SETTINGS, ...loaded.settings },
+          ai: migrateAI({ ...DEFAULT_AI, ...loaded.ai }),
+          draft: normalizeDraft(loaded.draft),
+        };
+      });
       setReady(true);
     });
   }, []);
@@ -158,7 +165,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const diskProjects = onDisk && typeof onDisk === 'object' && Array.isArray((onDisk as Persisted).projects)
           ? (onDisk as Persisted).projects : [];
         if (diskProjects.length > 0) {
-          setS((prev) => ({ ...(onDisk as Persisted), storage: prev.storage }));
+          setS((prev) => ({ ...(onDisk as Persisted), projects: diskProjects.map(migrateProject), storage: prev.storage }));
           return;
         }
       }
@@ -226,7 +233,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!list.length) return prev;
     const map = new Map(prev.projects.map((p) => [p.id, p]));
     let changed = false;
-    for (const c of list) {
+    // 云端项目同样可能是旧结构（用户换设备 / 之前版本上传的），并入前先补全字段
+    for (const raw of list) {
+      const c = migrateProject(raw);
       const local = map.get(c.id);
       if (!local) { map.set(c.id, c); changed = true; continue; }
       if ((c.updatedAt || 0) > (local.updatedAt || 0)) { map.set(c.id, c); changed = true; }

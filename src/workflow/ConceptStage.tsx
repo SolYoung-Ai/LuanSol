@@ -39,10 +39,11 @@ function naturalSize(src: string): Promise<{ w: number; h: number }> {
 
 /** 由产品信息拼出生图提示词 */
 function buildPrompt(info: ProductInfo, hint: string, extra = ''): string {
+  const colors = Array.isArray(info.themeColors) ? info.themeColors : [];
   const parts = [
     info.productName && `产品：${info.productName}`,
     info.brandName && `品牌：${info.brandName}`,
-    info.themeColors.length > 0 && `包装主色：${info.themeColors.join(' ')}`,
+    colors.length > 0 && `包装主色：${colors.join(' ')}`,
     info.illustrationElements && `插画元素：${info.illustrationElements}`,
     info.sellingPointPrimary && `一级卖点：${info.sellingPointPrimary}`,
     info.sellingPointSecondary && `二级卖点：${info.sellingPointSecondary}`,

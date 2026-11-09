@@ -22,7 +22,8 @@ import { buildAIContext, contextText } from '../src/ai/context';
 import { runAITask, registerAITransport, resetAITransport, aiCapabilitySummary } from '../src/ai/provider';
 import { assembleDesign, inferStructure } from '../src/workflow/assembler';
 import { createInitialWorkflow } from '../src/types';
-import type { DesignTask, ProjectWorkflow } from '../src/types';
+import { migrateProductInfo, migrateProject, migrateWorkflow } from '../src/migrations';
+import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
 
 export interface Result { name: string; ok: boolean; detail: string }
 const A = (cond: unknown, msg: string) => { if (!cond) throw new Error(msg); };
@@ -615,6 +616,58 @@ export async function runTests(): Promise<Result[]> {
     A(deepSeekReady === false, '缺少代理地址时不应认为 DeepSeek 已接入');
     A(typeof CLOUD.region === 'string' && CLOUD.region.length > 0, '默认区域缺失');
     return '未配置状态如实上报';
+  });
+
+  /* ---- 历史草稿迁移：这几条对应线上「打开就白屏」的真实事故 ---- */
+
+  await t('旧草稿迁移 · 缺 themeColors 的草稿不再抛错（白屏根因）', () => {
+    // 加 themeColors 之前的真实形态：这些键根本不存在，不是空数组
+    const legacy = {
+      id: 'proj_legacy', name: '旧草稿', structure: 'tuck-end',
+      brief: createEmptyBrief(), design: null, versions: [],
+      createdAt: 1, updatedAt: 2, status: 'draft',
+      workflow: {
+        version: 1, stage: 'requirements', mode: 'referenceStyle',
+        productInfo: { description: '旧描述', productName: '旧产品', brandName: '旧品牌' },
+        referenceImages: [], analysis: null, concepts: [], selectedConceptId: null,
+        tasks: [], createdAt: 1, updatedAt: 2,
+      },
+    } as unknown as Project;
+
+    const m = migrateProject(legacy);
+    const info = m.workflow!.productInfo;
+    A(Array.isArray(info.themeColors), 'themeColors 没有补成数组');
+    A(info.themeColors.length === 0, `themeColors 应为空数组，实际 ${JSON.stringify(info.themeColors)}`);
+    A(info.themeColors.includes('#ffffff') === false, 'themeColors.includes 仍不可用');
+    A(info.description === '旧描述', '用户已填的产品描述被默认值覆盖了');
+    A(info.productName === '旧产品', '用户已填的产品名称被默认值覆盖了');
+    A(info.productionAddress === '', '生产信息字段没有补默认空串');
+    A(Array.isArray(m.workflow!.conceptImages), 'conceptImages 没有补成数组');
+    A(m.workflow!.autoGenPending === false, 'autoGenPending 没有补成 false');
+    return 'themeColors / conceptImages / 生产信息 / autoGenPending 均已补全';
+  });
+
+  await t('旧草稿迁移 · null 与类型不符的字段回退默认值', () => {
+    const info = migrateProductInfo({ themeColors: null, illustrationElements: 123, logoMode: 'upload', netContent: '250g' });
+    A(Array.isArray(info.themeColors), 'null 的 themeColors 未回退成数组');
+    A(info.illustrationElements === '', '数字类型的插画元素未回退成空串');
+    A(info.logoMode === 'upload', '合法的 logoMode 不应被丢弃');
+    A(info.netContent === '250g', '合法的净含量不应被丢弃');
+
+    const wf = migrateWorkflow({ productInfo: null, conceptImages: null, stage: 'concepts' });
+    A(wf !== undefined, 'workflow 迁移返回了 undefined');
+    A(Array.isArray(wf!.conceptImages), 'null 的 conceptImages 未回退成数组');
+    A(wf!.stage === 'concepts', '显式 stage 不应被覆盖');
+    A(migrateWorkflow(null) === undefined, 'null workflow 应返回 undefined');
+    return 'null / 错类型字段均回落，合法值保留';
+  });
+
+  await t('旧草稿迁移 · 没有 workflow 的老项目原样返回', () => {
+    const old = { id: 'p0', name: '更早的项目' } as unknown as Project;
+    const m = migrateProject(old);
+    A(m.workflow === undefined, '无 workflow 的项目不应被凭空补出 workflow');
+    A(m.name === '更早的项目', '项目字段被改动');
+    return '原样返回';
   });
 
   if (inBrowser) {

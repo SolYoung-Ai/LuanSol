@@ -241,7 +241,7 @@ export function assembleDesign(wf: ProjectWorkflow): DesignDoc {
 
 /** 从产品信息（主题色）构建调色板，给真实兜底 */
 function paletteFromInfo(info: ProductInfo): Palette {
-  const c = info.themeColors.filter(Boolean);
+  const c = (Array.isArray(info.themeColors) ? info.themeColors : []).filter(Boolean);
   const bg = c[0] || info.brandMainColor || '#f3eee4';
   const primary = c[1] || '#20463a';
   const accent = c[2] || '#c8a86b';
