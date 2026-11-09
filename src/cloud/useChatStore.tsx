@@ -32,6 +32,8 @@ interface ChatStore {
   syncMessage: string;
   booted: boolean;
   chatModel: string;
+  /** 空白草稿状态下选择的生图档位（会话还没创建时使用） */
+  draftTier: ImageTier;
   newConversation: () => string;
   selectConversation: (id: string) => void;
   deleteConversation: (id: string) => Promise<void>;
@@ -67,6 +69,10 @@ function mergeConversations(local: Conversation[], cloud: Conversation[]): Conve
   return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+/** 「聊过才算对话」：一条消息都没有的空壳不进入列表、不落盘、不上传云端。
+ *  历史版本（点一下新建就插入一条空记录）留下的空壳靠这里一次性清掉。 */
+const isRealConversation = (c: Conversation) => Array.isArray(c.messages) && c.messages.length > 0;
+
 const tierCost = (tier: ImageTier) =>
   tier === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro;
 
@@ -97,6 +103,7 @@ function useChatStoreState(): ChatStore {
   const [syncState, setSyncState] = useState<ChatSyncState>('off');
   const [syncMessage, setSyncMessage] = useState('');
   const [booted, setBooted] = useState(false);
+  const [draftTier, setDraftTier] = useState<ImageTier>('flash');
   const [chatModel, setChatModelState] = useState<string>(loadChatModel);
   const setChatModel = useCallback((m: string) => {
     setChatModelState(m);
@@ -116,8 +123,10 @@ function useChatStoreState(): ChatStore {
       const raw = localStorage.getItem(LS_KEY);
       if (raw) {
         const p = JSON.parse(raw) as { conversations?: Conversation[]; activeId?: string };
-        if (Array.isArray(p.conversations)) setConversations(p.conversations);
-        if (p.activeId) setActiveId(p.activeId);
+        // 旧数据里可能有「点过新建但一句话没说」的空壳，读入时直接丢掉
+        const list = Array.isArray(p.conversations) ? p.conversations.filter(isRealConversation) : [];
+        if (list.length) setConversations(list);
+        if (p.activeId && list.some((c) => c.id === p.activeId)) setActiveId(p.activeId);
       }
     } catch { /* 本地数据损坏时忽略，从空开始 */ }
     setBooted(true);
@@ -127,7 +136,7 @@ function useChatStoreState(): ChatStore {
   useEffect(() => {
     if (!booted) return;
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify({ conversations, activeId }));
+      localStorage.setItem(LS_KEY, JSON.stringify({ conversations: conversations.filter(isRealConversation), activeId }));
     } catch { /* 配额不足（大图 base64）时忽略，云端仍有完整数据 */ }
   }, [conversations, activeId, booted]);
 
@@ -145,10 +154,14 @@ function useChatStoreState(): ChatStore {
       setSyncMessage('正在从云端取回对话…');
       const r = await pullAllConversations();
       if (r.ok) {
-        setConversations((prev) => mergeConversations(prev, r.data));
-        r.data.forEach((c) => { lastPushed.current[c.id] = c.updatedAt; });
+        // 云端可能还留着旧版本产生的空壳：只合并真正聊过的，其余顺手删掉
+        const real = r.data.filter(isRealConversation);
+        const junk = r.data.filter((c) => !isRealConversation(c));
+        setConversations((prev) => mergeConversations(prev, real));
+        real.forEach((c) => { lastPushed.current[c.id] = c.updatedAt; });
+        junk.forEach((c) => { void removeConversation(user.id, c.id); });
         setSyncState('ok');
-        setSyncMessage(`已从云端取回 ${r.data.length} 个对话`);
+        setSyncMessage(`已从云端取回 ${real.length} 个对话`);
       } else {
         setSyncState('error');
         setSyncMessage(r.message);
@@ -159,7 +172,7 @@ function useChatStoreState(): ChatStore {
   /* --------------------------- 变更防抖上传 --------------------------- */
   useEffect(() => {
     if (!user || !canSyncChats(user.id)) return;
-    const dirty = conversations.filter((c) => c.updatedAt > (lastPushed.current[c.id] ?? 0));
+    const dirty = conversations.filter((c) => isRealConversation(c) && c.updatedAt > (lastPushed.current[c.id] ?? 0));
     if (!dirty.length) return;
     const t = window.setTimeout(async () => {
       setSyncState('syncing');
@@ -176,19 +189,13 @@ function useChatStoreState(): ChatStore {
   }, [conversations, user]);
 
   /* ------------------------------- 新建 ------------------------------- */
+  /** 「新建对话」只是回到一张空白草稿：不立刻建记录。
+   *  以前这里会插一条 messages 为空的会话，导致每点一次（以及每次进入页面）
+   *  就多出一条「新对话」空壳。现在只有发出第一条消息时才真正创建。 */
   const newConversation = useCallback((): string => {
-    const now = Date.now();
-    const c: Conversation = {
-      id: uid('conv'),
-      title: '新对话',
-      messages: [],
-      imageTier: 'flash',
-      createdAt: now,
-      updatedAt: now,
-    };
-    setConversations((prev) => [c, ...prev]);
-    setActiveId(c.id);
-    return c.id;
+    setActiveId(null);
+    setDraftTier('flash');
+    return '';
   }, []);
 
   const selectConversation = useCallback((id: string) => setActiveId(id), []);
@@ -214,7 +221,8 @@ function useChatStoreState(): ChatStore {
 
   /* ----------------------------- 切换生图档 ----------------------------- */
   const setTier = useCallback((tier: ImageTier) => {
-    if (!activeId) return;
+    // 还没开始对话时只记在草稿上，等发出第一条消息时带进新会话
+    if (!activeId) { setDraftTier(tier); return; }
     updateConv(activeId, (c) => ({ ...c, imageTier: tier, updatedAt: Date.now() }));
   }, [activeId, updateConv]);
 
@@ -230,9 +238,9 @@ function useChatStoreState(): ChatStore {
       const now0 = Date.now();
       target = {
         id: convId,
-        title: text ? text.slice(0, 24) : '新对话',
+        title: text ? text.slice(0, 24) : '图片对话',
         messages: [],
-        imageTier: 'flash',
+        imageTier: draftTier,
         createdAt: now0,
         updatedAt: now0,
       };
@@ -290,7 +298,7 @@ function useChatStoreState(): ChatStore {
     } finally {
       setBusy(false);
     }
-  }, [activeId, updateConv, user, chatModel]);
+  }, [activeId, updateConv, user, chatModel, draftTier]);
 
   /* ----------------------------- 生成图片 ----------------------------- */
   const generateImage = useCallback(async () => {
@@ -341,7 +349,7 @@ function useChatStoreState(): ChatStore {
   const active = conversations.find((c) => c.id === activeId) || null;
 
   return {
-    conversations, activeId, active, busy, syncState, syncMessage, booted, chatModel,
+    conversations, activeId, active, busy, syncState, syncMessage, booted, chatModel, draftTier,
     newConversation, selectConversation, deleteConversation, renameConversation,
     setTier, setChatModel, sendText, generateImage,
   };

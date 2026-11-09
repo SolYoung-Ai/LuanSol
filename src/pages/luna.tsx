@@ -450,7 +450,7 @@ export default function Luna() {
               }}
             />
             <div className="lc-composer-right">
-              <TierMenu tier={active?.imageTier || 'flash'} onTier={chat.setTier} />
+              <TierMenu tier={active?.imageTier || chat.draftTier} onTier={chat.setTier} />
               <button
                 className="lc-icon-btn"
                 title="按当前档位生成图片"
