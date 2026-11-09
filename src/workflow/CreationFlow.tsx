@@ -9,9 +9,10 @@
  *   旧版 concepts（有文字方案、无整包图）→ 确认需求
  *   assembled → 有设计稿直接进编辑器
  * ============================================================ */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Project, ProjectWorkflow, WorkflowStage } from '../types';
 import { useApp } from '../store';
+import { useHash } from '../ui';
 import CreationEntry from './CreationEntry';
 import RequirementsStage from './RequirementsStage';
 import ConceptStage from './ConceptStage';
@@ -27,20 +28,23 @@ const STEPS: { stage: WorkflowStage; label: string }[] = [
   { stage: 'editor', label: '编辑器' },
 ];
 
-/** 把任意历史阶段归一到新四步流程，避免旧项目落到空白页。 */
+/** 把任意历史阶段归一到新四步流程，避免旧项目落到空白页。
+ *  已经是新流程的阶段必须原样尊重——否则从编辑器点回「创作入口 / 确认需求」会被
+ *  「有 design 就进编辑器」的规则弹回编辑器，步骤条看起来能点却没有反应。 */
 function normalizeStage(project: Project): WorkflowStage {
   const wf = project.workflow;
   if (!wf) return 'entry';
-  if (project.design) return 'editor';
   const s = wf.stage;
-  if (s === 'entry' || s === 'requirements') return s;
-  if (s === 'editor') return 'editor';
+  if (s === 'entry' || s === 'requirements' || s === 'editor') return s;
   if (s === 'concepts') {
-    // 有整包图 = 新流程方案页；旧版只有文字方案 → 回到确认需求重新生成
-    return (wf.conceptImages?.length || 0) > 0 || wf.concepts.length === 0 ? 'concepts' : 'requirements';
+    // 有整包图或刚点了生成 = 新流程方案页；旧版只有文字方案 → 回到确认需求重新生成
+    return (wf.conceptImages?.length || 0) > 0 || wf.autoGenPending
+      ? 'concepts'
+      : wf.concepts.length === 0 ? 'concepts' : 'requirements';
   }
+  // 旧阶段 analysis / planning / workflow / assembled：有设计稿进编辑器，否则回需求页
   if (s === 'assembled') return 'editor';
-  // analysis / planning / workflow：统一回到确认需求，保留已填数据
+  if (project.design) return 'editor';
   return 'requirements';
 }
 
@@ -115,9 +119,34 @@ function EmbeddedEditor({ projectId, initialTool }: { projectId: string; initial
 }
 
 export default function CreationFlow() {
-  const { s, patchWorkflow, setToast } = useApp();
+  const { s, patchWorkflow, setToast, startEmptyDraft } = useApp();
+  const hash = useHash();
+  const freshHandled = useRef(false);
   const project = s.projects.find((p) => p.id === s.activeId);
   const wf: ProjectWorkflow | undefined = project?.workflow;
+
+  // 「开始设计 / 新建设计」= 全新草稿：清掉当前工作区（项目本身仍保留在工作台草稿箱），
+  // 从创作入口第 1 步重新开始。刷新页面 / 从工作台打开旧草稿时不带 fresh 参数。
+  useEffect(() => {
+    if (freshHandled.current) return;
+    freshHandled.current = true;
+    const fresh = new URLSearchParams(hash.split('?')[1] || '').get('fresh') === '1';
+    if (!fresh) return;
+    // 放在下一帧：让已挂载的编辑器先完成自身的 loadProject，再切换成新草稿，
+    // 否则它会把旧项目重新写回 activeId。
+    window.setTimeout(() => startEmptyDraft(), 0);
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/new`);
+    // 不清理这个 timer：StrictMode 会先 cleanup 再重跑 effect，清理会把唯一一次建稿动作吞掉
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stage = project ? normalizeStage(project) : 'entry';
+
+  // 换步骤时把页面滚回顶部：确认需求页通常很长，用户滚到底再点「编辑器」时，
+  // 编辑器会带着上一次的滚动位置出现，导致顶部导航和步骤条被推出视口。
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [stage]);
 
   const goStage = (stage: WorkflowStage) => {
     if (!project) return;
@@ -141,8 +170,6 @@ export default function CreationFlow() {
       </div>
     );
   }
-
-  const stage = normalizeStage(project);
 
   let body: React.ReactNode;
   switch (stage) {

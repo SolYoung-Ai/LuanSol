@@ -49,6 +49,12 @@ export default function CreationEntry() {
     if (busy) return;
     setBusy(mode);
     try {
+      // 从步骤条回到创作入口时，改的是当前项目，不清空已有方案与设计稿
+      const current = s.projects.find((p) => p.id === s.activeId);
+      if (current?.workflow) {
+        patchWorkflow(current.id, { mode, stage: 'requirements' });
+        return;
+      }
       // 优先复用已有的空白 entry 草稿，避免重复点击堆出多个空项目
       const existing = s.projects.find(
         (p) => p.workflow && p.workflow.stage === 'entry' && p.design === null,

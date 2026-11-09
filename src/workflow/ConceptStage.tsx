@@ -121,6 +121,7 @@ export default function ConceptStage() {
       patchWorkflow(project.id, {
         conceptImages: next,
         selectedConceptImageId: next[0]?.id || null,
+        autoGenPending: false,
       });
       if (auth.user) {
         await recordUsage(auth.user.id, BATCH_COST, 'image');
@@ -134,10 +135,11 @@ export default function ConceptStage() {
     }
   };
 
-  // 首次进入且没有图时自动生成（StrictMode 双挂载用 ref 兜底）
+  // 只有刚点过「开始 AI 设计」才自动生成；从步骤条回看方案页不重复扣积分
   useEffect(() => {
     if (!wf || !project) return;
     if (startedRef.current) return;
+    if (!wf.autoGenPending) return;
     if ((wf.conceptImages?.length || 0) > 0) return;
     startedRef.current = true;
     void generateBatch();
@@ -217,6 +219,17 @@ export default function ConceptStage() {
           基于你填的参考图与产品信息生成三张完整效果图。选中一张后可「继续设计」，或对某一张单独重新生成。
         </p>
       </div>
+
+      {allEmpty && !loading && !error && (
+        <div className="wf-card wf-empty-card">
+          <div className="wf-error-ico"><Icon name="spark" size={24} /></div>
+          <h3>还没有方案图</h3>
+          <p>回到「确认需求」补充信息后点「开始 AI 设计」，或直接在这里生成一批三张。</p>
+          <button className="wf-btn-primary" onClick={() => { startedRef.current = true; void generateBatch(); }}>
+            <Icon name="spark" size={16} /> 生成三张方案（{BATCH_COST} 积分）
+          </button>
+        </div>
+      )}
 
       {allEmpty && !loading && error && (
         <div className="wf-card wf-error-card">

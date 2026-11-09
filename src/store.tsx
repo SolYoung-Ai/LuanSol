@@ -93,6 +93,8 @@ interface AppCtx {
   deleteProject: (id: string) => void;
   duplicateProject: (id: string) => void;
   newProject: () => void;
+  /** 开一份新的空草稿（草稿箱可见），供「开始设计 / 新建设计」从第 1 步重新开始 */
+  startEmptyDraft: () => string;
   /** V2：创建带 AI 工作流的真实项目并设为当前项目 */
   createWorkflowProject: (input: {
     mode: CreationMode;
@@ -252,6 +254,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     draft: createEmptyDraft(),
   })), []);
 
+  /** 新建空草稿：直接生成一个 stage=entry 的项目并设为当前项目。
+   *  与 newProject 的区别是「有一个真实的草稿项目」，所以离开后能在草稿箱找到，
+   *  也不会被编辑器里的默认工程初始化反覆盖。 */
+  const startEmptyDraft = useCallback((): string => {
+    let id = '';
+    setS((prev) => {
+      const existing = prev.projects.find((p) => p.workflow?.stage === 'entry' && !p.design);
+      if (existing) {
+        id = existing.id;
+        return { ...prev, activeId: existing.id, design: null, chat: [], report: null };
+      }
+      const now = Date.now();
+      const workflow = createInitialWorkflow(now);
+      workflow.stage = 'entry';
+      const proj: Project = {
+        id: uid('proj'), name: '未命名草稿', brief: createEmptyBrief(),
+        structure: 'tuck', scheme: 'minimal', design: null, versions: [],
+        createdAt: now, updatedAt: now, status: 'draft', workflow,
+      };
+      id = proj.id;
+      return {
+        ...prev, activeId: id, projects: [proj, ...prev.projects],
+        design: null, chat: [], report: null, brief: createEmptyBrief(),
+      };
+    });
+    return id;
+  }, []);
+
   /** V2：创建带 AI 工作流的真实项目。点「开始 AI 设计」后 stage 直接进入分析阶段。 */
   const createWorkflowProject = useCallback((input: {
     mode: CreationMode;
@@ -345,7 +375,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppCtx = {
     s, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
-    saveProject, syncProject, loadProject, mergeCloudProjects, deleteProject, duplicateProject, newProject,
+    saveProject, syncProject, loadProject, mergeCloudProjects, deleteProject, duplicateProject, newProject, startEmptyDraft,
     createWorkflowProject, patchWorkflow, updateProject,
     addVersion, restoreVersion,
     addAsset, removeAsset, toggleFavoriteAsset,

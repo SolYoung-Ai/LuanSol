@@ -73,6 +73,8 @@ export default function RequirementsStage() {
       productInfo: info,
       referenceImages: refs,
       stage: 'concepts',
+      // 只有还没有方案图时才自动生成；回看/修改需求不重复扣积分
+      autoGenPending: (wf.conceptImages?.length || 0) === 0,
     });
     // 生成在 ConceptStage 首次挂载时触发，这里只负责推进阶段
   };
@@ -161,18 +163,52 @@ export default function RequirementsStage() {
             placeholder="如：10g×9 袋 / 250g" /></label>
       </section>
 
-      {/* F 产品信息 */}
+      {/* E 产品描述：给 AI 看的创意信息 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">E</span><h2>产品信息</h2>
-          <span className="wf-hint">一句话也行，越具体越好</span></div>
+        <div className="wf-card-head"><span className="wf-idx">E</span><h2>产品描述</h2>
+          <span className="wf-hint">给 AI 看的设计依据，一句话也行</span></div>
         <textarea className="wf-textarea" rows={4} value={info.description}
           onChange={(e) => set({ description: e.target.value })}
           placeholder="例如：黄精礼盒，主色是砖红色，产品名称是九蒸九晒黄精，10×10×10cm，想走高端东方养生风。" />
       </section>
 
+      {/* F 生产信息：包装背面法定文字，和设计描述分开 */}
+      <section className="wf-card">
+        <div className="wf-card-head"><span className="wf-idx">F</span><h2>生产信息</h2>
+          <span className="wf-hint">印在包装背面的法定信息，可留空后补</span></div>
+        <p className="wf-card-note">
+          这部分是委托商、生产商、地址、许可证等真实生产信息，AI 不会替你编造；留空就不生成，避免印出错误的法定文字。
+        </p>
+        <div className="wf-grid2">
+          <label className="wf-field"><span className="wf-label">委托商 / 品牌方</span>
+            <input className="wf-input" value={info.manufacturer} onChange={(e) => set({ manufacturer: e.target.value })}
+              placeholder="如：山野集健康食品有限公司" /></label>
+          <label className="wf-field"><span className="wf-label">生产商</span>
+            <input className="wf-input" value={info.producer} onChange={(e) => set({ producer: e.target.value })}
+              placeholder="如：×××食品厂" /></label>
+        </div>
+        <label className="wf-field"><span className="wf-label">生产地址</span>
+          <input className="wf-input" value={info.productionAddress} onChange={(e) => set({ productionAddress: e.target.value })}
+            placeholder="如：安徽省亳州市××区××路 88 号" /></label>
+        <div className="wf-grid2">
+          <label className="wf-field"><span className="wf-label">生产许可证编号</span>
+            <input className="wf-input" value={info.productionLicense} onChange={(e) => set({ productionLicense: e.target.value })}
+              placeholder="如：SC10123456789012" /></label>
+          <label className="wf-field"><span className="wf-label">执行标准</span>
+            <input className="wf-input" value={info.standardCode} onChange={(e) => set({ standardCode: e.target.value })}
+              placeholder="如：GB/T 20977" /></label>
+          <label className="wf-field"><span className="wf-label">保质期 / 贮存</span>
+            <input className="wf-input" value={info.shelfLife} onChange={(e) => set({ shelfLife: e.target.value })}
+              placeholder="如：18 个月，阴凉干燥处" /></label>
+          <label className="wf-field"><span className="wf-label">服务电话</span>
+            <input className="wf-input" value={info.servicePhone} onChange={(e) => set({ servicePhone: e.target.value })}
+              placeholder="如：400-000-0000" /></label>
+        </div>
+      </section>
+
       {/* G LOGO */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">F</span><h2>LOGO</h2></div>
+        <div className="wf-card-head"><span className="wf-idx">G</span><h2>LOGO</h2></div>
         <div className="wf-seg">
           {([['upload', '已有 LOGO，上传'], ['generate', '没有 LOGO，按名称生成'], ['none', '暂时不放']] as const).map(([mode, label]) => (
             <button key={mode} className={`wf-seg-btn ${info.logoMode === mode ? 'on' : ''}`}
@@ -198,7 +234,7 @@ export default function RequirementsStage() {
 
       {/* H 条形码 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">G</span><h2>条形码</h2>
+        <div className="wf-card-head"><span className="wf-idx">H</span><h2>条形码</h2>
           <span className="wf-hint">有就填，没有留空；不伪造条码</span></div>
         <input className="wf-input" value={info.barcode} onChange={(e) => set({ barcode: e.target.value.replace(/[^\d]/g, '').slice(0, 14) })}
           inputMode="numeric" placeholder="如：6901234567892" />

@@ -26,9 +26,11 @@ export default function Home() {
     go('/studio');
   };
 
-  /** 开始设计：进入 AI 原生新建设计流程（未登录由路由层要求登录）。 */
+  /** 开始设计：进入 AI 原生新建设计流程（未登录由路由层要求登录）。
+   *  fresh=1 表示从零开一份新草稿，不接着上一次没做完的草稿；
+   *  未完成的草稿仍在工作台的「草稿」筛选里。 */
   const startWizard = () => {
-    go('/new');
+    go('/new?fresh=1');
   };
 
   return <div className="v4-home">

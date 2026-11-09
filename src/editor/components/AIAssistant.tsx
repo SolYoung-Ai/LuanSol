@@ -7,7 +7,7 @@ export default function AIAssistant() {
   const ed = useEditor();
 
   return (
-    <div style={{ width: 340, borderRight: '1px solid #e5e5e5', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#fff', minWidth: 0 }}>
       {/* 需求摘要 */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee' }}>
         <button

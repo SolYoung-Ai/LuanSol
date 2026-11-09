@@ -15,10 +15,11 @@ import { runPrepress, autoFix } from '../engine/prepress';
 import { spreadSvg, svgToCanvas } from '../engine/export';
 import { uid, downloadBlob } from '../engine/utils';
 import type { DesignDoc, Face, FaceId, Layer, TextLayer, ImageLayer, ShapeLayer, DesignBrief, StructureId, Asset, AssetCategory } from '../types';
-import { HandlePos, MM_TO_PX, ToolId, ViewMode } from './constants';
+import { HandlePos, MM_TO_PX, TextPreset, ToolId, ViewMode } from './constants';
 import { executeAction } from './ai/executor';
 import { planFromUser } from './ai/planner';
 import type { ToolHost } from './ai/types';
+import { fileToPng, svgToPng } from './raster';
 
 const SYSTEM_PROMPT = `${LUNA_PERSONA_PROMPT}
 
@@ -88,7 +89,13 @@ interface EditorCtx {
   moveLayerDown: (id: string) => void;
   bringToFront: (id: string) => void;
   sendToBack: (id: string) => void;
-  updateLayer: (id: string, patch: Partial<Layer>) => void;
+  updateLayer: (id: string, patch: Partial<Layer>, record?: boolean) => void;
+  /** 新增文字图层（左栏「文字」面板的预设） */
+  addTextPreset: (kind: TextPreset) => void;
+  /** 把内置矢量素材栅格化后放进画布（形状 / 图标 / 纹样） */
+  addSvgMaterial: (svg: string, name: string) => Promise<void>;
+  /** 上传本地图片：转 PNG data URL，同时入素材库并加入画布 */
+  uploadImages: (files: FileList | File[]) => Promise<number>;
   // 独立素材库
   addAssetToCanvas: (assetId: string) => void;
   assetFileRef: React.RefObject<HTMLInputElement>;
@@ -732,11 +739,108 @@ export function EditorProvider({
     const layers = [l, ...face.layers.filter((x) => x.id !== id)];
     update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers } } } });
   };
-  const updateLayer = (id: string, patch: Partial<Layer>) => {
+  const updateLayer = (id: string, patch: Partial<Layer>, record = true) => {
     if (!face || !design) return;
-    pushHistory();
+    if (record) pushHistory();
     const layers = face.layers.map((l) => l.id === id ? ({ ...l, ...patch } as Layer) : l);
     update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers } } } });
+  };
+
+  /** 插入一张图片图层：按画布比例给一个合适的初始尺寸，居中摆放 */
+  const insertImageLayer = (src: string, name: string, naturalW: number, naturalH: number) => {
+    if (!face || !design) return null;
+    const ratio = naturalW > 0 ? naturalH / naturalW : 1;
+    // 初始尺寸不超过画布的 55%，长边也不超过 90mm，避免一插入就出界
+    let w = Math.min(face.w * 0.55, face.h * 0.55, 90);
+    let h = w * ratio;
+    if (h > face.h * 0.55) { h = face.h * 0.55; w = h / (ratio || 1); }
+    const layer: ImageLayer = {
+      id: uid('lay'), name, type: 'image', src,
+      x: +Math.max(0, (face.w - w) / 2).toFixed(1),
+      y: +Math.max(0, (face.h - h) / 2).toFixed(1),
+      w: +w.toFixed(1), h: +h.toFixed(1),
+      rotation: 0, opacity: 1, locked: false,
+      naturalW, naturalH, fit: 'contain',
+    };
+    addLayer(layer);
+    setSelectedLayer(layer.id);
+    setSelectedIds([layer.id]);
+    return layer;
+  };
+
+  /** 左栏「文字」：五个常用预设，插入后直接可在面板里改字体与排版 */
+  const addTextPreset = (kind: TextPreset) => {
+    if (!face || !design) return;
+    const accent = design.palette.accent || '#C0392B';
+    const base = {
+      id: uid('lay'), type: 'text' as const, rotation: 0, opacity: 1, locked: false,
+      letterSpacing: 0, lineHeight: 1.4, curve: 0, placeholder: true,
+    };
+    const preset: Record<TextPreset, Partial<TextLayer> & { text: string; name: string }> = {
+      title: {
+        name: '主标题', text: '主标题文字', role: 'product', fontFamily: '"Songti SC","STSong","Noto Serif CJK SC",serif',
+        fontSize: 30, fontWeight: 700, color: '#1c1a17', align: 'center', letterSpacing: 0.04, lineHeight: 1.3,
+      },
+      subtitle: {
+        name: '副标题', text: '副标题文字', role: 'tagline', fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+        fontSize: 14, fontWeight: 400, color: '#333333', align: 'center', letterSpacing: 0.12, lineHeight: 1.5,
+      },
+      body: {
+        name: '正文', text: '在这里输入正文内容', role: 'info', fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+        fontSize: 8, fontWeight: 400, color: '#4a4a4a', align: 'left', letterSpacing: 0, lineHeight: 1.7,
+      },
+      price: {
+        name: '价格标签', text: '¥ 128', role: 'custom', fontFamily: '"Helvetica Neue",Arial,sans-serif',
+        fontSize: 24, fontWeight: 700, color: accent, align: 'left', letterSpacing: 0.02, lineHeight: 1.2,
+      },
+      label: {
+        name: '英文标签', text: 'PREMIUM QUALITY', role: 'legal', fontFamily: '"Helvetica Neue",Arial,sans-serif',
+        fontSize: 9, fontWeight: 500, color: '#666666', align: 'center', letterSpacing: 0.3, lineHeight: 1.4,
+      },
+    };
+    const p = preset[kind];
+    const w = kind === 'body' ? face.w * 0.72 : Math.min(face.w * 0.8, 140);
+    const h = Math.max(8, (p.fontSize || 12) * 0.3528 * (p.lineHeight || 1.4) * (kind === 'body' ? 3 : 1.2));
+    const layer: TextLayer = {
+      ...base,
+      ...p,
+      w: +w.toFixed(1),
+      h: +h.toFixed(1),
+      x: +((face.w - w) / 2).toFixed(1),
+      y: +(kind === 'price' ? face.h * 0.78 : face.h * 0.3).toFixed(1),
+    } as TextLayer;
+    addLayer(layer);
+    setSelectedLayer(layer.id);
+    setSelectedIds([layer.id]);
+    setActiveTool('text');
+  };
+
+  /** 内置矢量素材：栅格化后插入画布 */
+  const addSvgMaterial = async (svg: string, name: string) => {
+    const png = await svgToPng(svg, 640);
+    insertImageLayer(png.src, name, png.w, png.h);
+  };
+
+  /** 上传本地图片：入素材库 + 直接上画布 */
+  const uploadImages = async (files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => /^image\//.test(f.type) || /\.svg$/i.test(f.name));
+    let ok = 0;
+    for (const file of list) {
+      try {
+        const png = await fileToPng(file);
+        addAsset({
+          id: uid('asset'), name: png.name,
+          src: png.src, kind: 'uploaded', category: 'other',
+          naturalW: png.w, naturalH: png.h, favorite: false,
+          projectId: s.activeId || undefined, createdAt: Date.now(),
+        });
+        insertImageLayer(png.src, png.name, png.w, png.h);
+        ok += 1;
+      } catch {
+        // 单个文件失败不阻断其余文件
+      }
+    }
+    return ok;
   };
   /** 通用新增图层（AI 工具系统使用） */
   const addLayer = (layer: Layer) => {
@@ -815,25 +919,21 @@ export function EditorProvider({
     setSelectedLayer(layer.id);
   };
 
-  /** 上传文件到素材库（读取为持久化 data URL） */
+  /** 上传文件到素材库（统一转 PNG，SVG 也能用于导出） */
   const onPickAssetFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = String(reader.result);
-        const img = new Image();
-        img.onload = () => {
-          addAsset({
-            id: uid('asset'), name: file.name.replace(/\.[^.]+$/, ''),
-            src: result, kind: 'uploaded', category: 'other',
-            naturalW: img.width, naturalH: img.height, favorite: false,
-            projectId: s.activeId || undefined, createdAt: Date.now(),
-          });
-        };
-        img.src = result;
-      };
-      reader.readAsDataURL(file);
+    files.forEach(async (file) => {
+      try {
+        const png = await fileToPng(file);
+        addAsset({
+          id: uid('asset'), name: png.name,
+          src: png.src, kind: 'uploaded', category: 'other',
+          naturalW: png.w, naturalH: png.h, favorite: false,
+          projectId: s.activeId || undefined, createdAt: Date.now(),
+        });
+      } catch {
+        // 单个文件失败不影响其余
+      }
     });
     e.target.value = '';
   };
@@ -1112,6 +1212,7 @@ export function EditorProvider({
     saveStatus, manualSave,
     toggleLock, toggleVisible, deleteLayer, duplicateLayer, renameLayer,
     moveLayerUp, moveLayerDown, bringToFront, sendToBack, updateLayer,
+    addTextPreset, addSvgMaterial, uploadImages,
     addAssetToCanvas, assetFileRef, onPickAssetFiles, generateToLibrary, assetBusy,
     removeAsset, toggleFavoriteAsset,
     onLayerMouseDown, onMouseMove, onMouseUp, onResizeMouseDown, onRotateMouseDown,

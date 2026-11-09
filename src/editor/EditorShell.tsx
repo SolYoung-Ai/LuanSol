@@ -2,7 +2,7 @@
 import React from 'react';
 import TopToolbar from './components/TopToolbar';
 import LeftToolbar from './components/LeftToolbar';
-import AIAssistant from './components/AIAssistant';
+import LeftPanel from './components/LeftPanel';
 import DesignCanvas from './components/DesignCanvas';
 import PropertiesPanel from './components/PropertiesPanel';
 import LayersPanel from './components/LayersPanel';
@@ -22,10 +22,8 @@ export default function EditorShell({ embedded = false }: { embedded?: boolean }
         {/* 左侧纵向工具栏 */}
         <LeftToolbar />
 
-        {/* AI 对话面板 */}
-        <div className="editor-ai-panel" style={{ display: 'flex', minWidth: 0 }}>
-          <AIAssistant />
-        </div>
+        {/* 左侧工具面板：对话 / 文字 / 素材 / 上传 / 视图 */}
+        <LeftPanel />
 
         {/* 中间画布 */}
         <DesignCanvas />

@@ -274,6 +274,39 @@ const primSvg = (p: Prim): string => {
   }
 };
 
+/* ---------------- 文字图层内部渲染 ----------------
+ * 编辑器画布与导出/3D 共用同一份 SVG，保证「看到什么就印出什么」，
+ * 支持字色渐变与弧形排版（textPath）。 */
+export function textMarkup(l: TextLayer): string {
+  const fs = ptToMm(l.fontSize);
+  const lines = wrapText(l.text, Math.max(1, l.w), fs, l.letterSpacing);
+  const anchor = l.align === 'center' ? 'middle' : l.align === 'right' ? 'end' : 'start';
+  const tx = l.align === 'center' ? l.w / 2 : l.align === 'right' ? l.w : 0;
+  const safeId = String(l.id).replace(/[^a-zA-Z0-9_-]/g, '');
+  let defs = '';
+  let fill = l.color;
+  if (l.gradient?.enabled) {
+    const rad = ((l.gradient.angle ?? 0) * Math.PI) / 180;
+    const dx = Math.cos(rad) / 2, dy = Math.sin(rad) / 2;
+    defs = `<defs><linearGradient id="tg_${safeId}" x1="${n(0.5 - dx)}" y1="${n(0.5 - dy)}" x2="${n(0.5 + dx)}" y2="${n(0.5 + dy)}">`
+      + `<stop offset="0" stop-color="${l.gradient.from}"/><stop offset="1" stop-color="${l.gradient.to}"/></linearGradient></defs>`;
+    fill = `url(#tg_${safeId})`;
+  }
+  const common = `fill="${fill}" font-family="${escapeXml(l.fontFamily)}" font-size="${n(fs)}" font-weight="${l.fontWeight}" letter-spacing="${n(l.letterSpacing)}em"`;
+  // 弧形：用一条二次贝塞尔作基线，文字沿路径排布（多行合并为一行，避免多层弧线重叠）
+  const curve = Math.max(-100, Math.min(100, l.curve || 0));
+  if (curve !== 0) {
+    const pathId = `tp_${safeId}`;
+    const y0 = l.h * 0.62;
+    const sag = (l.h * 0.42 * curve) / 100;
+    const d = `M 0 ${n(y0)} Q ${n(l.w / 2)} ${n(y0 - sag * 2)} ${n(l.w)} ${n(y0)}`;
+    return `${defs}<path id="${pathId}" d="${d}" fill="none"/>`
+      + `<text ${common} text-anchor="middle"><textPath href="#${pathId}" startOffset="50%">${escapeXml(lines.join(' '))}</textPath></text>`;
+  }
+  const tspans = lines.map((line, i) => `<tspan x="${n(tx)}" ${i ? `dy="${n(fs * l.lineHeight)}"` : ''}>${escapeXml(line)}</tspan>`).join('');
+  return `${defs}<text x="${n(tx)}" y="${n(fs * 0.88)}" ${common} text-anchor="${anchor}" xml:space="preserve">${tspans}</text>`;
+}
+
 /* ---------------- 图层 → SVG ---------------- */
 export function layerMarkup(l: Layer): string {
   if (l.hidden) return '';
@@ -281,14 +314,7 @@ export function layerMarkup(l: Layer): string {
   let inner = '';
   if (l.type === 'shape') inner = shapePrims(l).map(primSvg).join('');
   else if (l.type === 'image') inner = `<image href="${l.src}" x="0" y="0" width="${n(l.w)}" height="${n(l.h)}" preserveAspectRatio="${l.fit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet'}"/>`;
-  else {
-    const fs = ptToMm(l.fontSize);
-    const lines = wrapText(l.text, Math.max(1, l.w), fs, l.letterSpacing);
-    const anchor = l.align === 'center' ? 'middle' : l.align === 'right' ? 'end' : 'start';
-    const tx = l.align === 'center' ? l.w / 2 : l.align === 'right' ? l.w : 0;
-    const tspans = lines.map((line, i) => `<tspan x="${n(tx)}" ${i ? `dy="${n(fs * l.lineHeight)}"` : ''}>${escapeXml(line)}</tspan>`).join('');
-    inner = `<text x="${n(tx)}" y="${n(fs * 0.88)}" fill="${l.color}" font-family="${escapeXml(l.fontFamily)}" font-size="${n(fs)}" font-weight="${l.fontWeight}" letter-spacing="${n(l.letterSpacing)}em" text-anchor="${anchor}" xml:space="preserve">${tspans}</text>`;
-  }
+  else inner = textMarkup(l);
   return `<g transform="${t}" opacity="${n(l.opacity)}" data-layer="${l.id}">${inner}</g>`;
 }
 

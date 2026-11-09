@@ -38,6 +38,9 @@ const groupOf = (p: Project) => STRUCTURES.find((s) => s.id === p.structure)?.gr
 
 const STRUCT_NAME = (p: Project) => STRUCTURES.find((s) => s.id === p.structure)?.name || p.structure;
 const statusLabel = (p: Project) => (p.status === 'draft' ? '草稿' : p.status === 'designing' ? '设计中' : '已完成');
+/** 尺寸还没填过时不要显示「0×0mm」——那看起来像坏数据，而是如实说「尺寸待定」 */
+const sizeLabel = (s: { l: number; w: number; h?: number }) =>
+  s.l || s.w ? `${s.l}×${s.w}${s.h ? `×${s.h}` : ''}mm` : '尺寸待定';
 const matchFilter = (p: Project, f: FilterId) =>
   f === 'all' ? true : f === 'done' ? (p.status === 'checked' || p.status === 'exported') : p.status === f;
 const fmt = (t: number) => {
@@ -161,7 +164,7 @@ export default function Workspace() {
         <p className="v4-sub">你的每一个想法，都在这里留下作品。</p>
       </div>
       <div className="v4-tools">
-        <button className="v4-btn-dark" onClick={() => go('/new')}>新建设计</button>
+        <button className="v4-btn-dark" onClick={() => go('/new?fresh=1')}>新建设计</button>
       </div>
     </div>
 
@@ -275,7 +278,7 @@ export default function Workspace() {
               <button className="v4-work-name" onClick={onCover} style={{ textAlign: 'left' }}>{p.name}</button>
               <div className="v4-work-meta">
                 <span>{STRUCT_NAME(p)}</span>
-                <span>{p.brief.size.l}×{p.brief.size.w}{p.brief.size.h ? `×${p.brief.size.h}` : ''}mm</span>
+                <span>{sizeLabel(p.brief.size)}</span>
                 <span>{fmt(p.updatedAt)}</span>
               </div>
               {!batchMode && <div className="v4-work-actions">
@@ -308,7 +311,7 @@ export default function Workspace() {
       </div>
       <h3>这里还没有作品</h3>
       <p>从一个想法开始，创建你的第一个包装。</p>
-      <button className="v4-btn-dark" onClick={() => go('/new')}>开始设计</button>
+      <button className="v4-btn-dark" onClick={() => go('/new?fresh=1')}>开始设计</button>
     </div>}
 
     {/* 单个删除确认 */}

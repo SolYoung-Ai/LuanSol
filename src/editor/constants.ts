@@ -74,7 +74,10 @@ export type HandlePos = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 export const HANDLE_POSITIONS: HandlePos[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
 // 编辑器工具类型
-export type ToolId = 'select' | 'text' | 'image' | 'shape' | 'assets' | 'ruler' | 'dieline';
+export type ToolId = 'select' | 'text' | 'image' | 'shape' | 'assets' | 'upload' | 'ruler' | 'dieline';
+
+/** 文字面板的五个常用预设 */
+export type TextPreset = 'title' | 'subtitle' | 'body' | 'price' | 'label';
 
 // 三个正式工作视图
 export type ViewMode = 'design' | '3d' | 'dieline';

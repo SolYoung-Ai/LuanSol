@@ -29,6 +29,14 @@ export interface BaseLayer {
   hidden?: boolean;
 }
 
+export interface TextGradient {
+  enabled: boolean;
+  from: string;
+  to: string;
+  /** 渐变方向（0 = 从左到右，90 = 从上到下） */
+  angle: number;
+}
+
 export interface TextLayer extends BaseLayer {
   type: 'text';
   text: string;
@@ -41,6 +49,10 @@ export interface TextLayer extends BaseLayer {
   letterSpacing: number; // em
   lineHeight: number; // em
   placeholder?: boolean;
+  /** 文字渐变；启用时覆盖 color */
+  gradient?: TextGradient;
+  /** 弧形排版曲率：-100（下弧）~ 100（上弧），0 为直线 */
+  curve?: number;
 }
 
 export interface ShapeLayer extends BaseLayer {
@@ -354,6 +366,22 @@ export interface ProductInfo {
   logoImage: string;
   /** 条形码（数字串，可为空，不伪造） */
   barcode: string;
+
+  /* ---- 生产信息：包装背面法定文字，与设计描述分开 ---- */
+  /** 委托商 / 品牌方 */
+  manufacturer: string;
+  /** 生产商（代工厂） */
+  producer: string;
+  /** 生产地址 */
+  productionAddress: string;
+  /** 生产许可证编号（如 SC1012…） */
+  productionLicense: string;
+  /** 执行标准（如 GB/T 20977） */
+  standardCode: string;
+  /** 保质期 / 贮存条件 */
+  shelfLife: string;
+  /** 服务电话 */
+  servicePhone: string;
 }
 
 /** 设计方案阶段的三张整包效果图（真实生图结果，可单独重新生成） */
@@ -526,6 +554,8 @@ export interface ProjectWorkflow {
   conceptImages: ConceptImage[];
   /** 用户选中的整包效果图 id（继续设计时据此组装） */
   selectedConceptImageId: string | null;
+  /** 用户刚点了「开始 AI 设计」：进入方案页时自动生成一批（只允许一次，回看不重复扣费） */
+  autoGenPending?: boolean;
   tasks: DesignTask[];
   createdAt: number;
   updatedAt: number;
@@ -541,6 +571,8 @@ export function emptyProductInfo(): ProductInfo {
     themeColors: [], illustrationElements: '',
     sellingPointPrimary: '', sellingPointSecondary: '', netContent: '',
     logoMode: 'none', logoName: '', logoImage: '', barcode: '',
+    manufacturer: '', producer: '', productionAddress: '',
+    productionLicense: '', standardCode: '', shelfLife: '', servicePhone: '',
   };
 }
 
@@ -557,6 +589,7 @@ export function createInitialWorkflow(now: number = Date.now()): ProjectWorkflow
     selectedConceptId: null,
     conceptImages: [],
     selectedConceptImageId: null,
+    autoGenPending: false,
     tasks: [],
     createdAt: now,
     updatedAt: now,

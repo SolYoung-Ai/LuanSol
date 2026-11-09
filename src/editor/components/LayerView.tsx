@@ -3,6 +3,7 @@ import React from 'react';
 import { useEditor } from '../EditorContext';
 import type { Layer, TextLayer, ImageLayer, ShapeLayer } from '../../types';
 import { HandlePos, HANDLE_POSITIONS, MM_TO_PX } from '../constants';
+import { textMarkup } from '../../engine/design';
 
 export default function LayerView({ layer }: { layer: Layer }) {
   const ed = useEditor();
@@ -41,19 +42,14 @@ export default function LayerView({ layer }: { layer: Layer }) {
         opacity: layer.opacity,
       }}
     >
-      {/* 文字 */}
+      {/* 文字：与导出共用同一份 SVG，渐变 / 弧形所见即所得 */}
       {layer.type === 'text' && (
-        <div style={{
-          fontSize: (layer as TextLayer).fontSize * z,
-          color: (layer as TextLayer).color,
-          fontFamily: (layer as TextLayer).fontFamily,
-          fontWeight: (layer as TextLayer).fontWeight,
-          textAlign: (layer as TextLayer).align,
-          lineHeight: (layer as TextLayer).lineHeight,
-          letterSpacing: (layer as TextLayer).letterSpacing,
-        }}>
-          {(layer as TextLayer).text}
-        </div>
+        <svg
+          viewBox={`0 0 ${layer.w} ${layer.h}`}
+          width="100%" height="100%"
+          style={{ display: 'block', overflow: 'visible', pointerEvents: 'none' }}
+          dangerouslySetInnerHTML={{ __html: textMarkup(layer as TextLayer) }}
+        />
       )}
 
       {/* 图片 */}
