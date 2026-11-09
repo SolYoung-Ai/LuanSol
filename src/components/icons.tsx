@@ -12,7 +12,8 @@ export type IconName =
   | 'chevronLeft' | 'chevronRight' | 'alignLeft' | 'alignHCenter' | 'alignRight'
   | 'alignTop' | 'alignVCenter' | 'alignBottom' | 'distH' | 'distV'
   | 'folder' | 'imageOff' | 'square' | 'clock' | 'refresh' | 'zoomIn' | 'zoomOut'
-  | 'search' | 'send' | 'message' | 'brain' | 'panelLeft' | 'menu';
+  | 'search' | 'send' | 'message' | 'brain' | 'panelLeft' | 'menu'
+  | 'user' | 'mail' | 'shield' | 'key' | 'cloud' | 'logOut';
 
 // 每个图标的内部 SVG 路径（viewBox 0 0 24 24）
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -119,6 +120,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
   panelLeft: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" /></>,
   // 汉堡菜单：三条等长横线
   menu: <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>,
+  // —— 账户信息页：一组轻量的 iOS 风格线性图标 ——
+  user: <><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20c.7-3.6 3.2-5.4 6.5-5.4s5.8 1.8 6.5 5.4" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3.6 7l8.4 6 8.4-6" /></>,
+  shield: <><path d="M12 3l8 3v5.5c0 4.8-3.3 8.2-8 9.5-4.7-1.3-8-4.7-8-9.5V6z" /><path d="M9 12l2 2 4-4" /></>,
+  key: <><circle cx="8" cy="15" r="4" /><path d="M11 12L21 2M17 6l3 3M14 9l2 2" /></>,
+  cloud: <path d="M7 18h10a4 4 0 000-8 6 6 0 00-11.6 1.6A3.5 3.5 0 007 18z" />,
+  logOut: <><path d="M10 4H6a2 2 0 00-2 2v12a2 2 0 002 2h4" /><path d="M14 8l4 4-4 4M18 12H9" /></>,
 };
 
 interface IconProps {

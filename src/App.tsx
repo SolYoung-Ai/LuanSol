@@ -24,7 +24,6 @@ const MarketWork = lazy(() => import('./pages/market').then((m) => ({ default: m
 const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
 const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default: m.ModelConfig })));
 const Subscribe = lazy(() => import('./pages/subscribe'));
-const Security = lazy(() => import('./pages/security'));
 const Help = lazy(() => import('./pages/help'));
 const Luna = lazy(() => import('./pages/luna'));
 const Studio = lazy(() => import('./pages/studio'));
@@ -97,11 +96,11 @@ export default function App() {
   else if (path.startsWith('/market/site/')) page = <MarketSite />;
   else if (path.startsWith('/market/work/')) page = <MarketWork />;
   else if (path.startsWith('/project/')) page = <ProjectDetail />;
-  else if (path === '/account') page = <Account />;
+  /* 账户信息是唯一入口：/security 是旧链接，直接渲染同一页，避免功能分家 */
+  else if (path === '/account' || path === '/security') page = <Account />;
   else if (path === '/settings') page = <Settings />;
   else if (path === '/models') page = <ModelConfig />;
   else if (path === '/subscribe') page = <Subscribe />;
-  else if (path === '/security') page = <Security />;
   else if (path === '/help') page = <Help />;
   else if (path === '/luna') page = <Luna />;
   else if (path === '/studio') page = <Studio />;

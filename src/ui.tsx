@@ -71,14 +71,15 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   const guestItems: { label: string; path?: string; action?: () => void; primary?: boolean }[] = [
     { label: t('登录 / 注册', 'Sign in / Create account'), primary: true, action: requestLogin },
     { label: t('我的工作台', 'Workspace'), path: '/workspace' },
-    { label: t('账号信息', 'Account'), path: '/account' },
+    { label: t('账户信息', 'Account'), path: '/account' },
     { label: t('订阅与会员', 'Membership'), path: '/subscribe' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
   ];
+  /* 个人资料与账号安全已合并成「账户信息」一页：
+     资料、密码、换绑邮箱都在 /account，菜单里不再拆成两个入口。 */
   const userItems: { label: string; path?: string; action?: () => void; adminOnly?: boolean }[] = [
-    { label: t('个人资料', 'Profile'), path: '/account' },
+    { label: t('账户信息', 'Account'), path: '/account' },
     { label: t('积分与充值', 'Credits & Recharge'), path: '/subscribe' },
-    { label: t('账号安全', 'Security'), path: '/security' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
     { label: t('开发者管理', 'Developer'), path: '/admin', adminOnly: true },
   ];

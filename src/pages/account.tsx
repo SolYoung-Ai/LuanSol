@@ -1,36 +1,63 @@
 /* ============================================================
- * 个人资料页
+ * 账户信息（原「个人资料」+「账号安全」合并页）
  * ------------------------------------------------------------
- * 只保留用户关心的三件事：头像、昵称、生日。
- * 技术信息（用户 ID、环境、登录账号）、订阅额度、云同步操作
- * 都已经挪到别处：订阅看 /subscribe，云同步在工作台。
+ * 一页管完：头像 / 昵称 / 生日、登录密码、绑定换绑邮箱、云端项目。
+ * 交互按 iOS 设置页组织：分组玻璃卡 + 可展开的行，默认看不到一堆
+ * 输入框与分割线；点开某行才出现对应编辑区。
+ *
+ * 所有写操作仍是真实 CloudBase 接口，且改密强制二次身份验证：
+ *  - 改密：先向注册邮箱发验证码（reauthenticate），再「验证码 + 新密码」提交。
+ *  - 换绑：向新邮箱发验证码，校验通过后生效。
+ *  - 短信验证码已在控制台关闭（成本约 0.05 元/条），不提供绑定手机入口。
+ * 失败原样展示服务端消息，不做假入口。
  * ============================================================ */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
-import { Button, Card, Empty, Notice, PageHead, SectionLabel, go } from '../ui';
+import { Notice, go } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { useProfile } from '../cloud/profile';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { useCloudSync } from '../cloud/useCloudSync';
 import { listProjects, pullProject, projectIdOf, timeLabel, type CloudMeta } from '../cloud/projects';
-import { CLOUD, cloudConfigured, cloudOriginSupported, CLOUD_SITE_URL } from '../cloud/config';
+import { cloudConfigured, cloudOriginSupported, CLOUD_SITE_URL } from '../cloud/config';
+import { Icon, type IconName } from '../components/icons';
+
+type Panel = 'profile' | 'password' | 'email' | null;
+
+/** 分组里的一个图标胶囊：颜色由 CSS 变量控制，浅深色自动适配 */
+function Ico({ name }: { name: IconName }) {
+  return <span className="ag-ico"><Icon name={name} size={17} /></span>;
+}
 
 export default function Account() {
   const a = useAuth();
   const profile = useProfile();
-  const { s, mergeCloudProjects, loadProject, setToast } = useApp();
+  const { mergeCloudProjects, loadProject, setToast } = useApp();
   const sync = useCloudSync();
   const [loginOpen, setLoginOpen] = useState(false);
-  const [rows, setRows] = useState<CloudMeta[] | null>(null);
-  const [listError, setListError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [panel, setPanel] = useState<Panel>(null);
+  const toggle = (p: Exclude<Panel, null>) => setPanel((cur) => (cur === p ? null : p));
 
-  // 昵称 / 头像 / 生日编辑态
+  /* ---- 个人资料 ---- */
   const [nick, setNick] = useState('');
   const [avatar, setAvatar] = useState('');
   const [birthday, setBirthdayLocal] = useState('');
   const [saving, setSaving] = useState(false);
   const avatarFileRef = useRef<HTMLInputElement>(null);
+
+  /* ---- 云端项目 ---- */
+  const [rows, setRows] = useState<CloudMeta[] | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  /* ---- 改密（验证码 + 新密码 + 确认） ---- */
+  const [pwdNonce, setPwdNonce] = useState('');
+  const [pwdNew, setPwdNew] = useState('');
+  const [pwdConfirm, setPwdConfirm] = useState('');
+
+  /* ---- 绑定 / 换绑：短信已停用，只允许邮箱 ---- */
+  const [linkTarget, setLinkTarget] = useState('');
+  const [linkCode, setLinkCode] = useState('');
 
   const onPickAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -57,7 +84,6 @@ export default function Account() {
   useEffect(() => {
     if (!a.user) return;
     setNick(a.user.label === a.user.id ? '' : a.user.label);
-    // 头像和生日从云端资料表读取
     setAvatar(profile.profile?.avatar_url || a.user.avatarUrl || '');
     setBirthdayLocal(profile.profile?.birthday || '');
   }, [a.user?.id, a.user?.label, a.user?.avatarUrl, profile.profile?.avatar_url, profile.profile?.birthday]);
@@ -70,6 +96,22 @@ export default function Account() {
 
   useEffect(() => { void refresh(); }, [refresh, a.user?.id, sync.lastSync]);
 
+  const saveProfile = async () => {
+    if (!a.user) return;
+    setSaving(true);
+    try {
+      await profile.updateAvatar(avatar.trim());
+      await profile.updateBirthday(birthday);
+      const r = await a.updateProfile({ nickName: nick.trim() || undefined });
+      if (!r.ok) { setToast(r.message); return; }
+      setToast('个人资料已保存（云端同步）');
+    } catch (e) {
+      setToast('保存失败：' + ((e as Error).message || '未知错误'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const pull = async (id: string) => {
     setBusyId(id);
     const r = await pullProject(id);
@@ -81,106 +123,203 @@ export default function Account() {
     go('/workspace');
   };
 
-  const saveProfile = async () => {
-    if (!a.user) return;
-    setSaving(true);
-    try {
-      // 头像和生日保存到云端
-      await profile.updateAvatar(avatar.trim());
-      await profile.updateBirthday(birthday);
-      const r = await a.updateProfile({
-        nickName: nick.trim() || undefined,
-      });
-      if (!r.ok) { setToast(r.message); return; }
-      setToast('个人资料已保存（云端同步）');
-    } catch (e) {
-      setToast('保存失败：' + ((e as Error).message || '未知错误'));
-    } finally {
-      setSaving(false);
-    }
+  const startPwd = async () => {
+    const r = await a.startPasswordChange();
+    setToast(r.message);
+  };
+  const submitPwd = async () => {
+    if (pwdNew !== pwdConfirm) { setToast('两次输入的新密码不一致'); return; }
+    const r = await a.confirmPasswordChange(pwdNonce, pwdNew);
+    setToast(r.message);
+    if (r.ok) { setPwdNonce(''); setPwdNew(''); setPwdConfirm(''); }
+  };
+  const sendLinkCode = async () => {
+    const r = await a.startLink('email', linkTarget);
+    setToast(r.message);
+  };
+  const submitLink = async () => {
+    const r = await a.verifyLink(linkCode);
+    setToast(r.message);
+    if (r.ok) { setLinkTarget(''); setLinkCode(''); }
   };
 
-  if (!cloudConfigured) {
-    return <div className="page page-narrow">
-      <PageHead kicker="ACCOUNT" title="个人资料" desc="当前构建没有接入云服务。" />
-      <Notice tone="warn">未配置 CloudBase 环境变量，登录与云同步不可用。</Notice>
-    </div>;
-  }
+  const avatarUrl = avatar.trim();
+  const initial = (a.user?.label || '?').slice(0, 1).toUpperCase();
 
-  return <div className="page">
-    <PageHead kicker="ACCOUNT" title="个人资料"
-      desc="你的头像、称呼和生日。账号安全（绑定邮箱 / 改密码）在「账号设置」里。"
-      right={a.user
-        ? <Button variant="outline" onClick={() => go('/security')}>账号设置</Button>
-        : <Button onClick={() => setLoginOpen(true)}>登录 / 注册</Button>} />
+  return <div className="page page-narrow ag-page">
+    <input ref={avatarFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickAvatar} />
 
-    {!cloudOriginSupported() && <Notice tone="warn">
+    <header className="ag-head">
+      <span className="ag-kicker">ACCOUNT</span>
+      <h1>账户信息</h1>
+      <p>资料、密码与邮箱，都在这里。</p>
+    </header>
+
+    {!cloudConfigured && <Notice tone="warn">未配置 CloudBase 环境变量，登录与云同步不可用。</Notice>}
+    {cloudConfigured && !cloudOriginSupported() && <Notice tone="warn">
       当前是 GitHub Pages 镜像域名，CloudBase 认证接口只对白名单来源放行。
-      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">去正式站点登录 →</a>
+      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">去正式站点操作 →</a>
     </Notice>}
 
-    {!a.user ? <Empty title="还没有登录"
-      desc="登录后才能开始设计、同步项目、保存你的个人资料。"
-      action={<Button onClick={() => setLoginOpen(true)}>登录或注册账号</Button>} /> : <>
-      <div className="acct-grid">
-        <Card className="pad-card">
-          <SectionLabel en="PROFILE">个人资料</SectionLabel>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-            <input ref={avatarFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickAvatar} />
-            <button onClick={() => avatarFileRef.current?.click()} title="点击上传头像" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%', overflow: 'hidden' }}>
-              {avatar.trim()
-                ? <img src={avatar.trim()} alt="头像" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover' }} />
-                : <div className="v4-avatar" style={{ width: 56, height: 56, fontSize: 22 }}>{(a.user.label || '?').slice(0, 1).toUpperCase()}</div>}
+    {!a.user ? (
+      <section className="ag-card ag-guest">
+        <span className="ag-guest-ico"><Icon name="user" size={26} /></span>
+        <h2>登录后管理账户信息</h2>
+        <p>登录后可修改头像与称呼、设置密码、换绑邮箱，并同步云端项目。</p>
+        <button className="ag-btn" onClick={() => setLoginOpen(true)}>登录 / 注册</button>
+      </section>
+    ) : <>
+      {/* ---------- 身份卡 ---------- */}
+      <section className="ag-card ag-identity">
+        <button className="ag-avatar" onClick={() => avatarFileRef.current?.click()} title="点击更换头像">
+          {avatarUrl
+            ? <img src={avatarUrl} alt="头像" />
+            : <span>{initial}</span>}
+          <span className="ag-avatar-edit"><Icon name="edit" size={13} /></span>
+        </button>
+        <div className="ag-identity-text">
+          <strong>{a.user.label}</strong>
+          <span>{a.user.account || '本地账号'}</span>
+        </div>
+        <span className="ag-pill">已登录</span>
+      </section>
+
+      {/* ---------- 个人资料 ---------- */}
+      <div className="ag-group-label">个人资料</div>
+      <section className="ag-card ag-group">
+        <button className={`ag-row ${panel === 'profile' ? 'open' : ''}`} onClick={() => toggle('profile')}>
+          <Ico name="user" />
+          <span className="ag-row-main"><strong>头像与称呼</strong><small>更换照片、修改昵称与生日</small></span>
+          <Icon name="chevronRight" size={16} className="ag-chev" />
+        </button>
+        {panel === 'profile' && <div className="ag-panel">
+          <div className="ag-avatar-row">
+            <button className="ag-avatar ag-avatar-sm" onClick={() => avatarFileRef.current?.click()} title="点击更换头像">
+              {avatarUrl ? <img src={avatarUrl} alt="头像" /> : <span>{initial}</span>}
             </button>
-            <div>
-              <div style={{ fontWeight: 600 }}>{a.user.label}</div>
-              <div style={{ fontSize: 12, color: 'var(--v4-ink-3, #888)' }}>{a.user.account || '本地账号'}</div>
-              <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>点击头像更换照片</div>
-            </div>
+            <span className="ag-row-main"><strong>个人头像</strong><small>点击更换，自动压缩为 128 × 128</small></span>
           </div>
-
-          <label className="field"><span className="field-label">称呼</span>
-            <input className="input" value={nick} onChange={(e) => setNick(e.target.value)}
-              placeholder="例如：Sol Young" /></label>
-          <label className="field"><span className="field-label">生日</span>
-            <input className="input" type="date" value={birthday} onChange={(e) => setBirthdayLocal(e.target.value)} /></label>
-
-          <div className="acct-actions" style={{ marginTop: 16 }}>
-            <Button size="sm" onClick={saveProfile} disabled={saving}>{saving ? '保存中…' : '保存资料'}</Button>
-            <Button size="sm" variant="ghost" onClick={async () => { const r = await a.signOut(); setToast(r.message); }}>退出登录</Button>
+          <div className="ag-fields">
+            <label className="ag-field"><span>称呼</span>
+              <input value={nick} onChange={(e) => setNick(e.target.value)} placeholder="例如：Sol Young" /></label>
+            <label className="ag-field"><span>生日</span>
+              <input type="date" value={birthday} onChange={(e) => setBirthdayLocal(e.target.value)} /></label>
           </div>
-        </Card>
-
-        <Card className="pad-card">
-          <SectionLabel en="SECURITY">账号安全</SectionLabel>
-          <div className="acct-row"><span>登录方式</span><strong>{a.user.account || '—'}</strong></div>
-          <div className="acct-actions" style={{ marginTop: 16 }}>
-            <Button size="sm" variant="outline" onClick={() => go('/security')}>绑定邮箱 / 修改密码</Button>
+          <div className="ag-actions">
+            <button className="ag-btn" onClick={() => void saveProfile()} disabled={saving}>{saving ? '保存中…' : '保存资料'}</button>
           </div>
-          <p className="acct-msg">订阅与额度在 <a className="inline-link" href="#/subscribe">会员说明</a>；云同步操作在 <a className="inline-link" href="#/workspace">工作台</a>。</p>
-        </Card>
-      </div>
+        </div>}
+      </section>
 
-      <Card className="pad-card cloud-list-card">
-        <SectionLabel en="CLOUD PROJECTS">云端项目</SectionLabel>
-        {listError && <Notice tone="warn">{listError}</Notice>}
-        {!rows ? (listError ? null : <p className="acct-msg">正在读取云端列表…</p>) : rows.length === 0
-          ? <p className="acct-msg">云端还没有项目。在工作台打开一个项目并保存，会自动同步上去。</p>
-          : <div className="cloud-list">{rows.map((r) => <div className="cloud-item" key={r.id}>
-            <div className="cloud-item-main">
-              <strong>{r.title || '未命名包装项目'}</strong>
-              <span>{timeLabel(r.updated_at)} · {projectIdOf(r.id)}</span>
+      {/* ---------- 登录与安全 ---------- */}
+      <div className="ag-group-label">登录与安全</div>
+      <section className="ag-card ag-group">
+        <div className="ag-row ag-row-static">
+          <Ico name="shield" />
+          <span className="ag-row-main"><strong>登录账号</strong><small>{a.user.account || '—'}</small></span>
+          <span className="ag-value">{a.user.email ? '邮箱已验证' : '邮箱未绑定'}</span>
+        </div>
+        {a.user.phone && <div className="ag-row ag-row-static">
+          <Ico name="message" />
+          <span className="ag-row-main"><strong>手机号</strong><small>历史绑定，仅作只读展示</small></span>
+          <span className="ag-value">{a.user.phone}</span>
+        </div>}
+
+        <button className={`ag-row ${panel === 'password' ? 'open' : ''}`} onClick={() => toggle('password')}>
+          <Ico name="key" />
+          <span className="ag-row-main"><strong>登录密码</strong><small>修改前先验证注册邮箱</small></span>
+          <Icon name="chevronRight" size={16} className="ag-chev" />
+        </button>
+        {panel === 'password' && <div className="ag-panel">
+          {!a.reauthPending ? <>
+            <p className="ag-hint">设置或修改密码前，需要先验证注册邮箱。点下方按钮后，验证码会发送到已绑定的邮箱。</p>
+            <div className="ag-actions">
+              <button className="ag-btn" onClick={() => void startPwd()} disabled={a.busy}>
+                {a.busy ? '发送中…' : '验证身份并设置密码'}
+              </button>
             </div>
-            <div className="cloud-item-actions">
-              <Button size="sm" variant="outline" disabled={busyId === r.id} onClick={() => void pull(r.id)}>
-                {busyId === r.id ? '取回中…' : '取回到本机'}</Button>
-              <Button size="sm" variant="ghost" onClick={async () => {
-                const ok = await sync.removeOne(r.id);
-                if (ok) void refresh();
-              }}>删除云端</Button>
+          </> : <>
+            <p className="ag-hint">身份验证码已发送到注册邮箱，请填写验证码并设置新密码。</p>
+            <div className="ag-fields ag-fields-single">
+              <label className="ag-field"><span>身份验证码</span>
+                <input inputMode="numeric" autoComplete="one-time-code" value={pwdNonce}
+                  onChange={(e) => setPwdNonce(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="6 位数字" /></label>
+              <label className="ag-field"><span>新密码</span>
+                <input type="password" value={pwdNew} onChange={(e) => setPwdNew(e.target.value)}
+                  autoComplete="new-password" placeholder="至少 8 位" /></label>
+              <label className="ag-field"><span>确认新密码</span>
+                <input type="password" value={pwdConfirm} onChange={(e) => setPwdConfirm(e.target.value)}
+                  autoComplete="new-password" /></label>
             </div>
-          </div>)}</div>}
-      </Card>
+            <div className="ag-actions">
+              <button className="ag-btn" onClick={() => void submitPwd()} disabled={a.busy || !pwdNonce || !pwdNew}>
+                {a.busy ? '提交中…' : '确认修改'}
+              </button>
+              <button className="ag-btn-quiet" onClick={a.cancelPasswordChange}>取消</button>
+            </div>
+          </>}
+        </div>}
+
+        <button className={`ag-row ${panel === 'email' ? 'open' : ''}`} onClick={() => toggle('email')}>
+          <Ico name="mail" />
+          <span className="ag-row-main"><strong>绑定 / 换绑邮箱</strong><small>当前：{a.user.email || '未绑定'}</small></span>
+          <Icon name="chevronRight" size={16} className="ag-chev" />
+        </button>
+        {panel === 'email' && <div className="ag-panel">
+          {!a.linkPending ? <>
+            <div className="ag-fields ag-fields-single">
+              <label className="ag-field"><span>新邮箱地址</span>
+                <input value={linkTarget} onChange={(e) => setLinkTarget(e.target.value)}
+                  inputMode="email" type="email" autoComplete="email" placeholder="you@example.com" /></label>
+            </div>
+            <p className="ag-hint">短信验证码已停用，暂不提供手机号绑定；已绑定的手机号仍可用于密码登录。</p>
+            <div className="ag-actions">
+              <button className="ag-btn" onClick={() => void sendLinkCode()} disabled={a.busy || !linkTarget.trim()}>
+                {a.busy ? '发送中…' : '发送验证码'}
+              </button>
+            </div>
+          </> : <>
+            <p className="ag-hint">验证码已发送到 <strong>{a.linkPending.target}</strong>。</p>
+            <div className="ag-fields ag-fields-single">
+              <label className="ag-field"><span>验证码</span>
+                <input inputMode="numeric" value={linkCode}
+                  onChange={(e) => setLinkCode(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="6 位数字" /></label>
+            </div>
+            <div className="ag-actions">
+              <button className="ag-btn" onClick={() => void submitLink()} disabled={a.busy || linkCode.length < 4}>
+                {a.busy ? '校验中…' : '完成绑定'}
+              </button>
+              <button className="ag-btn-quiet" onClick={a.cancelLink}>取消</button>
+            </div>
+          </>}
+        </div>}
+      </section>
+
+      {/* ---------- 云端项目 ---------- */}
+      <div className="ag-group-label">云端项目</div>
+      <section className="ag-card ag-group">
+        {listError ? <div className="ag-pad"><Notice tone="warn">{listError}</Notice></div>
+          : !rows ? <p className="ag-empty-row">正在读取云端列表…</p>
+            : rows.length === 0 ? <p className="ag-empty-row">云端还没有项目。在工作台保存一个项目，会自动同步上来。</p>
+              : rows.map((r) => <div className="ag-project" key={r.id}>
+                <Ico name="cloud" />
+                <span className="ag-row-main"><strong>{r.title || '未命名包装项目'}</strong>
+                  <small>{timeLabel(r.updated_at)} · {projectIdOf(r.id)}</small></span>
+                <div className="ag-project-ops">
+                  <button className="ag-mini" disabled={busyId === r.id} onClick={() => void pull(r.id)}>
+                    {busyId === r.id ? '取回中…' : '取回'}</button>
+                  <button className="ag-mini danger" onClick={async () => {
+                    const ok = await sync.removeOne(r.id);
+                    if (ok) void refresh();
+                  }}>删除</button>
+                </div>
+              </div>)}
+      </section>
+
+      <button className="ag-signout" onClick={async () => {
+        const r = await a.signOut();
+        setToast(r.message);
+      }}><Icon name="logOut" size={15} /> 退出登录</button>
     </>}
 
     <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)}

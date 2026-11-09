@@ -284,6 +284,11 @@ export default function Luna() {
       {/* ------------------------------ 左侧栏（桌面常驻 / 移动抽屉） ------------------------------ */}
       <aside className={`lc-side ${sideOpen ? '' : 'collapsed'} ${drawerOpen ? 'drawer-open' : ''}`}>
         <div className="lc-side-inner">
+        {/* 桌面端品牌头：与右上角的收起按钮组成一组，手机抽屉不渲染 */}
+        {!isMobile && <div className="lc-side-head">
+          <img src="./logo.png" alt="Luna" />
+          <span className="lc-side-head-text"><strong>Luna</strong><small>你的专属设计师</small></span>
+        </div>}
         <button className="lc-new" onClick={makeNew}>
           <Icon name="plus" size={16} />
           <span>新建对话</span>
@@ -351,13 +356,24 @@ export default function Luna() {
         </div>
         </div>
 
+        {/* 收起后只留一列图标快捷入口，点「搜索」会直接把侧栏展开 */}
+        {!isMobile && !sideOpen && <div className="lc-rail">
+          <button className="lc-rail-btn" title="新建对话" aria-label="新建对话" onClick={makeNew}>
+            <Icon name="plus" size={18} />
+          </button>
+          <button className="lc-rail-btn" title="展开侧栏并搜索" aria-label="展开侧栏并搜索" onClick={() => setSideOpen(true)}>
+            <Icon name="search" size={18} />
+          </button>
+        </div>}
+
         {/* 桌面端收起/展开常驻侧栏；移动端作为关闭抽屉按钮 */}
         <button
           className="lc-side-toggle"
           onClick={toggleSide}
           title={isMobile ? '关闭菜单' : sideOpen ? '收起侧栏' : '展开侧栏'}
+          aria-label={isMobile ? '关闭菜单' : sideOpen ? '收起侧栏' : '展开侧栏'}
         >
-          <Icon name={isMobile ? 'close' : 'panelLeft'} size={16} />
+          <Icon name={isMobile ? 'close' : sideOpen ? 'chevronLeft' : 'chevronRight'} size={16} />
           <span className="lc-side-toggle-text">
             {isMobile ? '关闭菜单' : sideOpen ? '收起侧栏' : '展开'}
           </span>
