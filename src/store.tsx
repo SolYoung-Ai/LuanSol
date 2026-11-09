@@ -264,7 +264,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       const id = uid('proj');
       const workflow = createInitialWorkflow(now);
-      workflow.stage = 'analysis';
+      workflow.stage = 'requirements';
       workflow.mode = input.mode;
       workflow.productInfo = input.productInfo;
       workflow.referenceImages = input.referenceImages;

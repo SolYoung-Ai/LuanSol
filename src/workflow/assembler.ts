@@ -10,11 +10,13 @@
  * 不编造条码/Logo/生产信息。
  * ============================================================ */
 import type {
+  ConceptImage,
   DesignBrief,
   DesignDoc,
   ImageLayer,
   Layer,
   Palette,
+  ProductInfo,
   ProjectWorkflow,
   StructureId,
   TextLayer,
@@ -225,6 +227,93 @@ export function assembleDesign(wf: ProjectWorkflow): DesignDoc {
     rationale:
       `由 AI 工作流自动组装：纳入 ${usedCount} 个已生成素材，按「${structure}」结构分配到各面；` +
       '品牌、产品名与净含量为独立可编辑文字图层，未用整张图片充当印刷稿，未编造条码/Logo/生产信息。',
+    createdAt: Date.now(),
+  };
+}
+
+/* ============================================================
+ * 由「设计方案」选中的整包效果图组装工程
+ * ------------------------------------------------------------
+ * 与 assembleDesign 的区别：这里没有逐任务素材，只有一张 AI 生成的
+ * 整包效果图。把它作为各面的底图（cover），正面叠加真实文字图层，
+ * 让用户进编辑器后能直接改字、挪位、调色，而不是拿一张死图。
+ * ============================================================ */
+
+/** 从产品信息（主题色）构建调色板，给真实兜底 */
+function paletteFromInfo(info: ProductInfo): Palette {
+  const c = info.themeColors.filter(Boolean);
+  const bg = c[0] || info.brandMainColor || '#f3eee4';
+  const primary = c[1] || '#20463a';
+  const accent = c[2] || '#c8a86b';
+  const ink = readableOn(bg);
+  const muted = ink === '#ffffff' ? 'rgba(255,255,255,0.78)' : 'rgba(20,20,20,0.62)';
+  return { bg, primary, accent, ink, muted };
+}
+
+/** 正面文字图层：品牌 / 产品名 / 一级卖点 / 净含量 */
+function textFromInfo(info: ProductInfo, palette: Palette, faceW: number, faceH: number): TextLayer[] {
+  const brand = info.brandName || info.logoName || 'LunaSol';
+  const product = info.productName || '精选好物';
+  const spec = info.netContent ? `净含量 ${info.netContent}` : '净含量：请按实际填写';
+  const m = Math.min(8, Math.max(3, faceW * 0.05));
+
+  const layers: TextLayer[] = [
+    makeText('品牌名称', brand, 'brand',
+      { x: m, y: faceH * 0.52, w: faceW - m * 2, h: faceH * 0.11 },
+      { color: palette.ink, align: 'center', fontSize: 26, fontWeight: 600, letterSpacing: 0.1 }),
+    makeText('产品名称', product, 'product',
+      { x: m, y: faceH * 0.63, w: faceW - m * 2, h: faceH * 0.09 },
+      { color: palette.ink, align: 'center', fontSize: 15, fontWeight: 400, letterSpacing: 0.08 }),
+  ];
+  if (info.sellingPointPrimary) {
+    layers.push(makeText('一级卖点', info.sellingPointPrimary, 'tagline',
+      { x: m, y: faceH * 0.72, w: faceW - m * 2, h: faceH * 0.07 },
+      { color: palette.muted, align: 'center', fontSize: 10, fontWeight: 400, letterSpacing: 0.06 }));
+  }
+  layers.push(makeText('规格', spec, 'info',
+    { x: m, y: faceH * 0.86, w: faceW - m * 2, h: faceH * 0.06 },
+    { color: palette.muted, align: 'center', fontSize: 9, placeholder: !info.netContent }));
+  return layers;
+}
+
+/** 把选中的整包效果图组装成可编辑工程 */
+export function assembleFromConceptImage(wf: ProjectWorkflow, image: ConceptImage): DesignDoc {
+  const structure = inferStructure(wf);
+  const size = inferSize(wf, structure);
+  const sizes = faceSizes(structure, size);
+  const info = wf.productInfo;
+  const palette = paletteFromInfo(info);
+
+  const faces: DesignDoc['faces'] = {};
+  for (const [faceId, spec] of Object.entries(sizes)) {
+    const fid = faceId as keyof typeof sizes;
+    const base: ImageLayer = {
+      id: uid('ly'), name: `AI 方案 ${image.label}`, type: 'image',
+      x: 0, y: 0, w: spec.w, h: spec.h,
+      rotation: 0, opacity: 1, locked: false,
+      src: image.src, naturalW: image.naturalW, naturalH: image.naturalH, fit: 'cover',
+    };
+    const textLayers = fid === 'front' ? textFromInfo(info, palette, spec.w, spec.h) : [];
+    faces[fid] = {
+      id: fid as never,
+      w: spec.w,
+      h: spec.h,
+      bg: palette.bg,
+      layers: [base, ...(textLayers as Layer[])],
+    };
+  }
+
+  const name = info.brandName || info.productName || '未命名包装项目';
+  return {
+    id: uid('design'),
+    name: `${name} · 方案 ${image.label}`,
+    scheme: 'minimal',
+    palette,
+    faces,
+    rationale:
+      `采用方案 ${image.label} 的整包效果图作为各面底图，按「${structure}」结构铺开；` +
+      '品牌、产品名、卖点与净含量为独立可编辑文字图层。效果图为 AI 概念渲染，' +
+      '正式印刷前请在编辑器逐面调整，并核对文字、条码与出血。',
     createdAt: Date.now(),
   };
 }

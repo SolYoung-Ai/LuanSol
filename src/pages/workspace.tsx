@@ -165,6 +165,25 @@ export default function Workspace() {
       </div>
     </div>
 
+    {/* 创作流程指引：让用户一眼看懂从想法到成品要走哪四步 */}
+    <div className="v4-flow-guide">
+      {[
+        { n: '01', t: '创作入口', d: '有方向 / 从零开始' },
+        { n: '02', t: '确认需求', d: '配色 · 卖点 · LOGO · 条码' },
+        { n: '03', t: '设计方案', d: '生成 3 张，选一张' },
+        { n: '04', t: '编辑器', d: '2D / 3D 精修导出' },
+      ].map((st, i) => (
+        <div className="v4-flow-step" key={st.n}>
+          <span className="v4-flow-dot">{st.n}</span>
+          <span className="v4-flow-text">
+            <strong>{st.t}</strong>
+            <em>{st.d}</em>
+          </span>
+          {i < 3 && <span className="v4-flow-arrow" aria-hidden>→</span>}
+        </div>
+      ))}
+    </div>
+
     {/* 云同步：登录后在这里集中操作（同步状态 / 立即双向同步 / 取回云端项目） */}
     <div className="v4-toolbar" style={{ borderBottom: 'none', paddingBottom: 0 }}>
       <div className="v4-sec-note">

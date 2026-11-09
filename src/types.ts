@@ -293,7 +293,7 @@ export type CreationMode = 'referenceStyle' | 'referenceInnovate' | 'fromScratch
 
 /** 工作流阶段：驱动页面渲染，刷新后据此恢复。
  *  editor 为流程内嵌入的精细编辑器（自动组装之后），与独立 /studio 复用同一套编辑器组件 */
-export type WorkflowStage = 'entry' | 'analysis' | 'concepts' | 'planning' | 'workflow' | 'assembled' | 'editor';
+export type WorkflowStage = 'entry' | 'requirements' | 'analysis' | 'concepts' | 'planning' | 'workflow' | 'assembled' | 'editor';
 
 /** 参考图用途分类 */
 export type ReferenceRole =
@@ -334,6 +334,44 @@ export interface ProductInfo {
   expectedSize: string;
   brandMainColor: string;
   specialRequirements: string;
+
+  /* ---- 新流程「确认需求」补充字段 ---- */
+  /** 包装主题颜色（HEX 数组，多选） */
+  themeColors: string[];
+  /** 插画元素描述 */
+  illustrationElements: string;
+  /** 产品一级卖点 */
+  sellingPointPrimary: string;
+  /** 产品二级卖点 */
+  sellingPointSecondary: string;
+  /** 净含量 */
+  netContent: string;
+  /** LOGO 处理方式：上传已有 / 按名称生成 / 暂无 */
+  logoMode: 'upload' | 'generate' | 'none';
+  /** 无 LOGO 时填写的名称，用于 AI 生成字形 */
+  logoName: string;
+  /** 已上传的 LOGO 图片 data URL */
+  logoImage: string;
+  /** 条形码（数字串，可为空，不伪造） */
+  barcode: string;
+}
+
+/** 设计方案阶段的三张整包效果图（真实生图结果，可单独重新生成） */
+export interface ConceptImage {
+  id: string;
+  /** 方案 A / B / C */
+  label: string;
+  /** 生图结果 data URL / URL */
+  src: string;
+  prompt: string;
+  /** 该张使用的模型档位 */
+  model: ImageTier;
+  tier: ImageTier;
+  at: number;
+  naturalW: number;
+  naturalH: number;
+  /** 生成时使用的差异化方向提示 */
+  hint: string;
 }
 
 /** 色彩规范条目 */
@@ -484,6 +522,10 @@ export interface ProjectWorkflow {
   analysis: AnalysisReport | null;
   concepts: DesignConcept[];
   selectedConceptId: string | null;
+  /** 设计方案阶段生成的三张整包效果图 */
+  conceptImages: ConceptImage[];
+  /** 用户选中的整包效果图 id（继续设计时据此组装） */
+  selectedConceptImageId: string | null;
   tasks: DesignTask[];
   createdAt: number;
   updatedAt: number;
@@ -496,6 +538,9 @@ export function emptyProductInfo(): ProductInfo {
     productName: '', brandName: '', productType: '', productIntro: '',
     audience: '', pricePositioning: '', salesScene: '', packagingType: '',
     expectedSize: '', brandMainColor: '', specialRequirements: '',
+    themeColors: [], illustrationElements: '',
+    sellingPointPrimary: '', sellingPointSecondary: '', netContent: '',
+    logoMode: 'none', logoName: '', logoImage: '', barcode: '',
   };
 }
 
@@ -510,6 +555,8 @@ export function createInitialWorkflow(now: number = Date.now()): ProjectWorkflow
     analysis: null,
     concepts: [],
     selectedConceptId: null,
+    conceptImages: [],
+    selectedConceptImageId: null,
     tasks: [],
     createdAt: now,
     updatedAt: now,

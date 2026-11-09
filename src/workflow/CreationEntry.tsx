@@ -1,119 +1,103 @@
-/* AI 创作入口（任务书第三部分）：整合参考图上传、产品信息、创作模式，提交创建真实项目。 */
-import React, { useMemo, useState } from 'react';
-import type { CreationMode, ProductInfo, ReferenceImage } from '../types';
+/* ============================================================
+ * 创作入口（第一步）：两个选择，决定接下来的路径。
+ * ------------------------------------------------------------
+ *  A. 我有参考图 / 设计方向 → 进入「确认需求」，按参考图落地
+ *  B. 我没有，从零开始     → 进入「确认需求」，AI 帮你构思
+ * 两条路径都落到同一个确认需求页，区别只在初始 mode 与提示文案，
+ * 不制造「选了没反应」的死路。项目在点击时真实创建。
+ * ============================================================ */
+import React, { useState } from 'react';
+import type { CreationMode } from '../types';
 import { emptyProductInfo } from '../types';
 import { useApp } from '../store';
-import ReferenceUploader from './components/ReferenceUploader';
-import ProductBriefForm from './components/ProductBriefForm';
-import ModeSelector from './components/ModeSelector';
+import { Icon } from '../components/icons';
+import type { IconName } from '../components/icons';
 
-const sectionHead: React.CSSProperties = {
-  display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10,
-};
-const sectionTitle: React.CSSProperties = { fontSize: 15, fontWeight: 700, color: '#222' };
-const sectionIndex: React.CSSProperties = {
-  fontSize: 11, color: '#e8783a', fontWeight: 700, letterSpacing: 1,
-};
-const card: React.CSSProperties = {
-  background: '#fff', border: '1px solid #ececec', borderRadius: 14,
-  padding: 20, marginBottom: 16,
-};
+interface Choice {
+  mode: CreationMode;
+  icon: IconName;
+  kicker: string;
+  title: string;
+  desc: string;
+  points: string[];
+}
+
+const CHOICES: Choice[] = [
+  {
+    mode: 'referenceStyle',
+    icon: 'image',
+    kicker: '我有方向',
+    title: '我有参考图 / 设计方向',
+    desc: '手上有喜欢的包装图、品牌规范，或已经想清楚风格。',
+    points: ['上传参考图，AI 按你的方向落地', '可以指定配色、插画元素与卖点'],
+  },
+  {
+    mode: 'fromScratch',
+    icon: 'spark',
+    kicker: '从零开始',
+    title: '我没有，从零开始',
+    desc: '只有一个产品，还没有任何设计想法，交给 AI 构思。',
+    points: ['描述产品，AI 帮你定调', '同样可补充信息让方向更准'],
+  },
+];
 
 export default function CreationEntry() {
-  const { s, createWorkflowProject, setToast } = useApp();
+  const { s, createWorkflowProject, patchWorkflow, loadProject, setToast } = useApp();
+  const [busy, setBusy] = useState<CreationMode | null>(null);
 
-  // 若当前 active 项目已有 entry 阶段草稿则恢复，否则用空值
-  const activeWorkflow = s.activeId
-    ? s.projects.find((p) => p.id === s.activeId)?.workflow
-    : undefined;
-
-  const [productInfo, setProductInfo] = useState<ProductInfo>(
-    activeWorkflow?.productInfo || emptyProductInfo(),
-  );
-  const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>(
-    activeWorkflow?.referenceImages || [],
-  );
-  const [mode, setMode] = useState<CreationMode>(activeWorkflow?.mode || 'referenceStyle');
-  const [submitting, setSubmitting] = useState(false);
-
-  const canSubmit = useMemo(() => {
-    if (submitting) return false;
-    const hasText = productInfo.description.trim().length > 0;
-    const hasImages = referenceImages.length > 0;
-    if (mode === 'fromScratch') return hasText;
-    return hasText || hasImages;
-  }, [submitting, productInfo.description, referenceImages.length, mode]);
-
-  const handleSubmit = () => {
-    if (!canSubmit) {
-      if (mode === 'fromScratch') setToast('请先用一句话描述你的产品和设计需求');
-      else setToast('请填写需求描述或至少上传一张参考图');
-      return;
-    }
-    setSubmitting(true);
+  const pick = (mode: CreationMode) => {
+    if (busy) return;
+    setBusy(mode);
     try {
-      createWorkflowProject({ mode, productInfo, referenceImages });
-      // 项目创建后 stage=analysis，CreationFlow 自动切换到分析阶段
+      // 优先复用已有的空白 entry 草稿，避免重复点击堆出多个空项目
+      const existing = s.projects.find(
+        (p) => p.workflow && p.workflow.stage === 'entry' && p.design === null,
+      );
+      if (existing) {
+        if (existing.id !== s.activeId) loadProject(existing.id);
+        patchWorkflow(existing.id, { mode, stage: 'requirements' });
+      } else {
+        createWorkflowProject({ mode, productInfo: emptyProductInfo(), referenceImages: [] });
+      }
     } catch (e) {
-      setToast(e instanceof Error ? e.message : '项目创建失败，请重试');
-      setSubmitting(false);
+      setToast(e instanceof Error ? e.message : '创建项目失败，请重试');
+      setBusy(null);
     }
   };
 
   return (
-    <div className="page" style={{ maxWidth: 860, margin: '0 auto', padding: '24px 20px 60px' }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 26, margin: '0 0 8px', color: '#1a1a1a' }}>开始创造你的包装</h1>
-        <p style={{ margin: 0, color: '#888', fontSize: 14 }}>从一个想法、一张参考图，开始你的包装设计。</p>
+    <div className="wf-page">
+      <div className="wf-head">
+        <div className="wf-kicker">STEP 01 · 创作入口</div>
+        <h1 className="wf-title">开始创造你的包装</h1>
+        <p className="wf-sub">先告诉我你手上有什么 —— 有方向，还是从零开始？</p>
       </div>
 
-      <section style={card}>
-        <div style={sectionHead}>
-          <span style={sectionIndex}>A</span>
-          <span style={sectionTitle}>灵感与参考图</span>
-          <span style={{ fontSize: 12, color: '#aaa' }}>可多选，图片会真实保存到项目</span>
-        </div>
-        <ReferenceUploader
-          images={referenceImages}
-          onChange={setReferenceImages}
-          onError={setToast}
-        />
-      </section>
-
-      <section style={card}>
-        <div style={sectionHead}>
-          <span style={sectionIndex}>B</span>
-          <span style={sectionTitle}>产品与设计需求</span>
-          <span style={{ fontSize: 12, color: '#aaa' }}>一句话即可，信息可后续补充</span>
-        </div>
-        <ProductBriefForm value={productInfo} onChange={setProductInfo} />
-      </section>
-
-      <section style={card}>
-        <div style={sectionHead}>
-          <span style={sectionIndex}>C</span>
-          <span style={sectionTitle}>选择创作模式</span>
-        </div>
-        <ModeSelector value={mode} onChange={setMode} />
-      </section>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
-        <button
-          onClick={() => { window.location.hash = '#/workspace'; }}
-          className="v4-btn-line"
-          style={{ padding: '11px 22px' }}
-        >
-          取消
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          className="v4-btn-dark"
-          style={{ padding: '11px 28px', opacity: canSubmit ? 1 : 0.5 }}
-        >
-          {submitting ? '正在创建…' : '开始 AI 设计'}
-        </button>
+      <div className="wf-choice-grid">
+        {CHOICES.map((c) => (
+          <button
+            key={c.mode}
+            className="wf-choice"
+            onClick={() => pick(c.mode)}
+            disabled={!!busy}
+          >
+            <span className="wf-choice-icon"><Icon name={c.icon} size={24} /></span>
+            <span className="wf-choice-kicker">{c.kicker}</span>
+            <span className="wf-choice-title">{c.title}</span>
+            <span className="wf-choice-desc">{c.desc}</span>
+            <span className="wf-choice-points">
+              {c.points.map((p) => (
+                <span key={p} className="wf-choice-point"><Icon name="check" size={13} />{p}</span>
+              ))}
+            </span>
+            <span className="wf-choice-cta">
+              {busy === c.mode ? '正在准备…' : '选择这条路'} <Icon name="chevronRight" size={15} />
+            </span>
+          </button>
+        ))}
       </div>
+
+      <p className="wf-foot-note">不确定选哪个？先选「从零开始」，在下一步补充产品信息即可。</p>
     </div>
   );
 }
