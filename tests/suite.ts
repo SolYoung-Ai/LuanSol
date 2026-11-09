@@ -10,7 +10,8 @@ import type { DesignBrief, DesignDoc, StructureId, TextLayer } from '../src/type
 import { STYLES, TRADITION_COUNT, styleById, stylePrimaryColor, buildStylePrompt } from '../src/v3/styles';
 import { createEmptyDraft, draftToBrief, dimensionComplete, structureReady } from '../src/v3/draft';
 import { generatePalettes } from '../src/v3/colors';
-import { accountKey, otpTarget, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
+import { accountKey, otpTarget, emailTarget, isEmail, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
+import { LOGIN_CONFIG } from '../src/cloud/loginConfig';
 import { decideGate } from '../src/cloud/subscription';
 import { toastTone } from '../src/store';
 import { CLOUD, cloudConfigured, deepSeekReady } from '../src/cloud/config';
@@ -579,6 +580,21 @@ export async function runTests(): Promise<Result[]> {
     A(otpTarget('13800138000')?.label === '手机号', '手机号注册目标识别失败');
     A(otpTarget('a@b.com')?.label === '邮箱', '邮箱注册目标识别失败');
     return '4 类账号 + 3 类目标识别正确';
+  });
+
+  /* ---------------- 登录配置 · 短信停用后验证码只认邮箱 ---------------- */
+  await t('登录配置 · 短信已关闭，任何验证码路径都不得构造 phone 参数', () => {
+    A(emailTarget('a@b.com')?.key.email === 'a@b.com', '邮箱验证码目标识别失败');
+    A(emailTarget('  A@B.COM  ')?.key.email === 'A@B.COM', '邮箱未正确 trim');
+    A(emailTarget('13800138000') === null, '手机号仍被当成验证码目标，会触发短信计费');
+    A(emailTarget('+8613800138000') === null, '国际号码仍被当成验证码目标');
+    A(emailTarget('lunasol_user') === null, '用户名仍被当成验证码目标');
+    A(emailTarget('a@b') === null, '非法邮箱未被拦截');
+    A(isEmail('a@b.com') && !isEmail('13800138000'), 'isEmail 判定错误');
+    A(LOGIN_CONFIG.methods.sms === false, '控制台已关闭短信，前端配置未同步');
+    A(LOGIN_CONFIG.methods.emailCode === true && LOGIN_CONFIG.methods.password === true, '登录方式配置与控制台不一致');
+    A(LOGIN_CONFIG.register.mode === 'auto', '注册模式应为自动注册并登录');
+    return '邮箱验证码 + 配置镜像一致，短信入口为 0';
   });
 
   await t('云同步键 · 行主键带账号，换账号不覆盖别人的行', () => {

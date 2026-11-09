@@ -764,6 +764,15 @@ img { display: block; max-width: 100%; }
 .luna-send-btn { padding: 8px 16px; border-radius: var(--v4-r-sm); border: none; background: #1d1d1b; color: #fff; cursor: pointer; font-size: 13px; flex-shrink: 0; }
 .luna-send-btn:disabled { background: #ddd; cursor: not-allowed; }
 
+/* ---- 登录弹窗：控制台品牌化配置（企业名 LunaSol）的前端镜像 ---- */
+.login-brand { display: flex; align-items: center; gap: 12px; padding: 2px 0 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.login-brand img { width: 38px; height: 38px; border-radius: 10px; flex: none; }
+.login-brand-name { font-size: 16px; font-weight: 600; letter-spacing: .02em; color: var(--ink); }
+.login-brand-tag { display: block; margin-top: 1px; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.login-secondary { margin-top: 14px; text-align: center; font-size: 12px; color: var(--muted); }
+.login-secondary button { margin-left: 4px; font-size: 12px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.login-secondary button:hover { color: #e8783a; }
+
 /* ---- Luna 对话页手机端适配 ---- */
 @media (max-width: 768px) {
   .luna-page { flex-direction: column; }

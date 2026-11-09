@@ -10,7 +10,10 @@ export function accountKey(account: string): Record<string, string> {
   return { username: a };
 }
 
-/** 注册与验证码只接受手机号或邮箱（CloudBase 的硬性要求） */
+/** 注册与验证码只接受手机号或邮箱（CloudBase 的硬性要求）。
+ *  ⚠️ 登录链路自 2026-11-09 起已停用此函数：控制台关闭了短信验证码，
+ *  任何 phone 参数都可能触发短信计费或服务端报错。新代码一律用 emailTarget()。
+ *  保留此函数仅为兼容旧测试与「读取历史账号格式」的纯数据用途。 */
 export function otpTarget(account: string): { key: Record<string, string>; label: string } | null {
   const a = account.trim();
   if (a.includes('@')) return { key: { email: a }, label: '邮箱' };
@@ -19,6 +22,21 @@ export function otpTarget(account: string): { key: Record<string, string>; label
     return { key: { phone: digits.startsWith('+') ? digits : `+86${digits}` }, label: '手机号' };
   }
   return null;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** 纯邮箱校验（可用于 UI 即时提示，不依赖浏览器）。 */
+export function isEmail(account: string): boolean {
+  return EMAIL_RE.test(account.trim());
+}
+
+/** 当前登录链路唯一允许的验证码目标：邮箱。
+ *  手机号、用户名、国际号码一律返回 null —— 从数据层杜绝短信发送，
+ *  即使将来有别的 UI 误调用 startCodeLogin 也不会产生短信费用。 */
+export function emailTarget(account: string): { key: { email: string }; label: '邮箱' } | null {
+  const a = account.trim();
+  return EMAIL_RE.test(a) ? { key: { email: a }, label: '邮箱' } : null;
 }
 
 /** 云端行主键：带上账号，换账号登录时不会撞上别人的行 */

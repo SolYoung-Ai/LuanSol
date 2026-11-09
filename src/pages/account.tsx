@@ -109,7 +109,7 @@ export default function Account() {
 
   return <div className="page">
     <PageHead kicker="ACCOUNT" title="个人资料"
-      desc="你的头像、称呼和生日。账号安全（绑定邮箱 / 手机 / 改密码）在「账号设置」里。"
+      desc="你的头像、称呼和生日。账号安全（绑定邮箱 / 改密码）在「账号设置」里。"
       right={a.user
         ? <Button variant="outline" onClick={() => go('/security')}>账号设置</Button>
         : <Button onClick={() => setLoginOpen(true)}>登录 / 注册</Button>} />
@@ -155,7 +155,7 @@ export default function Account() {
           <SectionLabel en="SECURITY">账号安全</SectionLabel>
           <div className="acct-row"><span>登录方式</span><strong>{a.user.account || '—'}</strong></div>
           <div className="acct-actions" style={{ marginTop: 16 }}>
-            <Button size="sm" variant="outline" onClick={() => go('/security')}>绑定邮箱 / 手机 / 修改密码</Button>
+            <Button size="sm" variant="outline" onClick={() => go('/security')}>绑定邮箱 / 修改密码</Button>
           </div>
           <p className="acct-msg">订阅与额度在 <a className="inline-link" href="#/subscribe">会员说明</a>；云同步操作在 <a className="inline-link" href="#/workspace">工作台</a>。</p>
         </Card>

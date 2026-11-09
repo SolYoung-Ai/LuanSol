@@ -6,15 +6,18 @@
  *  - 登录、注册、验证码、退出全部调用真实云端接口；
  *    失败原样展示 error.message，不伪造成功、不静默降级成本地假登录。
  *  - 用户名/密码登录：signInWithPassword（已实测返回 session 与 uid）。
- *  - 注册：signUp({phone|email, password}) → data.verifyOtp({token})，
- *    走 CloudBase 默认短信通道；邮件通道需要环境侧配置后才能收到信。
+ *  - 注册 / 验证码登录：控制台已关闭「短信验证码」（成本约 0.05 元/条），
+ *    因此 signUp({email}) / signInWithOtp({email}) 只接受邮箱，
+ *    由 keys.emailTarget() 在数据层兜底，任何路径都不会构造 phone 参数。
+ *  - 密码登录仍允许手机号作为「账号」（不走短信通道，已注册用户可继续用）。
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { authApi, type Err, type RawSession, type RawUser, type OtpCallback, type ReauthUpdate, type LinkVerifyCallback } from './sdk';
 import { cloudConfigured, cloudOriginSupported } from './config';
-import { accountKey, otpTarget } from './keys';
+import { accountKey, emailTarget } from './keys';
+import { NO_SMS_HINT } from './loginConfig';
 
-export { accountKey, otpTarget };
+export { accountKey, emailTarget, isEmail, otpTarget } from './keys';
 
 export interface AuthUser { id: string; label: string; account: string; avatarUrl: string; email: string; phone: string }
 
@@ -182,37 +185,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [apply]);
 
   const startSignup = useCallback(async (target: string, password: string): Promise<ActionResult> => {
+    const t = emailTarget(target);
+    if (!t) return { ok: false, message: `请输入正确的邮箱地址。${NO_SMS_HINT}` };
+    if (password.length < 8) return { ok: false, message: '密码至少 8 位' };
     const auth = await authApi();
     if (!auth) return { ok: false, message: unavailable('注册') };
-    const t = otpTarget(target);
-    if (!t) return { ok: false, message: '注册需要手机号或邮箱，用户名不能直接注册' };
-    if (password.length < 8) return { ok: false, message: '密码至少 8 位' };
     setBusy(true); setError(null);
     try {
       const r = await auth.signUp({ ...t.key, password });
       if (r.error) { const m = r.error.message || '注册失败'; setError(m); return { ok: false, message: m }; }
       if (!r.data?.verifyOtp) { const m = '注册服务未返回验证码校验入口'; setError(m); return { ok: false, message: m }; }
       verifyRef.current = r.data.verifyOtp;
-      setPending({ kind: 'signup', target: target.trim() });
-      return { ok: true, message: `验证码已发送到${t.label}，填写后完成注册` };
+      setPending({ kind: 'signup', target: t.key.email });
+      return { ok: true, message: `验证码已发送到${t.key.email}，填写后完成注册并自动登录` };
     } catch (e) {
       const m = errorMessage(e, '注册请求失败，请检查网络'); setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
   }, []);
 
+  /** 邮箱验证码登录。控制台「注册模式 = 自动注册并登录」，未注册邮箱由云端自动建号；
+   *  若云端返回「用户不存在」，LoginDialog 会降级展示邮箱注册表单。 */
   const startCodeLogin = useCallback(async (target: string): Promise<ActionResult> => {
+    const t = emailTarget(target);
+    if (!t) return { ok: false, message: `请输入正确的邮箱地址。${NO_SMS_HINT}` };
     const auth = await authApi();
     if (!auth) return { ok: false, message: unavailable('使用验证码') };
-    const t = otpTarget(target);
-    if (!t) return { ok: false, message: '请输入手机号或邮箱' };
     setBusy(true); setError(null);
     try {
       const r = await auth.signInWithOtp(t.key);
       if (r.error) { const m = r.error.message || '验证码发送失败'; setError(m); return { ok: false, message: m }; }
       if (!r.data?.verifyOtp) { const m = '登录服务未返回验证码校验入口'; setError(m); return { ok: false, message: m }; }
       verifyRef.current = r.data.verifyOtp;
-      setPending({ kind: 'login', target: target.trim() });
-      return { ok: true, message: `验证码已发送到${t.label}` };
+      setPending({ kind: 'login', target: t.key.email });
+      return { ok: true, message: `验证码已发送到${t.key.email}` };
     } catch (e) {
       const m = errorMessage(e, '验证码请求失败，请检查网络'); setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
@@ -286,7 +291,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) { return { ok: false, message: errorMessage(e, '更新失败') }; } finally { setBusy(false); }
   }, [apply, session]);
 
-  // 改密第一步：向注册邮箱/手机发送身份验证码（reauthenticate）
+  // 改密第一步：向注册邮箱发送身份验证码（reauthenticate）
   const startPasswordChange = useCallback(async (): Promise<ActionResult> => {
     const auth = await authApi();
     if (!auth?.reauthenticate) return { ok: false, message: unavailable('修改密码') };
@@ -297,7 +302,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!r.data?.updateUser) return { ok: false, message: '改密服务未返回验证入口' };
       reauthUpdateRef.current = r.data.updateUser;
       setReauthPending(true);
-      return { ok: true, message: '身份验证码已发送到注册邮箱或手机' };
+      return { ok: true, message: '身份验证码已发送到注册邮箱' };
     } catch (e) {
       return { ok: false, message: errorMessage(e, '验证码发送失败') };
     } finally { setBusy(false); }
@@ -314,7 +319,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (r.error) return { ok: false, message: r.error.message || '设置失败' };
       if (r.data?.session) apply(r.data.session as RawSession);
       setReauthPending(false); reauthUpdateRef.current = null;
-      return { ok: true, message: '密码已更新，下次可用手机号或邮箱+密码登录' };
+      return { ok: true, message: '密码已更新，下次可用邮箱 + 密码登录' };
     } catch (e) {
       return { ok: false, message: errorMessage(e, '设置失败') };
     } finally { setBusy(false); }
@@ -329,7 +334,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!auth?.updateUser) return { ok: false, message: unavailable('绑定') };
     const v = target.trim();
     if (kind === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return { ok: false, message: '请输入正确的邮箱地址' };
-    if (kind === 'phone' && !/^1\d{10}$/.test(v)) return { ok: false, message: '请输入 11 位手机号' };
+    // 控制台已关闭短信验证码：在 auth 层直接拒绝，保证任何 UI 路径都不会产生短信费用
+    if (kind === 'phone') return { ok: false, message: NO_SMS_HINT };
     setBusy(true); setError(null);
     try {
       const r = await auth.updateUser(kind === 'email' ? { email: v } : { phone: v });
