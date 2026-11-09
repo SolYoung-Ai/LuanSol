@@ -14,6 +14,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { authApi, type Err, type RawSession, type RawUser, type OtpCallback, type ReauthUpdate, type LinkVerifyCallback } from './sdk';
 import { cloudConfigured, cloudOriginSupported } from './config';
+import { humanizeAuthError, isSessionNoise } from './authErrors';
 import { accountKey, emailTarget } from './keys';
 import { NO_SMS_HINT } from './loginConfig';
 
@@ -151,8 +152,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!auth) { setReady(true); return; }
         const r = await auth.getSession();
         if (!alive) return;
-        if (r.error?.message && !/not logged|no session/i.test(r.error.message)) setError(r.error.message);
-        apply(r.data?.session || null);
+        const raw = r.error?.message;
+        // 本地 refresh token 被别的标签页/设备轮换过时，SDK 会在这里抛内部英文错误
+        // （invalid refresh token. for it may be has been refreshed by other process）。
+        // 这是后台自动恢复旧会话失败，与用户当前操作无关，用户也无从处理：
+        // 静默清掉失效会话，让人直接看到登录表单，而不是一条吓人的红色英文。
+        if (raw && isSessionNoise(raw)) {
+          apply(null);
+          try { await auth.signOut(); } catch { /* token 已失效，清不掉也不影响 */ }
+          if (!alive) return;
+          setError(null);
+        } else {
+          if (raw) setError(humanizeAuthError(raw));
+          apply(r.data?.session || null);
+        }
         try {
           const sub = auth.onAuthStateChange((event, s) => {
             if (event === 'SIGNED_OUT') { apply(null); return; }
@@ -376,12 +389,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (g?.data?.user) apply({ ...(session || null), user: g.data.user } as RawSession);
   }, [apply, session]);
 
+  // 对外只暴露「用户能看懂、且能据此行动」的文案：
+  // 会话噪音一律变成 null（等于没有错误），其余翻成中文，未识别的保持原文。
+  const visibleError = useMemo(() => {
+    if (!error) return null;
+    return humanizeAuthError(error, error) || null;
+  }, [error]);
+
   const value = useMemo<AuthCtx>(() => ({
-    ready, configured, originOk, user, session, pending, busy, error, linkPending, reauthPending,
+    ready, configured, originOk, user, session, pending, busy, error: visibleError, linkPending, reauthPending,
     signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut,
     updateProfile, startPasswordChange, confirmPasswordChange, cancelPasswordChange, startLink, verifyLink, cancelLink, refreshUser,
     clearError: () => setError(null),
-  }), [ready, configured, originOk, user, session, pending, busy, error, linkPending, reauthPending, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut, updateProfile, startPasswordChange, confirmPasswordChange, cancelPasswordChange, startLink, verifyLink, cancelLink, refreshUser]);
+  }), [ready, configured, originOk, user, session, pending, busy, visibleError, linkPending, reauthPending, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut, updateProfile, startPasswordChange, confirmPasswordChange, cancelPasswordChange, startLink, verifyLink, cancelLink, refreshUser]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

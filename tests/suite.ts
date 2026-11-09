@@ -23,6 +23,7 @@ import { runAITask, registerAITransport, resetAITransport, aiCapabilitySummary }
 import { assembleDesign, inferStructure } from '../src/workflow/assembler';
 import { createInitialWorkflow } from '../src/types';
 import { migrateProductInfo, migrateProject, migrateWorkflow } from '../src/migrations';
+import { humanizeAuthError, isSessionNoise } from '../src/cloud/authErrors';
 import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
 
 export interface Result { name: string; ok: boolean; detail: string }
@@ -668,6 +669,24 @@ export async function runTests(): Promise<Result[]> {
     A(m.workflow === undefined, '无 workflow 的项目不应被凭空补出 workflow');
     A(m.name === '更早的项目', '项目字段被改动');
     return '原样返回';
+  });
+
+  await t('鉴权错误 · 会话恢复失败不展示给用户', () => {
+    // 线上真实出现过的原文（多标签页轮换 refresh token 时 SDK 抛出）
+    const noise = 'invalid refresh token. for it may be has been refreshed by other process';
+    A(isSessionNoise(noise), '未识别为会话噪音');
+    A(humanizeAuthError(noise) === '', '会话噪音应静默为「无错误」');
+    A(isSessionNoise('Auth session missing!'), '未识别 auth session missing');
+    A(isSessionNoise('jwt expired'), '未识别 jwt expired');
+    // 正常未登录状态也不能当成错误
+    A(isSessionNoise('not logged in'), '未识别 not logged in');
+    // 真正的账号密码错误必须留下来并翻成中文
+    A(!isSessionNoise('Invalid login credentials'), '密码错误被误判为噪音');
+    A(/账号或密码/.test(humanizeAuthError('Invalid login credentials')), '密码错误未翻译');
+    // 未识别的消息保持原文，不臆造原因
+    A(humanizeAuthError('Some brand new server message') === 'Some brand new server message', '未知消息被改写');
+    A(humanizeAuthError('') === '操作失败，请稍后重试', '空消息未使用兜底文案');
+    return '噪音吞掉 / 常见错误中文化 / 未知消息保真';
   });
 
   if (inBrowser) {

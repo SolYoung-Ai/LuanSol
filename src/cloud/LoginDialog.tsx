@@ -16,6 +16,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Modal, Notice, go } from '../ui';
 import { useAuth, isEmail } from './auth';
+import { humanizeAuthError } from './authErrors';
 import { CLOUD_SITE_URL } from './config';
 import { LOGIN_CONFIG, NO_SMS_HINT } from './loginConfig';
 
@@ -49,8 +50,19 @@ export function LoginDialog({ open, onClose, onDone }: {
       setMsg(null); setCode(''); setPassword(''); setConfirmPassword('');
       setShowSignup(false); setTab(TABS[0]?.id ?? 'code');
       a.cancelCode();
+    } else {
+      // 打开时清掉上一次残留的后台错误：旧会话恢复失败之类的东西
+      // 与这次登录无关，留着只会让人以为「还没操作就出错了」。
+      a.clearError();
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** 统一整理返回文案：成功原样，失败翻成中文，内部噪音兜底成一句人话 */
+  const report = (r: { ok: boolean; message: string }, fallback = '操作失败，请稍后重试') => {
+    const text = r.ok ? r.message : (humanizeAuthError(r.message, fallback) || fallback);
+    setMsg({ ok: r.ok, text });
+    return text;
+  };
 
   // 出现提示（尤其错误）时自动滚动到可见区，避免手机端提示落在视口外看似「没反应」
   useEffect(() => {
@@ -64,8 +76,8 @@ export function LoginDialog({ open, onClose, onDone }: {
 
   const submitPassword = async () => {
     const r = await a.signInWithPassword(account, password);
-    setMsg({ ok: r.ok, text: r.message });
-    if (r.ok) done(r.message);
+    const text = report(r, '登录失败，请检查网络后重试');
+    if (r.ok) done(text);
   };
 
   const sendSignup = async () => {
@@ -75,7 +87,7 @@ export function LoginDialog({ open, onClose, onDone }: {
       return;
     }
     const r = await a.startSignup(account, password);
-    setMsg({ ok: r.ok, text: r.message });
+    report(r, '注册失败，请稍后重试');
   };
 
   const sendCode = async () => {
@@ -86,13 +98,13 @@ export function LoginDialog({ open, onClose, onDone }: {
       setMsg({ ok: false, text: '这个邮箱还没有账号，请在下方设置密码完成注册。' });
       return;
     }
-    setMsg({ ok: r.ok, text: r.message });
+    report(r, '验证码发送失败，请稍后重试');
   };
 
   const verify = async () => {
     const r = await a.verifyCode(code);
-    setMsg({ ok: r.ok, text: r.message });
-    if (r.ok) done(r.message);
+    const text = report(r, '验证码校验失败，请重新发送');
+    if (r.ok) done(text);
   };
 
   const brand = LOGIN_CONFIG.brand;
