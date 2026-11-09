@@ -32,7 +32,7 @@ export const LOGIN_CONFIG = {
   brand: {
     name: 'LunaSol',
     tagline: '人人都能成为设计师',
-    logo: '/favicon.svg',
+    logo: '/logo.png',
   },
 
   /** 登录方式选择，逐项对应控制台三个开关。 */
