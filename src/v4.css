@@ -877,6 +877,14 @@ img, svg, video, canvas { max-width: 100%; }
 /* Luna 页不需要整站页脚，避免输入框与页脚之间出现空档 */
 body.on-luna .footer-min { display: none; }
 
+/* 桌面端：整页不再滚动，滚轮只作用于鼠标所在的子区域（对话列表 / 消息区）。
+ * 只在 ≥861px 生效，手机端保持原有的整页滚动与抽屉行为。
+ * 两个子区域各自带 overscroll-behavior: contain，滚到底也不会把滚动传给页面。 */
+@media (min-width: 861px) {
+  body.on-luna { overflow: hidden; }
+  body.on-luna .lc-shell { overscroll-behavior: contain; }
+}
+
 /* ---------------- 左侧栏 ---------------- */
 .lc-side {
   position: relative;
@@ -897,7 +905,9 @@ body.on-luna .footer-min { display: none; }
   overflow: hidden;
 }
 .lc-side.collapsed { width: 56px; padding: 16px 8px 14px; }
-.lc-side-inner { display: flex; flex-direction: column; flex: 1; min-width: 244px; }
+/* min-height:0 是左侧列表能自己滚的关键：默认 auto 会被内容顶高，
+ * 结果 .lc-list 的 overflow-y 永远不生效，列表被 .lc-side 直接裁掉。 */
+.lc-side-inner { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 244px; }
 .lc-side.collapsed .lc-side-inner { display: none; }
 .lc-side-toggle {
   position: relative;
@@ -957,7 +967,7 @@ body.on-luna .footer-min { display: none; }
   font-size: 11px; letter-spacing: 1px;
   color: var(--v4-ink-3);
 }
-.lc-list { flex: 1; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.lc-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
 .lc-item {
   position: relative;
   display: flex; align-items: center; gap: 8px;
