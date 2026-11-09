@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LunaSol 验证码邮件预览</title>
+<style>
+  body { margin:0; background:#f0f0ee; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; padding:32px 16px; }
+  h1 { max-width:520px; margin:0 auto 8px; font-size:18px; color:#1d1d1b; }
+  .sub { max-width:520px; margin:0 auto 28px; font-size:13px; color:#8a8a84; }
+  .wrap { max-width:520px; margin:0 auto 40px; }
+  .tag { font-size:12px; color:#c8a86b; letter-spacing:2px; margin-bottom:10px; font-weight:600; }
+</style>
+</head>
+<body>
+  <h1>LunaSol 验证码邮件 · 效果预览</h1>
+  <p class="sub">下方为用户实际收到的邮件渲染效果（示例验证码 103745）。中文与英文两个版本，最终通过 CloudBase 模板变量自动填充真实验证码。</p>
+
+  <!-- ============ 中文版本 ============ -->
+  <div class="wrap">
+    <div class="tag">ZH · 中文版本</div>
+    <div style="background:#fafaf9;padding:24px 12px;border-radius:16px;">
+      <div style="background:#ffffff;border:1px solid #e8e6e0;border-radius:14px;overflow:hidden;">
+        <div style="background:#1d1d1b;padding:26px 28px;text-align:center;">
+          <div style="font-size:22px;letter-spacing:3px;color:#ffffff;font-weight:600;">LunaSol</div>
+          <div style="margin-top:6px;font-size:11px;letter-spacing:2px;color:#c8a86b;">AI 智能包装设计平台</div>
+        </div>
+        <div style="padding:28px;">
+          <p style="margin:0 0 6px;font-size:15px;color:#1d1d1b;font-weight:600;">你好，</p>
+          <p style="margin:0 0 20px;font-size:13px;color:#6b6b66;line-height:1.7;">你正在进行「安全验证」。请使用下方验证码完成操作：</p>
+          <div style="text-align:center;background:#faf7f0;border:1px solid #c8a86b;border-radius:12px;padding:20px 12px;margin-bottom:20px;">
+            <div style="font-size:34px;font-weight:700;letter-spacing:10px;color:#1d1d1b;padding-left:10px;">103745</div>
+          </div>
+          <p style="margin:0 0 8px;font-size:12px;color:#8a8a84;line-height:1.7;">验证码 10 分钟内有效，仅可使用一次。</p>
+          <p style="margin:0;font-size:12px;color:#8a8a84;line-height:1.7;">如果这不是你本人的操作，请忽略本邮件，你的账号安全不会受到影响。</p>
+        </div>
+        <div style="padding:18px 28px;border-top:1px solid #e8e6e0;text-align:center;">
+          <p style="margin:0 0 4px;font-size:12px;color:#9a9a94;">LunaSol · AI 智能包装设计平台</p>
+          <p style="margin:0;font-size:12px;"><a href="https://luna.solyoung.top/" style="color:#c8a86b;text-decoration:none;">luna.solyoung.top</a></p>
+        </div>
+      </div>
+      <p style="margin:14px 0 0;text-align:center;font-size:11px;color:#b5b5ae;">本邮件由系统自动发送，请勿直接回复。</p>
+    </div>
+  </div>
+
+  <!-- ============ 英文版本 ============ -->
+  <div class="wrap">
+    <div class="tag">EN · 英文版本</div>
+    <div style="background:#fafaf9;padding:24px 12px;border-radius:16px;">
+      <div style="background:#ffffff;border:1px solid #e8e6e0;border-radius:14px;overflow:hidden;">
+        <div style="background:#1d1d1b;padding:26px 28px;text-align:center;">
+          <div style="font-size:22px;letter-spacing:3px;color:#ffffff;font-weight:600;">LunaSol</div>
+          <div style="margin-top:6px;font-size:11px;letter-spacing:2px;color:#c8a86b;">AI PACKAGING DESIGN STUDIO</div>
+        </div>
+        <div style="padding:28px;">
+          <p style="margin:0 0 6px;font-size:15px;color:#1d1d1b;font-weight:600;">Hello,</p>
+          <p style="margin:0 0 20px;font-size:13px;color:#6b6b66;line-height:1.7;">You are performing a security verification. Please use the code below to continue:</p>
+          <div style="text-align:center;background:#faf7f0;border:1px solid #c8a86b;border-radius:12px;padding:20px 12px;margin-bottom:20px;">
+            <div style="font-size:34px;font-weight:700;letter-spacing:10px;color:#1d1d1b;padding-left:10px;">103745</div>
+          </div>
+          <p style="margin:0 0 8px;font-size:12px;color:#8a8a84;line-height:1.7;">This code expires in 10 minutes and can be used only once.</p>
+          <p style="margin:0;font-size:12px;color:#8a8a84;line-height:1.7;">If you did not request this, you can safely ignore this email.</p>
+        </div>
+        <div style="padding:18px 28px;border-top:1px solid #e8e6e0;text-align:center;">
+          <p style="margin:0 0 4px;font-size:12px;color:#9a9a94;">LunaSol · AI Packaging Design Studio</p>
+          <p style="margin:0;font-size:12px;"><a href="https://luna.solyoung.top/" style="color:#c8a86b;text-decoration:none;">luna.solyoung.top</a></p>
+        </div>
+      </div>
+      <p style="margin:14px 0 0;text-align:center;font-size:11px;color:#b5b5ae;">This is an automated message, please do not reply.</p>
+    </div>
+  </div>
+</body>
+</html>
