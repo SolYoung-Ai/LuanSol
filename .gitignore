@@ -14,3 +14,7 @@ tests/suite.browser.js
 
 # 创建仓库所用令牌缺少 workflow 权限；工作流以 docs/deploy-workflow.yml 模板提供
 .github/workflows/deploy.yml
+
+# 本地运维脚本：会读取 ~/.config/.cloudbase/auth.json 的临时凭证，绝不入库
+.cb_api.py
+.cb_set_email_tpl.py
