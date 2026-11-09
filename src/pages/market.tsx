@@ -151,7 +151,7 @@ export default function Market() {
   const activeCount = [group, region, country, style, access].filter((x) => x !== ALL).length + (q.trim() ? 1 : 0);
   const clearAll = () => { setGroup(ALL); setRegion(ALL); setCountry(ALL); setStyle(ALL); setAccess(ALL); setQ(''); };
 
-  return <div className="v4-page">
+  return <div className="gl-page gl-page-wide gl-market">
     <div className="v4-market-hero">
       <div className="v4-kicker">THE AESTHETIC INDEX</div>
       <h1 className="v4-market-title">审美市场</h1>
@@ -295,7 +295,7 @@ export function MarketSitePage() {
   const { favs, toggle } = useFavs();
   const { start, modal } = useSeedReference();
 
-  if (!site) return <div className="v4-page"><div className="v4-empty"><h3>没有找到这个站点</h3><p>链接可能已更新，返回审美市场重新浏览。</p><button className="v4-btn-dark" onClick={() => go('/market')}>返回审美市场</button></div></div>;
+  if (!site) return <div className="gl-page gl-page-wide gl-market"><div className="v4-empty"><h3>没有找到这个站点</h3><p>链接可能已更新，返回审美市场重新浏览。</p><button className="v4-btn-dark" onClick={() => go('/market')}>返回审美市场</button></div></div>;
 
   // 优先按风格标签匹配；没有匹配时退回「该站收录的作品」，再退回其他收录作品，
   // 保证左栏不会留一块无意义的空白。
@@ -305,7 +305,7 @@ export function MarketSitePage() {
   const sameGroup = MARKET_SITES.filter((s) => s.group === site.group && s.id !== site.id).slice(0, 6);
   const accessInfo = MARKET_ACCESS[site.access];
 
-  return <div className="v4-page">
+  return <div className="gl-page gl-page-wide gl-market">
     <button className="v4-filter" onClick={() => go('/market')}>← 审美市场</button>
     <div className="v4-detail">
       <div>
@@ -396,9 +396,9 @@ export function MarketWorkPage() {
   const { start, modal } = useSeedReference();
   const site: MarketSite | undefined = work ? MARKET_SITES.find((s) => s.id === work.sourceSiteId) : undefined;
 
-  if (!work) return <div className="v4-page"><div className="v4-empty"><h3>没有找到这个作品</h3><p>它可能已从索引里移除。</p><button className="v4-btn-dark" onClick={() => go('/market')}>返回审美市场</button></div></div>;
+  if (!work) return <div className="gl-page gl-page-wide gl-market"><div className="v4-empty"><h3>没有找到这个作品</h3><p>它可能已从索引里移除。</p><button className="v4-btn-dark" onClick={() => go('/market')}>返回审美市场</button></div></div>;
 
-  return <div className="v4-page">
+  return <div className="gl-page gl-page-wide gl-market">
     <button className="v4-filter" onClick={() => go('/market')}>← 审美市场</button>
     <div className="v4-detail">
       <div className="v4-detail-figure">
