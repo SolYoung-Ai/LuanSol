@@ -6,6 +6,7 @@ import { aiCapabilitySummary, getAIRunLog, clearAIRunLog } from '../ai/provider'
 import { CLOUD, deepSeekReady } from '../cloud/config';
 import { STRUCTURES } from '../engine/structure';
 import { downloadBlob, formatDate } from '../engine/utils';
+import { migrateProject } from '../migrations';
 import type { AISettings, Project } from '../types';
 
 /* ============================ 13. 个人设置 ============================ */
@@ -25,7 +26,8 @@ export function Settings() {
       try {
         const d = JSON.parse(String(fr.result));
         if (!Array.isArray(d.projects)) throw new Error('文件格式不正确');
-        update({ projects: [...d.projects, ...s.projects] as Project[] });
+        // 备份文件可能是旧版本导出的（缺 themeColors 等新字段），导入前统一迁移
+        update({ projects: [...d.projects.map((p: Project) => migrateProject(p)), ...s.projects] as Project[] });
         setToast(`已导入 ${d.projects.length} 个项目`);
       } catch (e) { setToast(`导入失败：${e instanceof Error ? e.message : e}`); }
     };
