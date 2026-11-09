@@ -1549,30 +1549,36 @@ button.ag-row.open { background: var(--v4-ios-fill); }
   .ag-project { flex-wrap: wrap; }
 }
 
-/* ---------- Luna 桌面侧栏：浮起的液态玻璃卡（手机端抽屉完全不变） ---------- */
+/* ---------- Luna 桌面侧栏：无边框的液态玻璃卡（手机端抽屉完全不变） ---------- */
 @media (min-width: 861px) {
   .lc-shell {
     position: relative;
     isolation: isolate;
     gap: 14px;
     padding: 12px 20px 12px 16px;
+    /* 不铺外部色晕：玻璃卡会把身后的颜色模糊洗白，卡片边缘便出现一条彩色硬边，
+       看起来就像套了一圈边框。色彩只放在卡片内部。 */
+    background: transparent;
   }
-  /* 玻璃后面要有颜色，模糊才有「液态」折射感 */
-  .lc-shell::before {
-    content: '';
-    position: absolute; inset: 0; z-index: -1; pointer-events: none;
-    background:
-      radial-gradient(420px 420px at 6% 10%, rgba(255, 183, 120, 0.20), transparent 70%),
-      radial-gradient(380px 460px at 20% 72%, rgba(126, 172, 255, 0.18), transparent 70%),
-      radial-gradient(320px 320px at 2% 100%, rgba(184, 154, 255, 0.14), transparent 72%);
-  }
+  /* 顶栏与页脚的通栏细线一并去掉，靠留白和柔影分层，不做「框」 */
+  .v4-nav { border-bottom: 0; box-shadow: none; }
+  .footer-min { border-top: 0; }
+
   .lc-side {
-    border: 1px solid var(--v4-glass-border-hi);
+    border: 0;
     border-radius: 26px;
-    background: var(--v4-glass-bg);
+    /* 极淡的双色渐变只留在玻璃内部，卡片外是干净的页面底色 */
+    background:
+      radial-gradient(130% 72% at 0% 0%, rgba(255, 196, 150, 0.10), transparent 68%),
+      radial-gradient(120% 82% at 100% 100%, rgba(140, 178, 255, 0.10), transparent 70%),
+      var(--v4-glass-bg);
     -webkit-backdrop-filter: var(--v4-glass-blur);
     backdrop-filter: var(--v4-glass-blur);
-    box-shadow: var(--v4-glass-shadow-lift), 0 28px 64px -34px rgba(16, 18, 22, 0.42);
+    /* 用内高光 + 两层柔影代替描边：有玻璃厚度和浮起感，但没有一圈线 */
+    box-shadow:
+      inset 0 1px 0 var(--v4-glass-border-hi),
+      0 2px 6px -3px rgba(16, 18, 22, 0.10),
+      0 24px 52px -28px rgba(16, 18, 22, 0.24);
     padding: 18px 14px 14px;
   }
   .lc-side.collapsed { width: 62px; padding: 16px 8px; border-radius: 22px; }
@@ -1609,13 +1615,29 @@ button.ag-row.open { background: var(--v4-ios-fill); }
   }
   .lc-rail-btn:hover { background: var(--v4-ios-fill); color: var(--v4-ink); }
 
-  /* 组内一律不画边框线，靠圆角与间距分层 */
-  .lc-new, .lc-search, .lc-item-edit { border-color: transparent; }
+  /* 组内一律不画边框线，靠圆角、填充与间距分层 */
+  .lc-new, .lc-search, .lc-item-edit, .lc-item, .lc-pending, .lc-tier-btn,
+  .lc-msg.user .lc-msg-text, .lc-reason, .lc-msg-img { border: 0; }
   .lc-new { border-radius: 14px; }
   .lc-search { border-radius: 12px; }
-  .lc-item { border-color: transparent; border-radius: 13px; }
-  .lc-item.active { background: var(--v4-ios-fill-hover); box-shadow: inset 0 0 0 1px var(--v4-glass-border); }
+  .lc-item { border-radius: 13px; }
+  .lc-item.active { background: var(--v4-ios-fill-hover); box-shadow: none; }
+  .lc-reason-body { border-top: 0; }
   .lc-side-foot { margin-top: 8px; padding-top: 8px; }
   .lc-user { padding: 8px; border-radius: 14px; background: var(--v4-ios-fill); }
+
+  /* 输入胶囊同样无描边，靠半透明玻璃与柔影浮起 */
+  .lc-composer {
+    border: 0;
+    background: var(--v4-ios-fill);
+    -webkit-backdrop-filter: var(--v4-glass-blur-menu);
+    backdrop-filter: var(--v4-glass-blur-menu);
+    box-shadow: inset 0 1px 0 var(--v4-glass-border-hi), 0 18px 44px -32px rgba(16, 18, 22, 0.38);
+  }
+  .lc-composer:focus-within {
+    box-shadow: inset 0 0 0 2px rgba(120, 150, 200, 0.16), 0 20px 48px -32px rgba(16, 18, 22, 0.42);
+  }
+
+  /* 本轮新增的玻璃组件统一无描边：头像菜单、账户信息分组卡、展开面板 */
+  .v4-menu, .ag-card, .ag-panel { border: 0; }
 }
-[data-theme="dark"] .lc-shell::before { opacity: 0.5; }
