@@ -114,6 +114,28 @@ function localDateStr(d: Date = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+/** 把数据库返回的 date / timestamptz 统一成 YYYY-MM-DD。
+ *  date 列直接返回 "2026-11-10"；timestamptz 会返回带时区的 ISO 串，
+ *  那种情况必须先转 Date 再取本地日期，否则会算错一天（跨天签到的老 bug）。 */
+export function dateKeyOf(v: unknown): string {
+  if (!v) return '';
+  if (v instanceof Date) return localDateStr(v);
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? s.slice(0, 10) : localDateStr(d);
+}
+
+/** rpc 返回的 jsonb 可能是对象，也可能是 JSON 字符串 */
+function asObject(v: unknown): Record<string, any> | null {
+  if (!v) return null;
+  if (typeof v === 'object') return v as Record<string, any>;
+  if (typeof v === 'string') {
+    try { const o = JSON.parse(v); return typeof o === 'object' ? o : null; } catch { return null; }
+  }
+  return null;
+}
+
 /** 自增用量计数（成功调用 AI 后）。返回最新 used，失败返回 -1。
  *  优先走数据库端的原子函数：并发调用不会互相覆盖计数；
  *  数据库函数不可用时退回「读-改-写」，结果仍然正确，只是并发下可能少计一次。 */
@@ -338,6 +360,10 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
 
   // ---- 签到：对接 PostgreSQL lunasol_checkin_logs 表 ----
   const [checkinState, setCheckinState] = useState<{ checkedToday: boolean; streak: number; loading: boolean }>({ checkedToday: false, streak: 0, loading: false });
+  /** 连点/多标签页互斥：签到请求进行中时直接忽略第二次点击 */
+  const checkinBusyRef = useRef(false);
+  /** 最近一次成功签到的本地日期，用于「刚签完马上又点」时立刻拦住 */
+  const checkedDateRef = useRef<string>('');
 
   // 加载签到状态
   useEffect(() => {
@@ -351,6 +377,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       if (!d) { setCheckinState({ checkedToday: false, streak: 0, loading: false }); return; }
       try {
         const today = localDateStr();
+        const yesterday = localDateStr(new Date(Date.now() - 86400000));
         // 查最近的签到记录，倒序
         const r = await d.from('lunasol_checkin_logs').select('checkin_date,streak,bonus').eq('user_id', u.id).order('checkin_date', { ascending: false }).limit(30);
         if (cancelled) return;
@@ -359,8 +386,11 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
           setCheckinState({ checkedToday: false, streak: 0, loading: false });
           return;
         }
-        const checkedToday = rows[0].checkin_date === today;
-        const streak = checkedToday ? rows[0].streak : rows[0].streak;
+        const lastDay = dateKeyOf(rows[0].checkin_date);
+        const checkedToday = lastDay === today;
+        // 连续天数只在「今天已签」或「昨天签过」时成立；断了就归零，
+        // 否则隔了三天还显示「已连续签到 4 天」，用户会以为记录出错了。
+        const streak = checkedToday || lastDay === yesterday ? Number(rows[0].streak) || 0 : 0;
         setCheckinState({ checkedToday, streak, loading: false });
       } catch {
         if (!cancelled) setCheckinState({ checkedToday: false, streak: 0, loading: false });
@@ -373,90 +403,126 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     const u = userRef.current;
     if (!u) return { ok: false, points: 0, streak: 0, message: '请先登录' };
     if (!sdkUsable()) return { ok: false, points: 0, streak: 0, message: '云服务未连接' };
-    if (checkinState.checkedToday) return { ok: false, points: 0, streak: checkinState.streak, message: '今天已经签到过了' };
-    const d = await db();
-    if (!d) return { ok: false, points: 0, streak: 0, message: '数据库未连接' };
-
-    const today = localDateStr();
-    const yesterday = localDateStr(new Date(Date.now() - 86400000));
-
-    // 查上一次签到记录
-    const r = await d.from('lunasol_checkin_logs').select('checkin_date,streak').eq('user_id', u.id).order('checkin_date', { ascending: false }).limit(1);
-    const rows = (r.data || []) as { checkin_date: string; streak: number }[];
-    const lastStreak = rows.length > 0 ? rows[0].streak : 0;
-    const newStreak = rows.length > 0 && rows[0].checkin_date === yesterday ? lastStreak + 1 : 1;
-
-    // 计算积分：基础 10，连续 10 天额外 100，会员双倍
-    const isProUser = isProActive(subRef.current);
-    const basePoints = isProUser ? 20 : 10;
-    const bonus = newStreak % 10 === 0 ? 100 : 0;
-    const totalPoints = basePoints + bonus;
-
-    // 插入签到记录
-    try {
-      await d.from('lunasol_checkin_logs').insert({
-        user_id: u.id,
-        checkin_date: today,
-        streak: newStreak,
-        bonus: totalPoints,
-      });
-    } catch (e) {
-      return { ok: false, points: 0, streak: newStreak, message: '签到失败：' + errText(e) };
+    // 三重防重：本地已签标记 / 请求进行中 / 数据库唯一约束兜底
+    if (checkinState.checkedToday || checkedDateRef.current === localDateStr()) {
+      return { ok: false, points: 0, streak: checkinState.streak, message: '今天已经签到过了' };
     }
+    if (checkinBusyRef.current) {
+      return { ok: false, points: 0, streak: checkinState.streak, message: '正在签到，请稍候' };
+    }
+    checkinBusyRef.current = true;
+    const d = await db();
+    if (!d) { checkinBusyRef.current = false; return { ok: false, points: 0, streak: 0, message: '数据库未连接' }; }
 
-    // 用 RPC 函数加积分（绕过 RLS，安全）
-    const cur = subRef.current;
-    if (cur) {
-      try {
-        if (typeof (d as any).rpc === 'function') {
-          const r = await (d as any).rpc('lunasol_grant_bonus', { p_uid: u.id, p_points: totalPoints });
-          if (!r.error && typeof r.data === 'number') {
-            setSub((prev) => prev ? { ...prev, bonus_credits: r.data as number } : prev);
+    try {
+      /* 首选：数据库函数。查重、写记录、加积分、写明细都在一个事务里完成，
+         并发点击 / 双标签页只会有一次真正生效，客户端拿到的就是最终结果。 */
+      if (typeof d.rpc === 'function') {
+        const r = await d.rpc('lunasol_checkin');
+        const p = asObject(r.data);
+        if (!r.error && p) {
+          const streak = Number(p.streak) || 0;
+          const points = Number(p.points) || 0;
+          if (p.already) {
+            setCheckinState({ checkedToday: true, streak, loading: false });
+            checkedDateRef.current = localDateStr();
+            return { ok: false, points: 0, streak, message: '今天已经签到过了' };
+          }
+          if (p.ok) {
+            setCheckinState({ checkedToday: true, streak, loading: false });
+            checkedDateRef.current = localDateStr();
+            void refresh();
+            const bonus = Number(p.bonus) || 0;
+            return {
+              ok: true, points, streak,
+              message: points > 0
+                ? `签到成功！+${points} 积分${bonus ? `（连续 ${streak} 天额外 +${bonus}）` : ''}`
+                : '签到成功（本月签到积分已达上限）',
+            };
+          }
+          return { ok: false, points: 0, streak, message: String(p.message || '签到失败，请稍后重试') };
+        }
+      }
+
+      /* 兜底（数据库函数尚未部署时）：先查今天有没有记录，再插入；
+         插入必须检查 error —— 唯一索引冲突时 SDK 不会抛异常，只回 {error}，
+         以前没看这个返回值，导致「冲突了仍然加积分」，于是出现一天能签到两次。 */
+      const today = localDateStr();
+      const yesterday = localDateStr(new Date(Date.now() - 86400000));
+
+      const dup = await d.from('lunasol_checkin_logs').select('id,streak').eq('user_id', u.id).eq('checkin_date', today).limit(1);
+      const dupRows = (dup.data || []) as { id: number; streak: number }[];
+      if (dupRows.length) {
+        setCheckinState({ checkedToday: true, streak: Number(dupRows[0].streak) || 0, loading: false });
+        checkedDateRef.current = today;
+        return { ok: false, points: 0, streak: Number(dupRows[0].streak) || 0, message: '今天已经签到过了' };
+      }
+
+      const r = await d.from('lunasol_checkin_logs').select('checkin_date,streak').eq('user_id', u.id).order('checkin_date', { ascending: false }).limit(1);
+      const rows = (r.data || []) as { checkin_date: string; streak: number }[];
+      const lastStreak = rows.length > 0 ? rows[0].streak : 0;
+      const newStreak = rows.length > 0 && dateKeyOf(rows[0].checkin_date) === yesterday ? lastStreak + 1 : 1;
+
+      const isProUser = isProActive(subRef.current);
+      const basePoints = isProUser ? 20 : 10;
+      const bonus = newStreak % 10 === 0 ? 100 : 0;
+      const totalPoints = basePoints + bonus;
+
+      const ins = await d.from('lunasol_checkin_logs').insert({
+        user_id: u.id, checkin_date: today, streak: newStreak, bonus: totalPoints,
+      });
+      if (ins.error) {
+        // 并发下第二次插入会撞唯一索引：当作「今天已签到」，绝不能继续发积分
+        setCheckinState({ checkedToday: true, streak: newStreak, loading: false });
+        checkedDateRef.current = today;
+        return { ok: false, points: 0, streak: newStreak, message: '今天已经签到过了' };
+      }
+
+      const cur = subRef.current;
+      if (cur) {
+        try {
+          if (typeof d.rpc === 'function') {
+            const g = await d.rpc('lunasol_grant_bonus', { p_uid: u.id, p_points: totalPoints });
+            const v = typeof g.data === 'number' ? g.data : asObject(g.data)?.value;
+            if (!g.error && typeof v === 'number') {
+              setSub((prev) => prev ? { ...prev, bonus_credits: v } : prev);
+            } else {
+              await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
+              setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
+            }
           } else {
-            // RPC 失败时兜底
             await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
             setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
           }
-        } else {
-          // 没有 rpc 方法，直接更新
+        } catch {
           await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
           setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
         }
-      } catch {
-        // RPC 失败时兜底
-        await d.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + totalPoints }).eq('id', cur.id);
-        setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + totalPoints } : prev);
       }
+
+      try {
+        const finalSub = subRef.current;
+        const balanceAfter = finalSub
+          ? (finalSub.quota_total - finalSub.quota_used + (finalSub.bonus_credits || 0))
+          : totalPoints;
+        await d.from('lunasol_credit_logs').insert({
+          owner_id: u.id, change_type: 'checkin', amount: totalPoints, balance_after: balanceAfter,
+          reason: `每日签到（连续 ${newStreak} 天）`, task_type: 'checkin',
+        });
+      } catch { /* 明细失败不影响签到本身 */ }
+
+      setCheckinState({ checkedToday: true, streak: newStreak, loading: false });
+      checkedDateRef.current = today;
+      return {
+        ok: true, points: totalPoints, streak: newStreak,
+        message: `签到成功！+${totalPoints} 积分${bonus ? `（连续 ${newStreak} 天额外 +${bonus}）` : ''}`,
+      };
+    } finally {
+      checkinBusyRef.current = false;
     }
+  }, [checkinState.checkedToday, checkinState.streak, refresh]);
 
-    // 写入积分明细记录
-    try {
-      const finalSub = subRef.current;
-      const balanceAfter = finalSub
-        ? (finalSub.quota_total - finalSub.quota_used + (finalSub.bonus_credits || 0))
-        : totalPoints;
-      await d.from('lunasol_credit_logs').insert({
-        owner_id: u.id,
-        change_type: 'checkin',
-        amount: totalPoints,
-        balance_after: balanceAfter,
-        reason: `每日签到（连续 ${newStreak} 天）`,
-        task_type: 'checkin',
-      });
-    } catch (e) {
-      console.error('写入积分明细失败', e);
-    }
-
-    setCheckinState({ checkedToday: true, streak: newStreak, loading: false });
-    return {
-      ok: true,
-      points: totalPoints,
-      streak: newStreak,
-      message: `签到成功！+${totalPoints} 积分${bonus ? `（连续 ${newStreak} 天额外 +${bonus}）` : ''}`,
-    };
-  }, [checkinState.checkedToday]);
-
-  // 兑换码：从 PostgreSQL 读，校验，加积分到 subscription.bonus_credits
+  // 兑换码：优先走数据库函数（积分码 / 会员码一次事务内校验并发放），失败再退回老实现
   const redeemCode = useCallback(async (code: string): Promise<{ ok: boolean; points?: number; message: string }> => {
     const c = code.trim().toUpperCase();
     if (!c) return { ok: false, message: '请输入兑换码' };
@@ -464,6 +530,22 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     if (!u) return { ok: false, message: '请先登录再兑换' };
     const db = await import('./sdk').then((m) => m.db()).catch(() => null);
     if (!db) return { ok: false, message: '数据库未连接，请稍后再试' };
+
+    if (typeof db.rpc === 'function') {
+      const res = await db.rpc('lunasol_redeem_code', { p_code: c });
+      const p = asObject(res.data);
+      if (!res.error && p) {
+        if (!p.ok) return { ok: false, message: String(p.message || '兑换失败') };
+        await refresh();
+        return {
+          ok: true,
+          points: Number(p.points) || 0,
+          message: String(p.message || (p.kind === 'membership' ? '兑换成功！会员已开通' : '兑换成功')),
+        };
+      }
+      // 函数不存在或调用报错：继续走下面的兼容路径
+    }
+
     // 1. 查码
     const r = await db.from('lunasol_redeem_codes').select('code,points,used,used_by').eq('code', c);
     if (r.error || !r.data || r.data.length === 0) return { ok: false, message: '兑换码无效，检查后重试' };
@@ -497,7 +579,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       }
     }
     return { ok: true, points: row.points, message: `兑换成功！+${row.points} 积分` };
-  }, [auth.user]);
+  }, [auth.user, refresh]);
 
   // 获取积分使用记录
   const getCreditLogs = useCallback(async (limit = 50): Promise<CreditLog[]> => {

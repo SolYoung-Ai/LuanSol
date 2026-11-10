@@ -54,7 +54,7 @@ export default function Subscribe() {
     if (checkedToday || checkinLoading) return;
     if (!a.user) {
       setToast('请先登录再签到，积分会绑定到你的账号');
-      go('/');
+      go('/account');
       return;
     }
     const r = await sub.doCheckin();
@@ -111,7 +111,7 @@ export default function Subscribe() {
           : <>登录后签到，积分会记在你的账号上</>}</div>
       </div>
       <button className={`gl-btn ${checkedToday ? 'gl-btn-soft' : ''}`} disabled={checkedToday || checkinLoading} onClick={() => void doCheckin()}>
-        {checkedToday ? '今日已签到' : !a.user ? '登录后签到' : '立即签到 +10'}
+        {checkedToday ? '今日已签到' : !a.user ? '登录后签到' : `立即签到 +${pro ? 20 : 10}`}
         {checkedToday && <Icon name="check" size={14} />}
       </button>
     </section>
@@ -175,13 +175,13 @@ export default function Subscribe() {
         </div>
         <div className="gl-rate">
           <div className="gl-rate-top"><strong>{t('图像 · Flash', 'Image · Flash')}</strong></div>
-          <div className="gl-rate-num"><Coin size={14} />&nbsp;{PRICING.costs.imageFlash} / 张</div>
+          <div className="gl-rate-num"><Coin size={14} />{PRICING.costs.imageFlash} / 张</div>
           <div className="gl-rate-note">Seedream 5.0 Flash · 快速出图</div>
         </div>
         <div className="gl-rate hi">
           <div className="gl-rate-top"><strong>{t('图像 · Pro', 'Image · Pro')}</strong><span className="gl-pill">精细</span></div>
-          <div className="gl-rate-num"><Coin size={14} />&nbsp;{PRICING.costs.imagePro} / 张</div>
-          <div className="gl-rate-note">Seedream 5.0 Pro · 只比 Flash 多 {(PRICING.costs.imagePro - PRICING.costs.imageFlash)} 积分</div>
+          <div className="gl-rate-num"><Coin size={14} />{PRICING.costs.imagePro} / 张</div>
+          <div className="gl-rate-note">Seedream 5.0 Pro · 仅多 {(PRICING.costs.imagePro - PRICING.costs.imageFlash)} 积分</div>
         </div>
       </div>
       <p className="gl-note">
@@ -224,7 +224,7 @@ export default function Subscribe() {
     <section className="gl-card">
       <div className="gl-label">充值积分包 <em>TOP-UP</em></div>
       <div className="gl-packs">
-        {PRICING.recharge.map((p) => <div className="gl-pack" key={p.price}>
+        {PRICING.recharge.map((p) => <div className={`gl-pack ${p.tag === '热门' ? 'hot' : ''}`} key={p.price}>
           <div className="gl-pack-tag">{p.tag}</div>
           <div className="gl-pack-price">¥{p.price}</div>
           <div className="gl-pack-points"><Coin size={14} />{p.points} 积分</div>
@@ -254,7 +254,10 @@ export default function Subscribe() {
       {redeemMsg && <div style={{ marginTop: 12 }}>
         <span className={`gl-pill ${redeemMsg.ok ? '' : 'gl-pill-accent'}`}>{redeemMsg.text}</span>
       </div>}
-      <p className="gl-note">内测测试码：LS-100（100 积分）、LS-200（200 积分）、LS-500（500 积分）。</p>
+      <p className="gl-note">
+        兑换码由管理员发放，分为「积分码」和「会员码」两种：积分码兑换后积分立即到账；
+        会员码兑换后会员立即生效，已开通的会在原有效期上顺延。兑换码由管理员统一发放，请勿在公开渠道传播。
+      </p>
     </section>
   </div>;
 }

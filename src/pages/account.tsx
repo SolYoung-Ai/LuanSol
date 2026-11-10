@@ -1,9 +1,12 @@
 /* ============================================================
  * 账户信息（原「个人资料」+「账号安全」合并页）
  * ------------------------------------------------------------
- * 一页管完：头像 / 昵称 / 生日、登录密码、绑定换绑邮箱、云端项目。
+ * 一页管完：头像 / 昵称 / 生日、登录密码、绑定换绑邮箱。
  * 交互按 iOS 设置页组织：分组玻璃卡 + 可展开的行，默认看不到一堆
  * 输入框与分割线；点开某行才出现对应编辑区。
+ *
+ * 云端项目列表不在这里重复：工作台已经是项目的唯一入口，
+ * 两处各放一份列表只会让「取回 / 删除」出现两套口径。
  *
  * 所有写操作仍是真实 CloudBase 接口，且改密强制二次身份验证：
  *  - 改密：先向注册邮箱发验证码（reauthenticate），再「验证码 + 新密码」提交。
@@ -11,14 +14,12 @@
  *  - 短信验证码已在控制台关闭（成本约 0.05 元/条），不提供绑定手机入口。
  * 失败原样展示服务端消息，不做假入口。
  * ============================================================ */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
-import { Notice, go } from '../ui';
+import { Notice } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { useProfile } from '../cloud/profile';
 import { LoginDialog } from '../cloud/LoginDialog';
-import { useCloudSync } from '../cloud/useCloudSync';
-import { listProjects, pullProject, projectIdOf, timeLabel, type CloudMeta } from '../cloud/projects';
 import { cloudConfigured, cloudOriginSupported, CLOUD_SITE_URL } from '../cloud/config';
 import { Icon, type IconName } from '../components/icons';
 
@@ -32,8 +33,7 @@ function Ico({ name }: { name: IconName }) {
 export default function Account() {
   const a = useAuth();
   const profile = useProfile();
-  const { mergeCloudProjects, loadProject, setToast } = useApp();
-  const sync = useCloudSync();
+  const { setToast } = useApp();
   const [loginOpen, setLoginOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const toggle = (p: Exclude<Panel, null>) => setPanel((cur) => (cur === p ? null : p));
@@ -44,11 +44,6 @@ export default function Account() {
   const [birthday, setBirthdayLocal] = useState('');
   const [saving, setSaving] = useState(false);
   const avatarFileRef = useRef<HTMLInputElement>(null);
-
-  /* ---- 云端项目 ---- */
-  const [rows, setRows] = useState<CloudMeta[] | null>(null);
-  const [listError, setListError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
 
   /* ---- 改密（验证码 + 新密码 + 确认） ---- */
   const [pwdNonce, setPwdNonce] = useState('');
@@ -88,14 +83,6 @@ export default function Account() {
     setBirthdayLocal(profile.profile?.birthday || '');
   }, [a.user?.id, a.user?.label, a.user?.avatarUrl, profile.profile?.avatar_url, profile.profile?.birthday]);
 
-  const refresh = useCallback(async () => {
-    if (!a.user) { setRows(null); setListError(null); return; }
-    const r = await listProjects();
-    if (r.ok) { setRows(r.data); setListError(null); } else { setRows(null); setListError(r.message); }
-  }, [a.user]);
-
-  useEffect(() => { void refresh(); }, [refresh, a.user?.id, sync.lastSync]);
-
   const saveProfile = async () => {
     if (!a.user) return;
     setSaving(true);
@@ -110,17 +97,6 @@ export default function Account() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const pull = async (id: string) => {
-    setBusyId(id);
-    const r = await pullProject(id);
-    setBusyId(null);
-    if (!r.ok) { setToast(r.message); return; }
-    mergeCloudProjects([r.data]);
-    loadProject(r.data.id);
-    setToast(`已取回「${r.data.name}」`);
-    go('/workspace');
   };
 
   const startPwd = async () => {
@@ -165,7 +141,7 @@ export default function Account() {
       <section className="ag-card ag-guest">
         <span className="ag-guest-ico"><Icon name="user" size={26} /></span>
         <h2>登录后管理账户信息</h2>
-        <p>登录后可修改头像与称呼、设置密码、换绑邮箱，并同步云端项目。</p>
+        <p>登录后可修改头像与称呼、设置密码、换绑邮箱。项目管理在工作台。</p>
         <button className="ag-btn" onClick={() => setLoginOpen(true)}>登录 / 注册</button>
       </section>
     ) : <>
@@ -295,27 +271,6 @@ export default function Account() {
         </div>}
       </section>
 
-      {/* ---------- 云端项目 ---------- */}
-      <div className="ag-group-label">云端项目</div>
-      <section className="ag-card ag-group">
-        {listError ? <div className="ag-pad"><Notice tone="warn">{listError}</Notice></div>
-          : !rows ? <p className="ag-empty-row">正在读取云端列表…</p>
-            : rows.length === 0 ? <p className="ag-empty-row">云端还没有项目。在工作台保存一个项目，会自动同步上来。</p>
-              : rows.map((r) => <div className="ag-project" key={r.id}>
-                <Ico name="cloud" />
-                <span className="ag-row-main"><strong>{r.title || '未命名包装项目'}</strong>
-                  <small>{timeLabel(r.updated_at)} · {projectIdOf(r.id)}</small></span>
-                <div className="ag-project-ops">
-                  <button className="ag-mini" disabled={busyId === r.id} onClick={() => void pull(r.id)}>
-                    {busyId === r.id ? '取回中…' : '取回'}</button>
-                  <button className="ag-mini danger" onClick={async () => {
-                    const ok = await sync.removeOne(r.id);
-                    if (ok) void refresh();
-                  }}>删除</button>
-                </div>
-              </div>)}
-      </section>
-
       <button className="ag-signout" onClick={async () => {
         const r = await a.signOut();
         setToast(r.message);
@@ -323,6 +278,6 @@ export default function Account() {
     </>}
 
     <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)}
-      onDone={(m) => { setToast(m); void refresh(); }} />
+      onDone={(m) => { setToast(m); }} />
   </div>;
 }
