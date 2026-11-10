@@ -22,7 +22,7 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
   const needLogin = need === 'login';
 
   const planLine = <>
-    <span>每月 {PRICING.proMonthlyQuota} 积分</span>
+    <span>开通得 {PRICING.proMonthlyQuota} 积分</span>
     <span>DeepSeek / Kimi / Doubao-Seed 等多模型接入</span>
   </>;
 
@@ -35,7 +35,7 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
       </p>
       <div className="sub-summary">
         <Tag tone="green">免费体验 {PRICING.freeTrialUses} 次</Tag>
-        <span>会员每月 {PRICING.proMonthlyQuota} 次</span>
+        <span>会员开通得 {PRICING.proMonthlyQuota} 积分</span>
       </div>
       <div className="modal-buttons">
         <Button variant="dark" onClick={() => { onClose(); onLogin?.(); }}>立即登录</Button>
@@ -44,16 +44,16 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
       </div>
     </> : <>
       <div className="sub-summary">
-        <Tag tone="plain">即将开放</Tag>
+        <Tag tone="green">会员已开放</Tag>
         {planLine}
       </div>
       <p className="modal-p">
-        会员开通通道尚未上线，当前不会扣费、也不会产生任何「已开通」状态。
+        会员目前通过<strong>兑换码</strong>开通（支付通道接入前不产生扣费），兑换后立即生效。
         内置设计引擎、编辑、3D 预览、印前检查与导出不依赖会员，可继续使用。
       </p>
       <Notice tone="info">额度用完后，AI 建议会自动回退为内置设计引擎的结果，并如实标注「未调用 AI」。</Notice>
       <div className="modal-buttons">
-        {!onPlansPage && <Button variant="dark" onClick={() => { onClose(); go('/subscribe'); }}>看会员说明</Button>}
+        {!onPlansPage && <Button variant="dark" onClick={() => { onClose(); go('/subscribe'); }}>用兑换码开通</Button>}
         <Button variant="ghost" onClick={onClose}>知道了</Button>
       </div>
     </>}

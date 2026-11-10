@@ -2209,6 +2209,11 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 .gl-plan-feats li { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.6; color: var(--v4-ink-2); }
 .gl-plan-feats li svg { flex: none; margin-top: 3px; color: var(--v4-orange); }
 .gl-plan .gl-btn { margin-top: auto; width: 100%; }
+/* 会员卡下方的小字：说清「现在只能靠兑换码」，避免用户以为按钮坏了 */
+.gl-plan-note {
+  margin: 10px 0 0; font-size: 11.5px; line-height: 1.65;
+  color: var(--v4-ink-3); text-align: center;
+}
 
 /* 充值包 ------------------------------------------------------
    和上面单价三格同一套暖白玻璃，别再混用 iOS 系统灰填充——
@@ -2262,6 +2267,19 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 .gl-pack .gl-btn { margin-top: 6px; }
 
 .gl-note { font-size: 11.5px; line-height: 1.8; color: var(--v4-ink-3); margin-top: 12px; }
+/* 行内微信号按钮：点一下自动复制。做成 chip 而不是 <a>，
+   因为这里没有任何可跳转地址，看起来像链接会给错预期。 */
+.gl-wx {
+  display: inline-flex; align-items: center; gap: 4px; vertical-align: baseline;
+  padding: 1px 7px; border: 0; border-radius: 7px; cursor: pointer;
+  font: inherit; font-weight: 600; letter-spacing: 0.01em;
+  background: rgba(217, 96, 44, 0.11); color: #b24a1b;
+  transition: background var(--v4-dur-fast) var(--v4-ease), transform var(--v4-dur-fast) var(--v4-ease);
+}
+.gl-wx:hover { background: rgba(217, 96, 44, 0.2); }
+.gl-wx:active { transform: scale(0.96); }
+[data-theme="dark"] .gl-wx { background: rgba(217, 96, 44, 0.22); color: #ffb98a; }
+[data-theme="dark"] .gl-wx:hover { background: rgba(217, 96, 44, 0.32); }
 .gl-redeem { display: flex; gap: 8px; align-items: center; }
 .gl-redeem .gl-input { flex: 1; }
 

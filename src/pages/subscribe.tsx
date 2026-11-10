@@ -3,13 +3,13 @@
  * ------------------------------------------------------------
  * 积分制：对话免费；Seedream Flash 6/张、Pro 10/张
  *  - 新注册送 PRICING.freeTrialUses 积分
- *  - 每日签到 +10（会员双倍），连续 10 天额外 +100，月上限 600
- *  - 充值包与会员：支付未开通，如实展示「即将开放」
- *  - 兑换码是当前唯一真实发放通道，保留入口
+ *  - 每日签到 +10（会员双倍 +20/天，会员月上限 600）；已取消「连续 10 天额外 +100」
+ *  - 会员已开放，但支付通道未接入，当前只能用兑换码开通
+ *  - 购买积分走人工：加微信 soyo-ang（点一下自动复制）
  * 视觉：与账户信息页同一套玻璃材质，靠圆角与间距分组，不画分割线。
  * 所有数字都从 PRICING 读，不在页面里写死。
  * ============================================================ */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { go } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
@@ -38,6 +38,31 @@ export default function Subscribe() {
   const [creditLogs, setCreditLogs] = useState<CreditLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
+  /** 兑换码输入框：会员卡的「用兑换码开通」要滚到这里并聚焦 */
+  const redeemRef = useRef<HTMLInputElement>(null);
+
+  /** 购买积分的对公微信号，点一下复制 */
+  const WX_ID = 'soyo-ang';
+  const copyWx = async () => {
+    try {
+      await navigator.clipboard.writeText(WX_ID);
+      setToast(`已复制微信号 ${WX_ID}`);
+    } catch {
+      // 非 https / 无剪贴板权限时退回选中式复制
+      const ta = document.createElement('textarea');
+      ta.value = WX_ID;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); setToast(`已复制微信号 ${WX_ID}`); }
+      catch { setToast(`微信号：${WX_ID}`); }
+      document.body.removeChild(ta);
+    }
+  };
+
+  const goRedeem = () => {
+    redeemRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => redeemRef.current?.focus(), 420);
+  };
 
   useEffect(() => {
     if (!a.user) return;
@@ -101,10 +126,9 @@ export default function Subscribe() {
     <section className="gl-hero">
       <div className="gl-hero-main">
         <div className="gl-hero-kicker">LIMITED TIME · 每日签到</div>
-        <div className="gl-hero-title">每天签到送积分，连续 10 天再加码</div>
+        <div className="gl-hero-title">每天签到送积分</div>
         <div className="gl-hero-text">
-          每天签到 <strong>+10</strong> 可叠加；连续满 10 天额外 <strong>+100</strong>。
-          会员双倍（<strong>+20</strong>/天），月上限 600 积分。
+          每天签到 <strong>+10</strong> 积分，会员双倍（<strong>+20</strong>/天，月上限 600 积分）。
         </div>
         <div className="gl-hero-streak">{a.user
           ? <>已连续签到 <strong>{checkinStreak}</strong> 天</>
@@ -216,7 +240,12 @@ export default function Subscribe() {
         </ul>
         {pro
           ? <button className="gl-btn gl-btn-soft" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</button>
-          : <button className="gl-btn gl-btn-soft" disabled>{t('即将开放', 'Coming soon')}</button>}
+          : <button className="gl-btn" onClick={goRedeem}>{t('用兑换码开通', 'Activate with code')}</button>}
+        <p className="gl-plan-note">
+          {pro
+            ? '会员权益已生效，到期后可用兑换码续期。'
+            : '会员已开放，支付通道接入前仅支持兑换码开通。'}
+        </p>
       </section>
     </div>
 
@@ -230,7 +259,7 @@ export default function Subscribe() {
           <div className="gl-pack-points"><Coin size={14} />{p.points} 积分</div>
         </div>)}
       </div>
-      <p className="gl-note">支付通道接入中，开放后以支付成功回调为准。在此之前可以用兑换码。</p>
+      <p className="gl-note">支付系统未开放，暂不支持自助购买；购买方式见下方「兑换码」。</p>
     </section>
 
     {/* ---------- 兑换码 ---------- */}
@@ -241,11 +270,12 @@ export default function Subscribe() {
       </p>
       <div className="gl-redeem">
         <input
+          ref={redeemRef}
           className="gl-input"
           value={redeemCode}
           onChange={(e) => setRedeemCode(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void redeem(); }}
-          placeholder={t('输入兑换码，如 LS-500', 'Enter code, e.g. LS-500')}
+          placeholder={t('输入兑换码', 'Enter your code')}
         />
         <button className="gl-btn" disabled={!redeemCode.trim() || redeeming} onClick={() => void redeem()}>
           {redeeming ? t('兑换中…', 'Redeeming…') : t('兑换', 'Redeem')}
@@ -255,8 +285,11 @@ export default function Subscribe() {
         <span className={`gl-pill ${redeemMsg.ok ? '' : 'gl-pill-accent'}`}>{redeemMsg.text}</span>
       </div>}
       <p className="gl-note">
-        兑换码由管理员发放，分为「积分码」和「会员码」两种：积分码兑换后积分立即到账；
-        会员码兑换后会员立即生效，已开通的会在原有效期上顺延。兑换码由管理员统一发放，请勿在公开渠道传播。
+        支付系统未开放，购买积分可以联系微信{' '}
+        <button className="gl-wx" onClick={() => void copyWx()} title="点击复制微信号">
+          {WX_ID}<Icon name="copy" size={11} />
+        </button>
+        ，测试期间所有积分 5 折，并赠送 2 个月标准会员。
       </p>
     </section>
   </div>;

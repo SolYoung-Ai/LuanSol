@@ -432,12 +432,9 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
             setCheckinState({ checkedToday: true, streak, loading: false });
             checkedDateRef.current = localDateStr();
             void refresh();
-            const bonus = Number(p.bonus) || 0;
             return {
               ok: true, points, streak,
-              message: points > 0
-                ? `签到成功！+${points} 积分${bonus ? `（连续 ${streak} 天额外 +${bonus}）` : ''}`
-                : '签到成功（本月签到积分已达上限）',
+              message: points > 0 ? `签到成功！+${points} 积分` : '签到成功（本月签到积分已达上限）',
             };
           }
           return { ok: false, points: 0, streak, message: String(p.message || '签到失败，请稍后重试') };
@@ -464,9 +461,8 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       const newStreak = rows.length > 0 && dateKeyOf(rows[0].checkin_date) === yesterday ? lastStreak + 1 : 1;
 
       const isProUser = isProActive(subRef.current);
-      const basePoints = isProUser ? 20 : 10;
-      const bonus = newStreak % 10 === 0 ? 100 : 0;
-      const totalPoints = basePoints + bonus;
+      // 已取消「连续 10 天额外 +100」：只按天给固定积分，会员双倍
+      const totalPoints = isProUser ? 20 : 10;
 
       const ins = await d.from('lunasol_checkin_logs').insert({
         user_id: u.id, checkin_date: today, streak: newStreak, bonus: totalPoints,
@@ -515,7 +511,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       checkedDateRef.current = today;
       return {
         ok: true, points: totalPoints, streak: newStreak,
-        message: `签到成功！+${totalPoints} 积分${bonus ? `（连续 ${newStreak} 天额外 +${bonus}）` : ''}`,
+        message: `签到成功！+${totalPoints} 积分`,
       };
     } finally {
       checkinBusyRef.current = false;
