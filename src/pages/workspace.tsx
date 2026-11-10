@@ -11,6 +11,7 @@ import React, { useMemo, useState } from 'react';
 import { Empty, Modal, go, useHash } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
+import { useSubscription } from '../cloud/subscription';
 import { useCloudSync } from '../cloud/useCloudSync';
 import { DesignView } from '../components/visuals';
 import { STRUCTURES } from '../engine/structure';
@@ -65,6 +66,7 @@ const checkBoxStyle = (checked: boolean, right?: boolean): React.CSSProperties =
 export default function Workspace() {
   const { s, update, loadProject, deleteProject, duplicateProject } = useApp();
   const auth = useAuth();
+  const { isPro } = useSubscription();
   const sync = useCloudSync();
   const hash = useHash();
   const tab = new URLSearchParams(hash.split('?')[1] || '').get('tab');
@@ -191,14 +193,21 @@ export default function Workspace() {
     <div className="v4-toolbar" style={{ borderBottom: 'none', paddingBottom: 0 }}>
       <div className="v4-sec-note">
         {auth.user
-          ? <>已登录 <strong>{auth.user.label}</strong> · {sync.state === 'ok'
-              ? `已同步 ${sync.cloudCount ?? '—'} 个云端项目${sync.lastSync ? ` · 最近 ${new Date(sync.lastSync).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`
-              : sync.message || '待同步'}</>
+          ? <>已登录 <strong>{auth.user.label}</strong> · {!isPro
+              ? '云端跨设备同步为会员权益，当前作品保存在本机浏览器'
+              : sync.state === 'ok'
+                ? `已同步 ${sync.cloudCount ?? '—'} 个云端项目${sync.lastSync ? ` · 最近 ${new Date(sync.lastSync).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`
+                : sync.message || '待同步'}</>
           : '未登录 · 作品仅保存在此设备浏览器；登录后可云端同步、多端取回'}
       </div>
       {auth.user && <div style={{ display: 'flex', gap: 8 }}>
-        <button className="v4-btn-line" onClick={() => void sync.downloadAll()}>取回云端项目</button>
-        <button className="v4-btn-line" onClick={() => void sync.syncNow()}>{sync.state === 'syncing' ? '同步中…' : '立即双向同步'}</button>
+        {isPro ? <>
+          <button className="v4-btn-line" onClick={() => void sync.downloadAll()}>取回云端项目</button>
+          <button className="v4-btn-line" onClick={() => void sync.syncNow()}>{sync.state === 'syncing' ? '同步中…' : '立即双向同步'}</button>
+        </> : <>
+          <button className="v4-btn-line" onClick={() => void sync.downloadAll()}>取回云端项目</button>
+          <button className="v4-btn-dark" onClick={() => go('/subscribe')}>开通会员 · 云端同步</button>
+        </>}
       </div>}
     </div>
 

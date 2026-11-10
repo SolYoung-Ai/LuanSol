@@ -4,7 +4,6 @@ import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AppProvider } from './store';
 import { AuthProvider } from './cloud/auth';
-import { CloudSyncProvider } from './cloud/useCloudSync';
 import { LangProvider } from './i18n';
 import { applyTheme, readTheme } from './theme';
 import './styles.css';
@@ -49,13 +48,11 @@ createRoot(document.getElementById('root')!).render(
     <BootReady />
     <LangProvider>
       <AuthProvider>
-        <AppProvider>
-          <CloudSyncProvider>
+          <AppProvider>
             <ErrorBoundary>
               <App />
             </ErrorBoundary>
-          </CloudSyncProvider>
-        </AppProvider>
+          </AppProvider>
       </AuthProvider>
     </LangProvider>
   </React.StrictMode>,

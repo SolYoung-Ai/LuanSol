@@ -152,7 +152,7 @@ export function EditorProvider({
   /** 挂载时初始激活的工具（如 'assets' 直接打开素材库） */
   initialTool?: ToolId;
 }) {
-  const { s, dieline, update, patchBrief, addChat, saveProject, loadProject, addVersion, syncProject, addAsset, removeAsset, toggleFavoriteAsset } = useApp();
+  const { s, dieline, update, patchBrief, addChat, saveProject, loadProject, addVersion, syncProject, addAsset, removeAsset, toggleFavoriteAsset, setToast } = useApp();
   const auth = useAuth();
   const sub = useSubscription();
   const hash = useHash();
@@ -1011,6 +1011,12 @@ export function EditorProvider({
   };
 
   // 导出
+  /** 印刷级导出（PDF / SVG / ZIP）是会员权益；PNG 预览图免费。
+   *  统一在这里拦截，避免只藏按钮、AI 工具链却仍能导出的「假门槛」。 */
+  const blockedByPlan = (label: string) => {
+    setToast(`${label} 导出为会员权益，开通后即可下载`);
+    window.location.hash = '#/subscribe';
+  };
   const exportPNG = async () => {
     if (!design) return;
     const svg = spreadSvg(design, dieline, 0, false);
@@ -1019,6 +1025,7 @@ export function EditorProvider({
   };
   const exportPDF = async () => {
     if (!design) return;
+    if (!sub.isPro) { blockedByPlan('PDF'); return; }
     const { spreadSvg: ss, svgToCanvas: sc } = await import('../engine/export');
     const { jsPDF } = await import('jspdf');
     const svg = ss(design, dieline, 0, true);
@@ -1034,12 +1041,14 @@ export function EditorProvider({
   };
   const exportSVG = () => {
     if (!design) return;
+    if (!sub.isPro) { blockedByPlan('SVG 矢量稿'); return; }
     const svg = spreadSvg(design, dieline, 0, false);
     const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
     downloadBlob(blob, `${design.name || 'lunasol'}.svg`);
   };
   const exportZIP = async () => {
     if (!design) return;
+    if (!sub.isPro) { blockedByPlan('ZIP 完整交付包'); return; }
     const { buildBundle } = await import('../engine/export');
     const { blob } = await buildBundle(design, dieline, 300, true);
     downloadBlob(blob, `${design.name || 'lunasol'}_完整交付包.zip`);

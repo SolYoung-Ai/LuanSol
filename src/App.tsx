@@ -7,6 +7,7 @@ import { LoginDialog } from './cloud/LoginDialog';
 import { SubscriptionProvider } from './cloud/subscription';
 import { ProfileProvider } from './cloud/profile';
 import { ChatStoreProvider } from './cloud/useChatStore';
+import { CloudSyncProvider } from './cloud/useCloudSync';
 import { cloudConfigured } from './cloud/config';
 import { LunaLoader } from './components/LunaLoader';
 
@@ -108,24 +109,26 @@ export default function App() {
   else page = <div className="page page-narrow"><h1>页面不存在</h1><Button onClick={() => go('/')}>回到首页</Button></div>;
 
   return <SubscriptionProvider requestLogin={requestLogin}>
-    <ProfileProvider>
-      <ChatStoreProvider>
-        <div className="app">
-          <Nav onLogin={requestLogin} />
-          <main className="main">
-            {/* 全局返回：非首页且非 Luna 对话页显示 */}
-            {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
-              if (window.history.length > 1) window.history.back(); else go('/');
-            }} aria-label="返回">← 返回</button>}
-            <Suspense fallback={<PageFallback />}>{page}</Suspense>
-          </main>
-          <Footer />
-          {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
-          <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
-          {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
-        </div>
-      </ChatStoreProvider>
-    </ProfileProvider>
+    <CloudSyncProvider>
+      <ProfileProvider>
+        <ChatStoreProvider>
+          <div className="app">
+            <Nav onLogin={requestLogin} />
+            <main className="main">
+              {/* 全局返回：非首页且非 Luna 对话页显示 */}
+              {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
+                if (window.history.length > 1) window.history.back(); else go('/');
+              }} aria-label="返回">← 返回</button>}
+              <Suspense fallback={<PageFallback />}>{page}</Suspense>
+            </main>
+            <Footer />
+            {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
+            <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
+            {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
+          </div>
+        </ChatStoreProvider>
+      </ProfileProvider>
+    </CloudSyncProvider>
   </SubscriptionProvider>;
 }
 

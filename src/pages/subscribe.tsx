@@ -222,6 +222,7 @@ export default function Subscribe() {
         <ul className="gl-plan-feats">
           <li><Icon name="check" size={13} />{PRICING.freeTrialUses} 积分（注册即送）</li>
           <li><Icon name="check" size={13} />四步创作流程与编辑器</li>
+          <li><Icon name="check" size={13} />印前检查与 PNG / JPG 预览图</li>
           <li><Icon name="check" size={13} />本机保存项目（IndexedDB）</li>
           <li><Icon name="check" size={13} />每日签到 +10</li>
         </ul>
@@ -236,7 +237,7 @@ export default function Subscribe() {
           <li><Icon name="check" size={13} />签到双倍（+20/天，月上限 600）</li>
           <li><Icon name="check" size={13} />全部对话模型解锁</li>
           <li><Icon name="check" size={13} />云端同步 + 历史版本</li>
-          <li><Icon name="check" size={13} />全部导出与印前能力（PDF / SVG / ZIP）</li>
+          <li><Icon name="check" size={13} />印刷级文件导出（PDF / SVG / DXF / ZIP）</li>
         </ul>
         {pro
           ? <button className="gl-btn gl-btn-soft" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</button>

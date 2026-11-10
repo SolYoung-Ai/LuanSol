@@ -9,6 +9,7 @@ import { mockupSvg } from '../engine/export';
 import type { StructureId } from '../types';
 import { downloadBlob, formatDate, svgToDataUrl } from '../engine/utils';
 import { useAuth } from '../cloud/auth';
+import { useSubscription } from '../cloud/subscription';
 import { useCloudSync } from '../cloud/useCloudSync';
 
 const SAMPLE: Record<StructureId, { l: number; w: number; h: number }> = {
@@ -152,6 +153,7 @@ export function ProjectDetail() {
   const hash = useHash();
   const id = hash.split('/')[2];
   const { s, loadProject, restoreVersion, duplicateProject, deleteProject, setToast } = useApp();
+  const { isPro } = useSubscription();
   const p = s.projects.find((x) => x.id === id);
   const [confirm, setConfirm] = useState(false);
   if (!p) return <div className="page page-narrow"><Empty title="找不到这个项目" desc="它可能已被删除，或保存在另一台设备的浏览器里。" action={<Button onClick={() => go('/projects')}>返回我的工作台</Button>} /></div>;
@@ -182,8 +184,13 @@ export function ProjectDetail() {
     </div>
     <Card className="pad-card versions-card"><SectionLabel en="VERSION HISTORY">历史版本</SectionLabel>
       {p.versions.length === 0 ? <p className="muted">编辑设计后会自动生成版本。</p> :
-        <div className="version-table">{[...p.versions].reverse().map((v) => <div key={v.id}><span>{v.label}</span><em>{formatDate(v.at)}</em>
-          <Button size="sm" variant="ghost" onClick={() => { loadProject(p.id); restoreVersion(v.id); setToast('已恢复该版本'); }}>恢复</Button></div>)}</div>}
+        <>
+          <div className="version-table">{[...p.versions].slice(isPro ? -p.versions.length : -3).reverse().map((v) => <div key={v.id}><span>{v.label}</span><em>{formatDate(v.at)}</em>
+            <Button size="sm" variant="ghost" onClick={() => { loadProject(p.id); restoreVersion(v.id); setToast('已恢复该版本'); }}>恢复</Button></div>)}</div>
+          {!isPro && p.versions.length > 3 && <p className="muted">
+            免费版可恢复最近 3 个版本；开通会员后可恢复全部 {p.versions.length} 个（旧版本不会被删除，续期后即可看到）。<Button size="sm" variant="ghost" onClick={() => go('/subscribe')}>开通会员 →</Button>
+          </p>}
+        </>}
     </Card>
     <Modal open={confirm} title="删除项目" onClose={() => setConfirm(false)}><p className="modal-p">该操作不可撤销。</p>
       <div className="modal-buttons"><Button variant="outline" onClick={() => setConfirm(false)}>取消</Button>
