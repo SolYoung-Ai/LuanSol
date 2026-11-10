@@ -4,7 +4,7 @@
  *  - 生成「积分码」和「会员码」：会员码兑换后直接开通 / 顺延会员
  *  - 支持批量生成 + 复制，列表里能看清类型、额度与使用状态
  *  - 作废未使用的码
- * 数据表：public.lunasol_redeem_codes（plan / months 为 2026-11 新增）
+ * 数据表：public.lunasol_redeem_codes（plan / months / days 为 2026-11 新增：月卡用 months，体验卡用 days）
  * 写入受 RLS 保护：只有管理员邮箱能 INSERT / SELECT。
  * ============================================================ */
 import React, { useEffect, useState } from 'react';
@@ -24,11 +24,27 @@ interface RedeemCode {
   created_at?: string;
   plan?: string;
   months?: number;
+  days?: number;
 }
 
+/** 会员码时长单位：体验卡按天，正式卡按月 */
+type DurationUnit = 'day' | 'month';
+interface Duration { unit: DurationUnit; value: number }
+
 const POINT_PRESETS = [100, 200, 300, 500, 1000];
-const MONTH_PRESETS = [1, 3, 6, 12];
+const DURATION_PRESETS: Duration[] = [
+  { unit: 'day', value: 1 },
+  { unit: 'day', value: 3 },
+  { unit: 'day', value: 7 },
+  { unit: 'month', value: 1 },
+  { unit: 'month', value: 3 },
+  { unit: 'month', value: 6 },
+  { unit: 'month', value: 12 },
+];
 const COUNT_PRESETS = [1, 5, 10];
+
+const durKey = (d: Duration) => `${d.unit}-${d.value}`;
+const durText = (d: Duration) => `${d.value} ${d.unit === 'day' ? '天' : '个月'}`;
 
 /** 纯前端生成码：8 位大写字母数字，撞码由主键约束兜底（重复会插入失败并被跳过） */
 function newCode(kind: CodeKind): string {
@@ -43,7 +59,7 @@ export default function Admin() {
   const [kind, setKind] = useState<CodeKind>('points');
   const [points, setPoints] = useState(300);
   const [customPoints, setCustomPoints] = useState('');
-  const [months, setMonths] = useState(1);
+  const [duration, setDuration] = useState<Duration>({ unit: 'month', value: 1 });
   const [count, setCount] = useState(1);
 
   const [codes, setCodes] = useState<RedeemCode[]>([]);
@@ -57,7 +73,7 @@ export default function Admin() {
     const d = await db();
     if (d) {
       const r = await d.from('lunasol_redeem_codes')
-        .select('code,points,used,used_by,created_at,plan,months')
+        .select('code,points,used,used_by,created_at,plan,months,days')
         .order('created_at', { ascending: false });
       if (r.error) setMessage({ ok: false, text: `读取兑换码失败：${r.error.message || '未知错误'}` });
       else setCodes((r.data || []) as RedeemCode[]);
@@ -76,7 +92,7 @@ export default function Admin() {
   const pointsValue = customPoints ? parseInt(customPoints, 10) || 0 : points;
   const summary = kind === 'points'
     ? `${count} 张 · 每张 ${pointsValue} 积分`
-    : `${count} 张 · 每张开通 ${months} 个月会员`;
+    : `${count} 张 · 每张开通 ${durText(duration)}会员`;
 
   const copy = async (text: string) => {
     try {
@@ -97,7 +113,7 @@ export default function Admin() {
   const create = async () => {
     if (creating) return;
     if (kind === 'points' && pointsValue <= 0) { setMessage({ ok: false, text: '请输入有效积分额度' }); return; }
-    if (kind === 'pro_monthly' && months <= 0) { setMessage({ ok: false, text: '请输入有效会员月数' }); return; }
+    if (kind === 'pro_monthly' && duration.value <= 0) { setMessage({ ok: false, text: '请选择有效会员时长' }); return; }
     const d = await db();
     if (!d) { setMessage({ ok: false, text: '数据库未连接' }); return; }
 
@@ -109,11 +125,13 @@ export default function Admin() {
 
     for (let i = 0; i < count; i++) {
       const code = newCode(kind);
+      const isMember = kind === 'pro_monthly';
       const r = await d.from('lunasol_redeem_codes').insert({
         code,
         points: kind === 'points' ? pointsValue : 0,
         plan: kind,
-        months: kind === 'pro_monthly' ? months : 0,
+        months: isMember && duration.unit === 'month' ? duration.value : 0,
+        days: isMember && duration.unit === 'day' ? duration.value : 0,
         used: false,
       });
       if (r.error) errs.push(r.error.message || '插入失败');
@@ -127,7 +145,7 @@ export default function Admin() {
         ok: true,
         text: kind === 'points'
           ? `已生成 ${okCodes.length} 张积分码（每张 ${pointsValue} 积分）`
-          : `已生成 ${okCodes.length} 张会员码（每张 ${months} 个月）`,
+          : `已生成 ${okCodes.length} 张会员码（每张 ${durText(duration)}）`,
       });
       void load();
     } else {
@@ -144,7 +162,11 @@ export default function Admin() {
   };
 
   const typeOf = (c: RedeemCode) => (c.plan === 'pro_monthly' ? '会员码' : '积分码');
-  const quotaOf = (c: RedeemCode) => (c.plan === 'pro_monthly' ? `${c.months || 1} 个月` : `${c.points} 积分`);
+  const quotaOf = (c: RedeemCode) => {
+    if (c.plan !== 'pro_monthly') return `${c.points} 积分`;
+    if (c.days && c.days > 0) return `${c.days} 天`;
+    return `${c.months || 1} 个月`;
+  };
   const statusOf = (c: RedeemCode) =>
     !c.used ? '可用' : c.used_by && c.used_by !== 'revoked' ? '已使用' : '已作废';
 
@@ -171,20 +193,29 @@ export default function Admin() {
       <div className="adm-field">
         <div className="adm-field-label">{kind === 'points' ? '每张额度' : '每张开通时长'}</div>
         <div className="adm-chips">
-          {(kind === 'points' ? POINT_PRESETS : MONTH_PRESETS).map((v) => {
-            const on = kind === 'points' ? points === v && !customPoints : months === v;
-            return <button
-              key={v}
-              className={`adm-chip ${on ? 'on' : ''}`}
-              onClick={() => {
-                if (kind === 'points') { setPoints(v); setCustomPoints(''); }
-                else setMonths(v);
-              }}
-            >
-              {on && <Icon name="check" size={12} />}
-              {kind === 'points' ? `${v} 积分` : `${v} 个月`}
-            </button>;
-          })}
+          {kind === 'points'
+            ? POINT_PRESETS.map((v) => {
+              const on = points === v && !customPoints;
+              return <button
+                key={v}
+                className={`adm-chip ${on ? 'on' : ''}`}
+                onClick={() => { setPoints(v); setCustomPoints(''); }}
+              >
+                {on && <Icon name="check" size={12} />}
+                {v} 积分
+              </button>;
+            })
+            : DURATION_PRESETS.map((d) => {
+              const on = duration.unit === d.unit && duration.value === d.value;
+              return <button
+                key={durKey(d)}
+                className={`adm-chip ${on ? 'on' : ''}`}
+                onClick={() => setDuration(d)}
+              >
+                {on && <Icon name="check" size={12} />}
+                {durText(d)}
+              </button>;
+            })}
           {kind === 'points' && <input
             className="luna-input adm-custom"
             inputMode="numeric"
@@ -193,6 +224,9 @@ export default function Admin() {
             onChange={(e) => setCustomPoints(e.target.value.replace(/\D/g, ''))}
           />}
         </div>
+        {kind === 'pro_monthly' && <p className="adm-summary" style={{ marginTop: 8 }}>
+          体验卡按 100 积分 / 天发放额度（1 天 = 100、3 天 = 300、7 天 = 700 积分）；正式月卡固定 3000 积分。
+        </p>}
       </div>
 
       <div className="adm-field">
@@ -269,7 +303,7 @@ export default function Admin() {
             </table>
           </div>}
       <p className="adm-tip">
-        会员码兑换后会员立即生效；已是会员的会在原有效期上顺延。兑换码存在云端数据库，用户兑换时由数据库函数一次性占用，重复兑换会被拒绝。
+        会员码兑换后会员立即生效；已是会员的会在原有效期上顺延（天卡、月卡可叠加）。天卡到期后自动失效，不自动续费。兑换码存在云端数据库，用户兑换时由数据库函数一次性占用，重复兑换会被拒绝。
       </p>
     </Card>
   </div>;
