@@ -2,7 +2,7 @@
  * Luna 对话状态与云端同步
  * ------------------------------------------------------------
  * - 对话模型：免费用户固定 DeepSeek-V4（不能自选），会员可在页面上切换；
- * - 生图两档（flash/pro）随对话保存，由用户在输入区切换；可带比例/风格；
+ * - 生图档位随对话保存（Seedream Flash/Pro、GPT Image 2 文字/输入图），由用户在输入区切换；
  * - 对话本地持久化 + 登录后云端合并，变更防抖上传，换设备/浏览器可见；
  * - 人设统一引用 engine/persona.ts，全站同一份。
  * ============================================================ */
@@ -12,10 +12,10 @@ import { uid } from '../engine/utils';
 import { useApp } from '../store';
 import { useAuth } from './auth';
 import { loadAI, llmChatWithReasoning } from '../engine/llm';
-import { callSeedream } from '../engine/seedream';
+import { callImage } from '../engine/seedream';
+import { imageCost, imageShort } from './models';
 import { LUNA_PERSONA_PROMPT } from '../engine/persona';
 import { recordUsage, useSubscription } from './subscription';
-import { PRICING } from './plans';
 import { canSyncChats, pullAllConversations, pushConversation, removeConversation } from './chats';
 
 const LS_KEY = 'lunasol.chats.v1';
@@ -75,11 +75,9 @@ function mergeConversations(local: Conversation[], cloud: Conversation[]): Conve
  *  历史版本（点一下新建就插入一条空记录）留下的空壳靠这里一次性清掉。 */
 const isRealConversation = (c: Conversation) => Array.isArray(c.messages) && c.messages.length > 0;
 
-const tierCost = (tier: ImageTier) =>
-  tier === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro;
-
-const tierLabel = (tier: ImageTier) =>
-  tier === 'flash' ? 'Flash' : 'Pro';
+// 价格与名称统一从 cloud/models.ts 取，避免这里另写一套导致「显示 6 扣 10」
+const tierCost = (tier: ImageTier) => imageCost(tier);
+const tierLabel = (tier: ImageTier) => imageShort(tier);
 
 /** 基于对话上下文构造生图提示词。 */
 function buildImagePrompt(c: Conversation): string {
@@ -389,7 +387,7 @@ function useChatStoreState(): ChatStore {
         : buildImagePrompt(conv);
       const lastUserImage = opts?.reference
         || [...conv.messages].reverse().find((m) => m.role === 'user' && m.image)?.image;
-      const url = await callSeedream(prompt, {
+      const url = await callImage(prompt, {
         tier,
         referenceImage: lastUserImage,
         uid: user?.id,

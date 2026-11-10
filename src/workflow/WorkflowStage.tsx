@@ -11,9 +11,9 @@ import React, { useState } from 'react';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
-import { PRICING } from '../cloud/plans';
 import type { DesignTask, TaskVariant, ImageTier } from '../types';
-import { callSeedream } from '../engine/seedream';
+import { callImage } from '../engine/seedream';
+import { OPEN_IMAGE_MODELS, imageCost } from '../cloud/models';
 import { planTasks } from './planner';
 import { assembleDesign, inferStructure, buildBrief, refineTextColors } from './assembler';
 import CanvasView from './CanvasView';
@@ -37,7 +37,7 @@ const STATUS_LABEL: Record<DesignTask['status'], string> = {
   success: '已完成', failed: '失败', cancelled: '已取消',
 };
 
-const tierCost = (t: ImageTier) => t === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro;
+const tierCost = (t: ImageTier) => imageCost(t);
 
 /** 加载 dataURL 获取真实尺寸 */
 function naturalSize(src: string): Promise<{ w: number; h: number }> {
@@ -104,7 +104,7 @@ export default function WorkflowStage({ onEnterEditor }: { onEnterEditor: (tool:
     }
     patchTask(taskId, { status: 'running', error: '' });
     try {
-      const src = await callSeedream(task.prompt, { tier, uid: auth.user?.id });
+      const src = await callImage(task.prompt, { tier, uid: auth.user?.id });
       const { w, h } = await naturalSize(src);
       if (auth.user) {
         await recordUsage(auth.user.id, cost, 'image');
@@ -250,7 +250,7 @@ export default function WorkflowStage({ onEnterEditor }: { onEnterEditor: (tool:
         </div>
       </div>
       <p style={{ fontSize: 11, color: '#aaa', margin: '0 0 16px' }}>
-        文本分析免费 · 生图 Flash {PRICING.costs.imageFlash} 积分/张 · Pro {PRICING.costs.imagePro} 积分/张 · 当前余额 {sub.usedLeft ?? 0}
+        文本分析免费 · 生图 {OPEN_IMAGE_MODELS.map((m) => `${m.short} ${m.cost}`).join(' / ')} 积分/张 · 当前余额 {sub.usedLeft ?? 0}
       </p>
 
       {viewMode === 'canvas' ? (
@@ -380,18 +380,18 @@ function TaskCard({
 
       {/* 模型档位选择 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
-        {(['flash', 'pro'] as ImageTier[]).map((t) => (
+        {OPEN_IMAGE_MODELS.map((m) => (
           <button
-            key={t}
-            onClick={() => onPatch({ imageTier: t })}
+            key={m.id}
+            onClick={() => onPatch({ imageTier: m.id })}
             style={{
               fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
-              border: task.imageTier === t ? '1px solid #222' : '1px solid #eee',
-              background: task.imageTier === t ? '#222' : '#fff',
-              color: task.imageTier === t ? '#fff' : '#888',
+              border: task.imageTier === m.id ? '1px solid #222' : '1px solid #eee',
+              background: task.imageTier === m.id ? '#222' : '#fff',
+              color: task.imageTier === m.id ? '#fff' : '#888',
             }}
           >
-            {t === 'flash' ? `Flash ${PRICING.costs.imageFlash}积分` : `Pro ${PRICING.costs.imagePro}积分`}
+            {m.short} {m.cost}积分
           </button>
         ))}
       </div>

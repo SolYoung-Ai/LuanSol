@@ -17,16 +17,14 @@ import { useChatStore, CHAT_MODELS } from '../cloud/useChatStore';
 import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
 import { LoginDialog } from '../cloud/LoginDialog';
-import { PRICING } from '../cloud/plans';
+import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageModel } from '../cloud/models';
 
 type LunaMode = 'chat' | 'image';
 
-const TIERS: ImageTier[] = ['flash', 'pro'];
-const tierName = (t: ImageTier) =>
-  t === 'flash' ? 'Seedream 5.0 Flash' : 'Seedream 5.0 Pro';
-const tierShort = (t: ImageTier) => (t === 'flash' ? 'Flash' : 'Pro');
-const tierCost = (t: ImageTier) =>
-  t === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro;
+// 档位名称与价格全部来自 cloud/models.ts，界面上显示多少就扣多少
+const tierName = (t: ImageTier) => imageLabel(t);
+const tierShort = (t: ImageTier) => imageShort(t);
+const tierCost = (t: ImageTier) => imageCost(t);
 
 /** 比例 → Seedream 实际出图尺寸（自动则交给服务端默认 1024×1024） */
 const RATIOS = [
@@ -241,7 +239,15 @@ export default function Luna() {
     if (!f) return;
     if (f.size > 4 * 1024 * 1024) { setToast('图片请小于 4MB'); return; }
     const reader = new FileReader();
-    reader.onload = () => setPendingImage(String(reader.result));
+    reader.onload = () => {
+      setPendingImage(String(reader.result));
+      // GPT Image 2 的「文字输入」档不收参考图，带图必须走「输入图」档（93 积分）。
+      // 这里明说一句，避免用户以为还是 86 积分却按 93 扣。
+      if (imageModel(tier).id === 'gpt2-text') {
+        chat.setTier('gpt2-ref');
+        setToast('已切到「GPT Image 2 · 输入图」（93 积分/张），因为这次带了参考图');
+      }
+    };
     reader.readAsDataURL(f);
   };
 
@@ -257,6 +263,11 @@ export default function Luna() {
     if (mode === 'image') {
       if (!text && !img) {
         setToast('先描述一下画面，比如「国风茶叶礼盒，米白底，烫金纹样，正面视角」');
+        return;
+      }
+      // 该档位必须有参考图，否则云函数会直接拒绝（不扣分，但白等一场）
+      if (imageModel(tier).needsRef && !img) {
+        setToast('「GPT Image 2 · 输入图」需要先上传参考图；只用文字的话请切到「文字输入」档（86 积分）');
         return;
       }
       // 余额不足时先拦住：绝不能先把输入框清空再被拒——用户刚写好的提示词会凭空消失
@@ -511,7 +522,11 @@ export default function Luna() {
             <div className="lc-pending">
               <img src={pendingImage} alt="待发送" />
               <span>{mode === 'image' ? '参考图已就绪，会按它出图' : '参考图已就绪'}</span>
-              <button onClick={() => setPendingImage(null)} aria-label="移除参考图">
+              <button onClick={() => {
+                setPendingImage(null);
+                // 参考图去掉后回到「文字输入」档，不然会按 93 积分的图生图档下单
+                if (imageModel(tier).id === 'gpt2-ref') chat.setTier('gpt2-text');
+              }} aria-label="移除参考图">
                 <Icon name="close" size={13} />
               </button>
             </div>
@@ -558,10 +573,10 @@ export default function Luna() {
                       icon="spark"
                       caption="模型"
                       value={tierName(tier)}
-                      options={TIERS.map((t) => ({
-                        id: t,
-                        label: tierName(t),
-                        hint: `${tierCost(t)} 积分`,
+                      options={OPEN_IMAGE_MODELS.map((m) => ({
+                        id: m.id,
+                        label: m.label,
+                        hint: `${m.cost} 积分`,
                       }))}
                       onPick={(id) => chat.setTier(id as ImageTier)}
                     />
@@ -602,7 +617,7 @@ export default function Luna() {
           <div className="lc-dock-hint">
             {mode === 'image' ? (
               <span className="lc-hint-text">
-                生图 {tierCost(tier)} 积分/张
+                {tierShort(tier)} 生图 {tierCost(tier)} 积分/张
                 {typeof balance === 'number' ? ` · 当前余额 ${balance}` : ''}
               </span>
             ) : sub.isPro ? (

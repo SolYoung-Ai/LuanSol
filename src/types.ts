@@ -266,8 +266,9 @@ export interface PrepressReport {
 
 /* ============================ Luna 对话 ============================ */
 
-/** 生图两档（对应 Seedream Flash / Pro） */
-export type ImageTier = 'flash' | 'pro';
+/** 生图档位（对应 cloud/models.ts 的 IMAGE_MODELS，改名必须同步改那里与云函数）
+ *  flash/pro = 方舟 Seedream；gpt2-text/gpt2-ref = B.AI GPT Image 2 的两档输入 */
+export type ImageTier = 'flash' | 'pro' | 'gpt2-text' | 'gpt2-ref';
 
 /** 单条 Luna 分身对话消息（区别于编辑器内部聊天用的旧 ChatMessage） */
 export interface LunaMessage {

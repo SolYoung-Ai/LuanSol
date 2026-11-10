@@ -14,12 +14,13 @@ import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
 import { PRICING } from '../cloud/plans';
-import { callSeedream } from '../engine/seedream';
+import { callImage } from '../engine/seedream';
+import { OPEN_IMAGE_MODELS, imageCost } from '../cloud/models';
 import { assembleFromConceptImage, buildBrief, inferStructure, refineTextColors } from './assembler';
 import { Icon } from '../components/icons';
 
 const BATCH_COST = PRICING.costs.imageFlash; // 整批 3 张按 6 积分档计
-const tierCost = (t: ImageTier) => (t === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro);
+const tierCost = (t: ImageTier) => imageCost(t);
 
 /** 三个方向的差异化提示 */
 const HINTS: { label: string; name: string; hint: string }[] = [
@@ -92,7 +93,7 @@ export default function ConceptStage() {
     try {
       const results = await Promise.allSettled(
         HINTS.map(async (h) => {
-          const src = await callSeedream(buildPrompt(info, h.hint), { tier: 'flash', referenceImage, uid });
+          const src = await callImage(buildPrompt(info, h.hint), { tier: 'flash', referenceImage, uid });
           const size = await naturalSize(src);
           return { src, naturalW: size.w, naturalH: size.h, hint: h.hint, label: h.label };
         }),
@@ -168,7 +169,7 @@ export default function ConceptStage() {
     setRegenBusy(img.id);
     try {
       const uid = auth.user?.id;
-      const src = await callSeedream(draftPrompt, { tier: draftTier, referenceImage: wf.referenceImages[0]?.src, uid });
+      const src = await callImage(draftPrompt, { tier: draftTier, referenceImage: wf.referenceImages[0]?.src, uid });
       const { w, h } = await naturalSize(src);
       const next = images.map((it) => it.id === img.id
         ? { ...it, src, prompt: draftPrompt, model: draftTier, tier: draftTier, at: Date.now(), naturalW: w, naturalH: h }
@@ -279,9 +280,9 @@ export default function ConceptStage() {
                 ) : (
                   <div className="wf-regen-panel">
                     <div className="wf-seg wf-seg-sm">
-                      {(['flash', 'pro'] as ImageTier[]).map((t) => (
-                        <button key={t} className={`wf-seg-btn ${draftTier === t ? 'on' : ''}`} onClick={() => setDraftTier(t)}>
-                          {t === 'flash' ? `Flash ${tierCost('flash')}积分` : `Pro ${tierCost('pro')}积分`}
+                      {OPEN_IMAGE_MODELS.map((m) => (
+                        <button key={m.id} className={`wf-seg-btn ${draftTier === m.id ? 'on' : ''}`} onClick={() => setDraftTier(m.id)}>
+                          {m.short} {m.cost}积分
                         </button>
                       ))}
                     </div>

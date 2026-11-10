@@ -4,6 +4,7 @@ import { Button, Card, Modal, Notice, PageHead, SectionLabel, Tag, Toggle } from
 import { aiEnabled, aiStatusLabel, aiMode, saveAI, testConnection } from '../engine/llm';
 import { aiCapabilitySummary, getAIRunLog, clearAIRunLog } from '../ai/provider';
 import { CLOUD, deepSeekReady } from '../cloud/config';
+import { PRICING } from '../cloud/plans';
 import { STRUCTURES } from '../engine/structure';
 import { downloadBlob, formatDate } from '../engine/utils';
 import { migrateProject } from '../migrations';
@@ -102,9 +103,10 @@ export function ModelConfig() {
     </div>
 
     <Card className="pad-card"><SectionLabel en="PLATFORM MODELS">平台模型（托管）</SectionLabel>
-      <p className="ai-caps-intro">LunaSol 在腾讯云开发 CloudBase 国内站部署后台代理，<strong>所有厂商 API Key 只保存在云函数环境变量</strong>，前端不接触任何密钥。文本能力由平台统一路由，已接入 DeepSeek、Kimi、Doubao-Seed、GLM 等多款模型，生图接入 Doubao-Seedream 系列，用户可在 Luan 里切换。</p>
+      <p className="ai-caps-intro">LunaSol 在腾讯云开发 CloudBase 国内站部署后台代理，<strong>所有厂商 API Key 只保存在云函数环境变量</strong>，前端不接触任何密钥。文本能力由平台统一路由，已接入 DeepSeek、Kimi、Doubao-Seed、GLM 等多款模型；生图接入 Doubao-Seedream 与 GPT Image 2（文字输入 / 输入图两档），用户可在 Luna 里切换；3D 建模预留 Hyper3D-Gen2。</p>
       <div className="kv"><span>文本模型</span><strong>DeepSeek-V4.1 · Kimi-K3.1-Pro · Doubao-Seed-2.1 Pro/Lite/Turbo · GLM-5.3-Flash（服务端代理）</strong></div>
-      <div className="kv"><span>生图模型</span><strong>Doubao-Seedream 5.0 Flash / Pro（服务端代理）</strong></div>
+      <div className="kv"><span>生图模型</span><strong>Doubao-Seedream 5.0 Flash / Pro · GPT Image 2 文字输入 / 输入图（服务端代理）</strong></div>
+      <div className="kv"><span>3D 模型</span><strong>Hyper3D-Gen2（{PRICING.costs.hyper3d} 积分/次，编辑器中开放）</strong></div>
       <div className="kv"><span>后台</span><strong>CloudBase HTTP 云函数 · {CLOUD.region}</strong></div>
       <div className="kv"><span>当前状态</span><strong>{enabled ? '已启用平台 AI' : '已关闭，使用内置设计引擎'}</strong></div>
       <Toggle label="启用平台 AI" hint="开启后九步向导由平台大模型提供建议；关闭后改用内置确定性设计引擎（不调用大模型）" checked={enabled} onChange={(v) => setMode(v ? 'proxy' : 'off')} />

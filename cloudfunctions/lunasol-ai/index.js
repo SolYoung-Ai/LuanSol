@@ -1,15 +1,18 @@
 /* LunaSol AI 后台代理（CloudBase HTTP 云函数 / Node.js 18）
  * ------------------------------------------------------------
- * 职责：把前端 OpenAI 兼容的 chat/completions 请求转发给 DeepSeek。
- * 厂商密钥 DEEPSEEK_API_KEY 只保存在云函数环境变量，绝不进入前端源码、
- * Git 仓库、日志或响应体。前端只持有公开的网关地址与代理令牌。
+ * 职责：把前端的 AI 请求转发到对应的上游厂商。
+ *   文本对话  → DeepSeek（DEEPSEEK_API_KEY）/ 方舟（SEEDREAM_API_KEY）
+ *   图像生成  → 方舟 Seedream（SEEDREAM_API_KEY）/ B.AI GPT Image 2（BAI_API_KEY）
+ *   3D 生成   → 方舟 Hyper3D-Gen2（SEEDREAM_API_KEY，异步任务接口，暂未开放）
+ * 所有厂商密钥只保存在云函数环境变量，绝不进入前端源码、Git 仓库、日志或响应体。
  *
  * 安全约束：
  *  - 不回显 req.headers / process.env / x-cloudbase-context；
  *  - 上游错误只透传精简后的 error.message；
- *  - 模型名由后台白名单决定，前端不能随意指定；
- *  - 需要 X-LunaSol-Token 与后台 LUNASOL_PROXY_TOKEN 一致；
- *  - 不支持图像生成，明确返回 501，前端如实回退，不伪造 AI 结果。
+ *  - 模型名由后台白名单决定，前端只能传「档位名」，真实模型 ID 只在这里映射；
+ *  - 需要 X-LunaSol-Token 与后台 LUNASOL_PROXY_TOKEN 一致。
+ *
+ * 档位 → 上游模型 的映射是唯一权威：前端不传厂商模型名，避免扣错积分或走错厂商。
  */
 const http = require('http');
 const https = require('https');
@@ -132,6 +135,119 @@ function applyArkRules(frontModel, arkPayload) {
   if (typeof rule.temperature === 'number') next.temperature = rule.temperature;
   return next;
 }
+
+/* ---------- B.AI 图像模型（2026-11 接入） ----------
+ * B.AI 提供 OpenAI 兼容网关，Base URL 固定 https://api.b.ai/v1。
+ * GPT Image 2 按「输入 token 档位」计费：纯文字输入 5，带参考图输入 8，
+ * 因此前端分两个档位（gpt2-text / gpt2-ref），由这里映射到同一个真实模型 ID，
+ * 但前端扣分不同（86 / 93）——映射写错就会扣错积分，改动前先核对这张表。
+ */
+const BAI_BASE_URL = (process.env.BAI_BASE_URL || 'https://api.b.ai/v1').replace(/\/+$/, '');
+const BAI_IMAGE_MODEL = process.env.BAI_IMAGE_MODEL || 'gpt-image-2';
+
+/**
+ * 前端档位 → 上游厂商与真实模型 ID。这是全站唯一的映射表：
+ *   provider=bai  → B.AI（Authorization: Bearer BAI_API_KEY）
+ *   provider=ark  → 火山方舟（Authorization: Bearer SEEDREAM_API_KEY）
+ * 前端只允许传 key，传表外的值直接 400，绝不回落到默认档位偷偷扣费。
+ */
+function imageRoute(tier) {
+  const seedreamBase = (process.env.SEEDREAM_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/+$/, '');
+  const routes = {
+    flash: { provider: 'ark', base: seedreamBase, model: 'doubao-seedream-5-0-flash-260915', key: process.env.SEEDREAM_API_KEY },
+    pro: { provider: 'ark', base: seedreamBase, model: 'doubao-seedream-5-0-pro-260628', key: process.env.SEEDREAM_API_KEY },
+    'gpt2-text': { provider: 'bai', base: BAI_BASE_URL, model: BAI_IMAGE_MODEL, key: process.env.BAI_API_KEY },
+    'gpt2-ref': { provider: 'bai', base: BAI_BASE_URL, model: BAI_IMAGE_MODEL, key: process.env.BAI_API_KEY },
+  };
+  return routes[tier] || null;
+}
+
+/** 硬超时：DNS 卡住时 socket timeout 不会触发（连接还没建立），必须用独立计时器兜底，
+ *  否则函数会一直挂到网关把请求掐掉（表现为客户端 90 秒白屏）。 */
+function withDeadline(promise, ms, message) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+/** B.AI 图生图（带参考图）：OpenAI 兼容 /images/edits，multipart 上传参考图。
+ *  GPT Image 2 的「输入 8」档位只在这条路径上生效——generations 不认 image 参数。 */
+function callBaiImageEdit(route, opts) {
+  return withDeadline(new Promise((resolve, reject) => {
+    const m = /^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i.exec(opts.dataUrl || '');
+    if (!m) { reject(new Error('参考图格式不正确')); return; }
+    const mime = m[1];
+    const buf = Buffer.from(m[2], 'base64');
+    const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const boundary = `----lunasol${Date.now().toString(16)}`;
+    const chunks = [];
+    const pushText = (s) => chunks.push(Buffer.from(s, 'utf8'));
+    pushText(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\n${route.model}\r\n`);
+    pushText(`--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${opts.prompt}\r\n`);
+    pushText(`--${boundary}\r\nContent-Disposition: form-data; name="size"\r\n\r\n${opts.size || '1024x1024'}\r\n`);
+    pushText(`--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="ref.${ext}"\r\nContent-Type: ${mime}\r\n\r\n`);
+    chunks.push(buf);
+    pushText(`\r\n--${boundary}--\r\n`);
+    const data = Buffer.concat(chunks);
+    const req = https.request(new URL(route.base + '/images/edits'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${route.key || ''}`,
+        'Content-Length': data.length,
+      },
+    }, (upstream) => {
+      let raw = '';
+      upstream.setEncoding('utf8');
+      upstream.on('data', (c) => { raw += c; });
+      upstream.on('end', () => {
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch { /* */ }
+        resolve({ status: upstream.statusCode || 502, json: parsed, raw: raw.slice(0, 1200) });
+      });
+    });
+    req.setTimeout(175000, () => req.destroy(new Error('图像生成超时')));
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  }), 180000, 'B.AI 上游无响应（DNS 解析或网络不可达）');
+}
+
+/** B.AI 图像生成：OpenAI 兼容 /images/generations，强制要 b64 以便前端直接落库 */
+function callBaiImage(route, payload) {
+  return withDeadline(new Promise((resolve, reject) => {
+    const target = new URL(route.base + '/images/generations');
+    const data = JSON.stringify(payload);
+    const req = https.request(target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${route.key || ''}`,
+        'Content-Length': Buffer.byteLength(data),
+      },
+    }, (upstream) => {
+      let raw = '';
+      upstream.setEncoding('utf8');
+      upstream.on('data', (c) => { raw += c; });
+      upstream.on('end', () => {
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch { /* 交给调用方兜底 */ }
+        resolve({ status: upstream.statusCode || 502, json: parsed, raw: raw.slice(0, 1200) });
+      });
+    });
+    req.setTimeout(175000, () => req.destroy(new Error('图像生成超时')));
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  }), 180000, 'B.AI 上游无响应（DNS 解析或网络不可达）');
+}
+
 
 // res 是每次请求独立的对象，把该请求的 CORS 头挂在它上面，避免并发串扰
 function sendJson(res, statusCode, data) {
@@ -334,9 +450,6 @@ function downloadToBase64(fileUrl) {
 }
 
 async function handleImage(req, res, body) {
-  if (!process.env.SEEDREAM_API_KEY) {
-    return sendJson(res, 503, { error: { message: '后台尚未配置 SEEDREAM_API_KEY' } });
-  }
   const token = process.env.LUNASOL_PROXY_TOKEN || '';
   if (!token || String(req.headers['x-lunasol-token'] || '') !== token) {
     return sendJson(res, 401, { error: { message: '代理令牌无效' } });
@@ -344,34 +457,62 @@ async function handleImage(req, res, body) {
   const verdict = guard(req);
   if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
 
-  const uid = String(req.headers['x-cloudbase-uid'] || '').trim();
   const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, 2000) : '';
   if (!prompt) return sendJson(res, 400, { error: { message: '缺少 prompt' } });
 
-  // 前端传 flash/pro，映射到方舟具体模型 ID；缺省走环境变量
-  const TIER_MODEL = {
-    flash: 'doubao-seedream-5-0-flash-260915',
-    pro: 'doubao-seedream-5-0-pro-260628',
-  };
-  const tier = typeof body.model === 'string' && TIER_MODEL[body.model] ? body.model : 'flash';
+  // 档位必须命中映射表。传表外的值直接拒绝，绝不做「回落到 Flash」这种悄悄换模型的事：
+  // 前端按档位扣积分，一旦静默回落，用户付了 GPT Image 2 的钱却拿到 Seedream 的图。
+  const tier = typeof body.model === 'string' ? body.model : '';
+  const route = imageRoute(tier);
+  if (!route) {
+    return sendJson(res, 400, { error: { message: `未知的图像模型档位：${tier || '(空)'}` } });
+  }
+  if (!route.key) {
+    return sendJson(res, 503, { error: { message: `${route.provider === 'bai' ? 'B.AI' : '方舟'} 密钥未配置，该档位暂不可用` } });
+  }
 
-  const payload = {
-    model: TIER_MODEL[tier] || TIER_MODEL.flash,
-    prompt,
-    size: typeof body.size === 'string' ? body.size : '1024x1024',
-    response_format: 'url',
-    ...(typeof body.image === 'string' && body.image.startsWith('data:image/') ? { image: body.image } : {}),
-  };
+  const hasRef = typeof body.image === 'string' && body.image.startsWith('data:image/');
+  // GPT Image 2 的两个价格档位对应两种输入，走错接口就白扣分：
+  //   文字输入(5) → /images/generations（无参考图）
+  //   图片输入(8) → /images/edits（带参考图，multipart）
+  if (tier === 'gpt2-ref' && !hasRef) {
+    return sendJson(res, 400, { error: { message: '该档位需要先上传参考图' } });
+  }
+  if (tier === 'gpt2-text' && hasRef) {
+    return sendJson(res, 400, { error: { message: '已上传参考图，请切换到「GPT Image 2 · 输入图」档位（93 积分）' } });
+  }
+  const size = typeof body.size === 'string' ? body.size : '1024x1024';
+  const payload = route.provider === 'bai'
+    ? {
+      model: route.model,
+      prompt,
+      n: 1,
+      size,
+    }
+    : {
+      model: route.model,
+      prompt,
+      size,
+      response_format: 'url',
+      ...(hasRef ? { image: body.image } : {}),
+    };
 
   try {
     dayUsed += 1;
-    const r = await callSeedream(payload);
+    let r;
+    if (route.provider === 'bai') {
+      r = tier === 'gpt2-ref'
+        ? await callBaiImageEdit(route, { prompt, dataUrl: body.image, size })
+        : await callBaiImage(route, payload);
+    } else {
+      r = await callSeedream(payload);
+    }
     if (r.status < 200 || r.status >= 300) {
       return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, {
         error: { message: safeUpstreamError(r) },
       });
     }
-    // 统一把上游结果转成 b64_json 返回：服务端下载 TOS URL，规避前端 CORS
+    // 统一把上游结果转成 b64_json 返回：服务端下载 TOS / CDN 图片，规避前端 CORS
     const out = [];
     for (const d of (r.json.data || [])) {
       if (d.b64_json) {
@@ -386,6 +527,8 @@ async function handleImage(req, res, body) {
     }
     return sendJson(res, 200, {
       created: r.json.created || Date.now(),
+      model: route.model,
+      provider: route.provider,
       data: out,
     });
   } catch (e) {
@@ -485,6 +628,8 @@ const server = http.createServer(async (req, res) => {
       tokenRequired: Boolean(process.env.LUNASOL_PROXY_TOKEN),
       imageGeneration: Boolean(process.env.SEEDREAM_API_KEY),
       imageProvider: process.env.SEEDREAM_API_KEY ? 'seedream' : 'none',
+      gptImageEnabled: Boolean(process.env.BAI_API_KEY),
+      hyper3dEnabled: Boolean(process.env.SEEDREAM_API_KEY),
       limits: { ratePerMinute: RATE_PER_MINUTE, dailyLimit: DAILY_LIMIT, dailyUsed: dayUsed, requireOrigin: REQUIRE_ORIGIN },
     });
   }

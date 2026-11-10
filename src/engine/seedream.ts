@@ -1,13 +1,18 @@
 /* ============================================================
- * Seedream 生图调用（经云函数代理，前端不持有厂商密钥）
+ * 图像生成调用（经云函数代理，前端不持有任何厂商密钥）
  * ------------------------------------------------------------
- * 两档 tier（flash/pro）由云函数映射到方舟真实模型，
- * 云函数统一把结果转成 base64 返回，规避前端跨域。
+ * 前端只传「档位名」（flash / pro / gpt2-text / gpt2-ref），
+ * 真实模型 ID 与厂商路由全部在云函数里决定：
+ *   flash / pro        → 火山方舟 Seedream
+ *   gpt2-text          → B.AI GPT Image 2 · /images/generations（文字输入）
+ *   gpt2-ref           → B.AI GPT Image 2 · /images/edits（带参考图，multipart）
+ * 这样即使前端被改，也不可能拿便宜的档位去调贵的模型。
  * ============================================================ */
 import { CLOUD } from '../cloud/config';
+import { imageModel } from '../cloud/models';
 import type { ImageTier } from '../types';
 
-export async function callSeedream(prompt: string, opts: {
+export async function callImage(prompt: string, opts: {
   tier: ImageTier;
   referenceImage?: string;
   uid?: string;
@@ -15,6 +20,9 @@ export async function callSeedream(prompt: string, opts: {
   size?: string;
 }): Promise<string> {
   if (!CLOUD.aiBaseUrl || !CLOUD.aiToken) throw new Error('图像服务未配置');
+  const m = imageModel(opts.tier);
+  // 需要参考图的档位没图时，宁可直接报错也不要偷偷换成别的模型（会扣错积分）
+  if (m.needsRef && !opts.referenceImage) throw new Error('该模型需要先上传参考图');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-LunaSol-Token': CLOUD.aiToken,
@@ -26,7 +34,7 @@ export async function callSeedream(prompt: string, opts: {
     body: JSON.stringify({
       prompt,
       size: opts.size || '1024x1024',
-      model: opts.tier,
+      model: m.id,
       ...(opts.referenceImage ? { image: opts.referenceImage } : {}),
     }),
   });
@@ -39,3 +47,6 @@ export async function callSeedream(prompt: string, opts: {
   if (url.startsWith('http')) return url;
   return `data:image/png;base64,${url}`;
 }
+
+/** 旧名字保留一个别名，避免遗漏的引用直接炸掉；新代码一律用 callImage。 */
+export const callSeedream = callImage;

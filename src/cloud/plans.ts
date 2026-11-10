@@ -29,6 +29,12 @@ export const PRICING = {
     chat: 0,             // 对话免费（吸引用户聊，靠生图变现）
     imageFlash: 6,       // Seedream 5.0 Flash（成本约 ¥0.12，毛利约 80%）
     imagePro: 10,        // Seedream 5.0 Pro（成本约 ¥0.30，名义毛利约 70%，与 Flash 仅差 4 积分）
+    /** GPT Image 2 · 文字输入（B.AI，按输入 token 5 档计费，约 ¥0.9/张） */
+    imageGpt2Text: 86,
+    /** GPT Image 2 · 输入图（B.AI，带参考图按输入 token 8 档计费，约 ¥1.1/张） */
+    imageGpt2Ref: 93,
+    /** Hyper3D-Gen2 文/图生 3D（方舟，官方 ¥1.8/次） */
+    hyper3d: 21,
   } as const,
 
   /** 内部管理员邮箱（仅此邮箱可见开发者管理入口） */

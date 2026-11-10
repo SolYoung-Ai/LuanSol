@@ -1,7 +1,8 @@
 /* ============================================================
  * 积分与充值（iOS 液态玻璃版）
  * ------------------------------------------------------------
- * 积分制：对话免费；Seedream Flash 6/张、Pro 10/张
+ * 积分制：对话免费；Seedream Flash 6 / Pro 10；GPT Image 2 文字输入 86 / 输入图 93；
+ * Hyper3D-Gen2 21（3D 生成，暂未开放入口）
  *  - 新注册送 PRICING.freeTrialUses 积分
  *  - 每日签到 +10（会员双倍 +20/天，会员月上限 600）；已取消「连续 10 天额外 +100」
  *  - 会员已开放，但支付通道未接入，当前只能用兑换码开通
@@ -15,6 +16,7 @@ import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, type CreditLog } from '../cloud/subscription';
 import { PRICING } from '../cloud/plans';
+import { IMAGE_MODELS, HYPER3D_COST } from '../cloud/models';
 import { useLang } from '../i18n';
 import { Icon } from '../components/icons';
 
@@ -195,21 +197,37 @@ export default function Subscribe() {
         <div className="gl-rate">
           <div className="gl-rate-top"><strong>{t('对话', 'Chat')}</strong></div>
           <div className="gl-rate-num">免费</div>
-          <div className="gl-rate-note">DeepSeek / Kimi / Doubao-Seed / GLM</div>
+          <div className="gl-rate-note">DeepSeek-V4 驱动，不扣积分</div>
         </div>
+        {IMAGE_MODELS.filter((m) => m.provider === 'ark').map((m) => (
+          <div className={`gl-rate ${m.id === 'pro' ? 'hi' : ''}`} key={m.id}>
+            <div className="gl-rate-top">
+              <strong>{m.id === 'flash' ? t('图像 · 快速', 'Image · Fast') : t('图像 · 精细', 'Image · Fine')}</strong>
+              {m.id === 'pro' && <span className="gl-pill">{t('更清晰', 'Sharper')}</span>}
+            </div>
+            <div className="gl-rate-num"><Coin size={14} />{m.cost} / 张</div>
+            <div className="gl-rate-note">{m.label} · {m.note}</div>
+          </div>
+        ))}
+        {IMAGE_MODELS.filter((m) => m.provider === 'bai').map((m) => (
+          <div className={`gl-rate ${m.id === 'gpt2-ref' ? 'hi' : ''}`} key={m.id}>
+            <div className="gl-rate-top">
+              <strong>{m.id === 'gpt2-text' ? t('GPT Image 2 · 文字', 'GPT Image 2 · text') : t('GPT Image 2 · 输入图', 'GPT Image 2 · image')}</strong>
+              <span className="gl-pill">{t('旗舰', 'Flagship')}</span>
+            </div>
+            <div className="gl-rate-num"><Coin size={14} />{m.cost} / 张</div>
+            <div className="gl-rate-note">{m.note}</div>
+          </div>
+        ))}
         <div className="gl-rate">
-          <div className="gl-rate-top"><strong>{t('图像 · Flash', 'Image · Flash')}</strong></div>
-          <div className="gl-rate-num"><Coin size={14} />{PRICING.costs.imageFlash} / 张</div>
-          <div className="gl-rate-note">Seedream 5.0 Flash · 快速出图</div>
-        </div>
-        <div className="gl-rate hi">
-          <div className="gl-rate-top"><strong>{t('图像 · Pro', 'Image · Pro')}</strong><span className="gl-pill">精细</span></div>
-          <div className="gl-rate-num"><Coin size={14} />{PRICING.costs.imagePro} / 张</div>
-          <div className="gl-rate-note">Seedream 5.0 Pro · 仅多 {(PRICING.costs.imagePro - PRICING.costs.imageFlash)} 积分</div>
+          <div className="gl-rate-top"><strong>{t('3D · Hyper3D-Gen2', '3D · Hyper3D-Gen2')}</strong><span className="gl-pill">{t('即将开放', 'Soon')}</span></div>
+          <div className="gl-rate-num"><Coin size={14} />{HYPER3D_COST} / 次</div>
+          <div className="gl-rate-note">文/图生 3D 模型（.glb），先在编辑器里用</div>
         </div>
       </div>
       <p className="gl-note">
-        方案页第一次是一批出 3 张，按 Flash 档只扣 {PRICING.costs.imageFlash} 积分；单张重新生成才按所选档位逐张计。
+        方案页第一次是一批出 3 张，按 Seedream 快速档只扣 {PRICING.costs.imageFlash} 积分；单张重新生成才按所选档位逐张计。
+        GPT Image 2 分两档：只用文字描述 {PRICING.costs.imageGpt2Text} 积分，带参考图改图 {PRICING.costs.imageGpt2Ref} 积分。
         扣费以实际成功返回的图为准，失败不扣。
       </p>
     </section>

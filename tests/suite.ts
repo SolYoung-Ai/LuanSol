@@ -13,6 +13,8 @@ import { generatePalettes } from '../src/v3/colors';
 import { accountKey, otpTarget, emailTarget, isEmail, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
 import { LOGIN_CONFIG } from '../src/cloud/loginConfig';
 import { decideGate } from '../src/cloud/subscription';
+import { PRICING } from '../src/cloud/plans';
+import { IMAGE_MODELS, OPEN_IMAGE_MODELS, HYPER3D_COST, imageCost, imageModel } from '../src/cloud/models';
 import { toastTone } from '../src/store';
 import { CLOUD, cloudConfigured, deepSeekReady } from '../src/cloud/config';
 import { validateBarcode, encodeBarcode, decodeEan, verifyBarcode } from '../src/v3/barcode';
@@ -715,5 +717,36 @@ export async function runTests(): Promise<Result[]> {
   } else {
     R.push({ name: '浏览器相关测试', ok: true, detail: 'SKIP（Node 环境无 DOM，由浏览器测试覆盖）' });
   }
+  await t('图像档位 · 价格与模型一一对应（防扣错积分）', () => {
+    const ids = IMAGE_MODELS.map((m) => m.id);
+    A(new Set(ids).size === ids.length, '档位 id 有重复');
+    A(imageCost('flash') === PRICING.costs.imageFlash, `flash 价格不一致: ${imageCost('flash')}`);
+    A(imageCost('pro') === PRICING.costs.imagePro, `pro 价格不一致: ${imageCost('pro')}`);
+    A(imageCost('gpt2-text') === 86, `GPT Image 2 文字输入应为 86，实际 ${imageCost('gpt2-text')}`);
+    A(imageCost('gpt2-ref') === 93, `GPT Image 2 输入图应为 93，实际 ${imageCost('gpt2-ref')}`);
+    A(HYPER3D_COST === 21, `Hyper3D-Gen2 应为 21，实际 ${HYPER3D_COST}`);
+    return ids.map((id) => `${id}=${imageCost(id)}`).join(' / ');
+  });
+
+  await t('图像档位 · 展示价与扣费同源、未知档位不偷偷换价', () => {
+    for (const m of IMAGE_MODELS) {
+      A(imageModel(m.id).cost === m.cost, `${m.label} 展示价与扣费不一致`);
+    }
+    // 旧会话里可能出现历史档位名；回落时展示与扣费仍取同一个对象，不会出现「显示 6 扣 10」
+    const fallback = imageModel('unknown-tier' as never);
+    A(fallback.cost === imageModel(fallback.id).cost, '回落档位的价格不同源');
+    A(OPEN_IMAGE_MODELS.every((m) => m.open), '未开放档位混进了可选列表');
+    A(OPEN_IMAGE_MODELS.length === IMAGE_MODELS.length, '有档位被误标为未开放');
+    return `可选 ${OPEN_IMAGE_MODELS.length} 档，全部开放`;
+  });
+
+  await t('图像档位 · 图生图档位强制绑定参考图', () => {
+    const ref = imageModel('gpt2-ref');
+    A(ref.needsRef === true, 'gpt2-ref 必须标记为需要参考图');
+    A(!imageModel('gpt2-text').needsRef, 'gpt2-text 不应要求参考图');
+    A(ref.provider === 'bai' && imageModel('flash').provider === 'ark', '厂商路由标记错误');
+    return 'gpt2-ref 需参考图，其余不需要';
+  });
+
   return R;
 }
