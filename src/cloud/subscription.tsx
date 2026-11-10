@@ -539,42 +539,13 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
           message: String(p.message || (p.kind === 'membership' ? '兑换成功！会员已开通' : '兑换成功')),
         };
       }
-      // 函数不存在或调用报错：继续走下面的兼容路径
+      // 数据库函数报错：如实返回错误。原来的「直接改表 + 调 grant_bonus」兼容路径
+      // 已失效（前者没有 RLS 更新权限、后者已撤销执行权限），会把兑换码消耗掉
+      // 却只返回一句「兑换成功」，用户拿到的是空头承诺，因此整段删除。
+      return { ok: false, message: `兑换失败：${errText(res.error) || '请稍后重试'}` };
     }
 
-    // 1. 查码
-    const r = await db.from('lunasol_redeem_codes').select('code,points,used,used_by').eq('code', c);
-    if (r.error || !r.data || r.data.length === 0) return { ok: false, message: '兑换码无效，检查后重试' };
-    const row = r.data[0] as { code: string; points: number; used: boolean; used_by: string | null };
-    if (row.used) return { ok: false, message: '该兑换码已被使用' };
-    // 2. 标记已使用（检查是否成功，防止并发重复兑换）
-    const markRes = await db.from('lunasol_redeem_codes').update({ used: true, used_by: u.id }).eq('code', c);
-    if (markRes.error) return { ok: false, message: '兑换失败，请稍后重试' };
-    // 3. 用 RPC 函数给用户加积分（绕过 RLS，安全）
-    const cur = subRef.current;
-    if (cur) {
-      try {
-        if (typeof (db as any).rpc === 'function') {
-          const r = await (db as any).rpc('lunasol_grant_bonus', { p_uid: u.id, p_points: row.points });
-          if (!r.error && typeof r.data === 'number') {
-            setSub((prev) => prev ? { ...prev, bonus_credits: r.data as number } : prev);
-          } else {
-            // RPC 失败时兜底
-            await db.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + row.points }).eq('id', cur.id);
-            setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + row.points } : prev);
-          }
-        } else {
-          // 没有 rpc 方法，直接更新
-          await db.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + row.points }).eq('id', cur.id);
-          setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + row.points } : prev);
-        }
-      } catch {
-        // RPC 失败时兜底
-        await db.from(TABLE).update({ bonus_credits: (cur.bonus_credits || 0) + row.points }).eq('id', cur.id);
-        setSub((prev) => prev ? { ...prev, bonus_credits: (prev.bonus_credits || 0) + row.points } : prev);
-      }
-    }
-    return { ok: true, points: row.points, message: `兑换成功！+${row.points} 积分` };
+    return { ok: false, message: '云端兑换服务不可用，请刷新页面后重试' };
   }, [auth.user, refresh]);
 
   // 获取积分使用记录

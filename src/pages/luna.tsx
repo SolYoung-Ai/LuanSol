@@ -335,11 +335,14 @@ export default function Luna() {
   }
 
   const initial = (auth.user.label || auth.user.email || 'U').slice(0, 1).toUpperCase();
-  const syncLabel = chat.syncState === 'syncing'
-    ? '同步中…'
-    : chat.syncState === 'error'
-      ? '同步失败'
-      : '已同步到云端';
+  // 只有真的同步成功才说「已同步」：免费用户与尚未同步时都如实显示「本机保存」
+  const syncLabel = !sub.isPro
+    ? '本机保存'
+    : chat.syncState === 'syncing'
+      ? '同步中…'
+      : chat.syncState === 'error'
+        ? '同步失败'
+        : chat.syncState === 'ok' ? '已同步到云端' : '本机保存';
   const canSend = !!input.trim() || !!pendingImage;
   const balance = sub.usedLeft;
 

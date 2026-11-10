@@ -153,6 +153,13 @@ function useChatStoreState(): ChatStore {
   /* --------------------------- 登录后云端合并 --------------------------- */
   useEffect(() => {
     if (!user) { mergedFor.current = null; return; }
+    // 对话云端同步同样是会员权益：免费用户只在本机 localStorage 保存
+    if (!sub.isPro) {
+      mergedFor.current = null;
+      setSyncState('off');
+      setSyncMessage('对话保存在本机；跨设备同步为会员权益');
+      return;
+    }
     if (mergedFor.current === user.id) return;
     mergedFor.current = user.id;
     void (async () => {
@@ -173,11 +180,11 @@ function useChatStoreState(): ChatStore {
         setSyncMessage(r.message);
       }
     })();
-  }, [user]);
+  }, [user, sub.isPro]);
 
   /* --------------------------- 变更防抖上传 --------------------------- */
   useEffect(() => {
-    if (!user || !canSyncChats(user.id)) return;
+    if (!user || !sub.isPro || !canSyncChats(user.id)) return;
     const dirty = conversations.filter((c) => isRealConversation(c) && c.updatedAt > (lastPushed.current[c.id] ?? 0));
     if (!dirty.length) return;
     const t = window.setTimeout(async () => {
@@ -192,7 +199,7 @@ function useChatStoreState(): ChatStore {
       else { setSyncState('ok'); setSyncMessage('对话已同步到云端'); }
     }, 1500);
     return () => window.clearTimeout(t);
-  }, [conversations, user]);
+  }, [conversations, user, sub.isPro]);
 
   /* ------------------------------- 新建 ------------------------------- */
   /** 「新建对话」只是回到一张空白草稿：不立刻建记录。
