@@ -233,6 +233,7 @@ export default function Subscribe() {
         <div className="gl-plan-name">{t('会员 · 每月特权', 'Member · Monthly')}</div>
         <div className="gl-plan-price">¥{PRICING.proMonthlyPriceRMB}<span>/月</span></div>
         <ul className="gl-plan-feats">
+          <li><Icon name="check" size={13} />开通即得 {PRICING.proMonthlyQuota} 积分额度</li>
           <li><Icon name="check" size={13} />签到双倍（+20/天，月上限 600）</li>
           <li><Icon name="check" size={13} />全部对话模型解锁</li>
           <li><Icon name="check" size={13} />云端同步 + 历史版本</li>

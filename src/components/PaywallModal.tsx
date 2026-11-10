@@ -31,10 +31,10 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
     {needLogin ? <>
       <p className="modal-p">
         登录后即可在九步向导、需求汇总与在线编辑器中使用平台 AI。
-        新注册用户有 <strong>{PRICING.freeTrialUses} 次免费体验</strong>。
+        新注册用户有 <strong>{PRICING.freeTrialUses} 积分免费体验</strong>。
       </p>
       <div className="sub-summary">
-        <Tag tone="green">免费体验 {PRICING.freeTrialUses} 次</Tag>
+        <Tag tone="green">免费体验 {PRICING.freeTrialUses} 积分</Tag>
         <span>会员开通得 {PRICING.proMonthlyQuota} 积分</span>
       </div>
       <div className="modal-buttons">

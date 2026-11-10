@@ -6,6 +6,7 @@ import { useApp } from '../store';
 import { useHash } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
+import { PRICING } from '../cloud/plans';
 import { loadAI, llmChat, llmJson, llmImage, aiEnabled } from '../engine/llm';
 import { LUNA_PERSONA_PROMPT } from '../engine/persona';
 import { buildSchemes, cloneDesign } from '../engine/design';
@@ -335,7 +336,7 @@ export function EditorProvider({
       );
       update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers } } } });
       addVersion(`局部修改：${selectedL.name}`);
-      if (auth.user) { await recordUsage(auth.user.id, 10, 'image'); sub.refresh(); }
+      if (auth.user) { await recordUsage(auth.user.id, PRICING.costs.imageFlash, 'image'); sub.refresh(); }
       addChat({ role: 'ai', text: `「${selectedL.name}」已经修改好了，你看看效果。如果不满意可以继续告诉我。` });
     } else if (selectedL.type === 'text') {
       const textLayer = selectedL as TextLayer;
@@ -358,7 +359,7 @@ export function EditorProvider({
       const layers = face.layers.map((l) => l.id === textLayer.id ? ({ ...l, ...patch } as TextLayer) : l);
       update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers } } } });
       addVersion(`文字修改：${selectedL.name}`);
-      if (auth.user) { await recordUsage(auth.user.id, 1); sub.refresh(); }
+      // 文字/颜色类修改只是文本模型的一次调用，按「对话免费」口径不扣积分。 
       addChat({ role: 'ai', text: `文字已经修改好了。` });
     } else {
       const shapeLayer = selectedL as ShapeLayer;
@@ -438,15 +439,14 @@ export function EditorProvider({
       if (plan.thought) addChat({ role: 'ai', text: plan.thought });
 
       if (plan.actions.length === 0) {
-        // 纯对话，无工具操作
-        if (auth.user) { await recordUsage(auth.user.id, 1, 'chat'); sub.refresh(); }
+        // 纯对话不扣积分（与「对话免费」口径一致）
       } else {
         for (const action of plan.actions) {
           const result = await executeAction(action, toolHost);
           addChat({ role: 'ai', text: `${action.name}｜${result.ok ? '已完成' : '未完成'}：${result.message}` });
         }
         const hasImage = plan.actions.some((a) => a.name === 'generate_image_asset');
-        if (auth.user) { await recordUsage(auth.user.id, hasImage ? 10 : 1, hasImage ? 'image' : 'chat'); sub.refresh(); }
+        if (auth.user && hasImage) { await recordUsage(auth.user.id, PRICING.costs.imageFlash, 'image'); sub.refresh(); }
       }
     } catch (e) {
       const msg = (e as Error).message || 'AI 暂时连不上';
@@ -515,7 +515,8 @@ export function EditorProvider({
 
       update({ design: newDesign });
       addVersion('AI 生成初版');
-      await recordUsage(auth.user.id, 30, 'image');
+      // 三张图按 Flash 档计（与实际调用的模型一致），不再按 3×Pro 扣 30 分
+      await recordUsage(auth.user.id, PRICING.costs.imageFlash * 3, 'image');
       sub.refresh();
       addChat({ role: 'ai', text: '设计初版已经生成完成！你可以点击画布上的任意元素进行修改。' });
     } catch (e) {

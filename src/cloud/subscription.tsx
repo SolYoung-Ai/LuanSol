@@ -71,7 +71,7 @@ export function decideGate(input: {
   const trial = input.freeTrial ?? FREE_TRIAL;
   const quota = input.quota ?? PRO_QUOTA;
   if (!input.loggedIn) {
-    return { ok: false, reason: `登录后即可使用平台 AI；新注册用户有 ${trial} 次免费体验`, need: 'login' };
+    return { ok: false, reason: `登录后即可使用平台 AI；新注册用户有 ${trial} 积分免费体验`, need: 'login' };
   }
   if (input.remaining === null) return { ok: true, reason: '', need: 'subscribe' };
   if (input.remaining > 0) return { ok: true, reason: '', need: 'subscribe' };
@@ -79,7 +79,7 @@ export function decideGate(input: {
     ok: false,
     reason: input.proActive
       ? '会员额度已用完或已过期，请续费后继续'
-      : `免费体验已用完（${trial} 次），订阅会员即可每月使用 ${quota} 次 AI`,
+      : `免费体验已用完（${trial} 积分），订阅会员即可每月使用 ${quota} 积分`,
     need: 'subscribe',
   };
 }

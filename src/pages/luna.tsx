@@ -259,6 +259,11 @@ export default function Luna() {
         setToast('先描述一下画面，比如「国风茶叶礼盒，米白底，烫金纹样，正面视角」');
         return;
       }
+      // 余额不足时先拦住：绝不能先把输入框清空再被拒——用户刚写好的提示词会凭空消失
+      if (typeof balance === 'number' && balance < tierCost(tier)) {
+        setToast(`积分不足：${tierCost(tier)} 积分/张，当前余额 ${balance}。去「积分与充值」签到或兑换后再试。`);
+        return;
+      }
       setPendingImage(null);
       setInput('');
       void chat.generateImage(text || '按参考图生成一张包装效果图', {

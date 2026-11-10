@@ -9,7 +9,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { Conversation, ImageTier, LunaMessage } from '../types';
 import { uid } from '../engine/utils';
-import { go } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from './auth';
 import { loadAI, llmChatWithReasoning } from '../engine/llm';
@@ -214,11 +213,11 @@ function useChatStoreState(): ChatStore {
       if (!r.ok) setToast(r.message);
     }
     delete lastPushed.current[id];
-    setConversations((prev) => {
-      const rest = prev.filter((c) => c.id !== id);
-      setActiveId((cur) => (cur === id ? (rest[0]?.id || null) : cur));
-      return rest;
-    });
+    // 不要在 setConversations 的 updater 里再调 setState：updater 会在渲染阶段执行，
+    // 期间更新另一个 state 会触发 React 的 "Cannot update a component while rendering" 警告。
+    const rest = conversationsRef.current.filter((c) => c.id !== id);
+    setConversations(rest);
+    setActiveId((cur) => (cur === id ? (rest[0]?.id || null) : cur));
   }, [user, setToast]);
 
   /* ------------------------------- 重命名 ------------------------------- */
@@ -326,8 +325,9 @@ function useChatStoreState(): ChatStore {
     const cost = tierCost(tierForCheck);
     const balance = sub.usedLeft ?? 0;
     if (balance < cost) {
-      setToast(`积分不足：${tierLabel(tierForCheck)} 生图需要 ${cost} 积分，当前余额 ${balance}。`);
-      go('/subscribe');
+      // 不在这里强行跳订阅页：跳转会卸载页面，用户写好的描述会一起丢掉。
+      // 只提示原因，让用户自己决定去签到 / 兑换 / 继续聊。
+      setToast(`积分不足：${tierLabel(tierForCheck)} 生图需要 ${cost} 积分，当前余额 ${balance}。可在「积分与充值」签到或兑换后再试。`);
       return;
     }
 
@@ -371,7 +371,9 @@ function useChatStoreState(): ChatStore {
     if (!target || !convId) return;
     const conv = target;
     const id: string = convId;
-    const tier = conv.imageTier;
+    // 旧会话可能没有 imageTier（早期数据），缺省时必须和界面显示保持同一档，
+    // 否则会出现「界面写 6 积分、实际按 10 积分扣」的错账。
+    const tier: ImageTier = conv.imageTier || draftTier;
 
     setBusy(true);
     try {
