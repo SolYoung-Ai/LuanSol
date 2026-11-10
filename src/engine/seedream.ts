@@ -11,6 +11,8 @@ export async function callSeedream(prompt: string, opts: {
   tier: ImageTier;
   referenceImage?: string;
   uid?: string;
+  /** 出图尺寸（对应界面的「比例」），不传时用 1024x1024 */
+  size?: string;
 }): Promise<string> {
   if (!CLOUD.aiBaseUrl || !CLOUD.aiToken) throw new Error('图像服务未配置');
   const headers: Record<string, string> = {
@@ -23,7 +25,7 @@ export async function callSeedream(prompt: string, opts: {
     headers,
     body: JSON.stringify({
       prompt,
-      size: '1024x1024',
+      size: opts.size || '1024x1024',
       model: opts.tier,
       ...(opts.referenceImage ? { image: opts.referenceImage } : {}),
     }),

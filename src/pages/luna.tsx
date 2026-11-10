@@ -1,27 +1,59 @@
 /* ============================================================
- * Luna —— 设计师 AI 分身对话（Grok 式界面）
+ * Luna —— 设计师 AI 分身对话
  * ------------------------------------------------------------
- * 左侧：新建对话 + 搜索 + 云端历史对话；中间：欢迎大标题 / 对话流
- * + 底部输入框。对话模型固定 DeepSeek（deepseek-reasoner，带思考过程），
- * 不提供模型选择；生图两档 flash/pro 由用户在输入框切换。
+ * 布局：左侧液态玻璃对话栏（桌面常驻 / 手机抽屉）+ 右侧纯白对话区。
+ * 输入框是一个玻璃 composer，里面可以切换两种模式：
+ *   · 对话      —— 由 DeepSeek-V4 驱动（免费用户固定此模型，不自选）
+ *   · 图像生成  —— 自己写画面描述，可选模型 / 比例 / 风格 / 模板
+ * 全页不使用渐变：白底 + 极淡描边 + 一层柔和投影，靠留白分层。
  * 人设统一来自 engine/persona.ts，全站同一份。
  * ============================================================ */
 import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/icons';
+import type { IconName } from '../components/icons';
 import type { ImageTier, LunaMessage } from '../types';
 import { useAuth } from '../cloud/auth';
-import { useChatStore } from '../cloud/useChatStore';
+import { useChatStore, CHAT_MODELS } from '../cloud/useChatStore';
+import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { PRICING } from '../cloud/plans';
-import { CHAT_MODELS } from '../cloud/useChatStore';
+
+type LunaMode = 'chat' | 'image';
 
 const TIERS: ImageTier[] = ['flash', 'pro'];
 const tierName = (t: ImageTier) =>
-  t === 'flash' ? 'Seedream-5.0-flash' : 'Seedream-5.0-pro';
+  t === 'flash' ? 'Seedream 5.0 Flash' : 'Seedream 5.0 Pro';
 const tierShort = (t: ImageTier) => (t === 'flash' ? 'Flash' : 'Pro');
 const tierCost = (t: ImageTier) =>
   t === 'flash' ? PRICING.costs.imageFlash : PRICING.costs.imagePro;
+
+/** 比例 → Seedream 实际出图尺寸（自动则交给服务端默认 1024×1024） */
+const RATIOS = [
+  { id: 'auto', label: '自动', size: undefined as string | undefined },
+  { id: '1:1', label: '1:1', size: '1024x1024' },
+  { id: '3:4', label: '3:4', size: '864x1152' },
+  { id: '4:3', label: '4:3', size: '1152x864' },
+  { id: '16:9', label: '16:9', size: '1280x720' },
+  { id: '9:16', label: '9:16', size: '720x1280' },
+];
+
+const STYLES = [
+  { id: 'none', label: '不限', prompt: '' },
+  { id: 'photo', label: '商业摄影', prompt: '商业摄影棚拍风格，柔光，干净背景，高清质感。' },
+  { id: 'minimal', label: '极简平面', prompt: '极简平面设计，大面积留白，克制配色，干净排版。' },
+  { id: 'ink', label: '东方水墨', prompt: '中国水墨画风格，宣纸质感，淡墨晕染，留白意境。' },
+  { id: 'retro', label: '复古手绘', prompt: '复古手绘插画风格，做旧纸张质感，暖色调。' },
+  { id: '3d', label: '3D 立体', prompt: '3D 渲染风格，柔和布光，圆润体积感，细腻材质。' },
+];
+
+const TEMPLATES = [
+  { id: 'none', label: '不限', prompt: '' },
+  { id: 'box', label: '包装盒', prompt: '产品包装盒效果图，正面视角，' },
+  { id: 'bag', label: '手提袋', prompt: '纸质手提袋效果图，' },
+  { id: 'label', label: '瓶贴', prompt: '瓶身标签效果图，' },
+  { id: 'poster', label: '海报', prompt: '海报版面效果图，' },
+];
 
 // 前端按纯文本渲染（不解析 Markdown），把模型偶尔带出的 Markdown 符号清掉，
 // 避免页面上裸露 ** 或 #，同时保留正常换行。
@@ -49,57 +81,40 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
   );
 }
 
-/* --------------------------- 生图档位下拉 --------------------------- */
-function TierMenu({ tier, onTier }: { tier: ImageTier; onTier: (t: ImageTier) => void }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="lc-tier">
-      <button className="lc-tier-btn" onClick={() => setOpen((o) => !o)} title="生图档位">
-        <span className="lc-tier-brand">Seedream 5.0</span>
-        <Icon name="chevronDown" size={13} />
-      </button>
-      {open && (
-        <>
-          <div className="lc-backdrop" onClick={() => setOpen(false)} />
-          <div className="lc-tier-menu">
-            {TIERS.map((t) => (
-              <button
-                key={t}
-                className={`lc-tier-opt ${t === tier ? 'sel' : ''}`}
-                onClick={() => { onTier(t); setOpen(false); }}
-              >
-                <span>{tierShort(t)}</span>
-                <span className="lc-tier-opt-cost">{tierCost(t)}积分</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
+/* --------------------------- 通用下拉（composer 内） --------------------------- */
+interface Option { id: string; label: string; hint?: string }
 
-/* --------------------------- 对话模型下拉 --------------------------- */
-function ChatModelMenu({ model, onModel }: { model: string; onModel: (m: string) => void }) {
+function Pick({
+  icon, caption, value, options, onPick,
+}: {
+  icon?: IconName;
+  caption?: string;
+  value: string;
+  options: Option[];
+  onPick: (id: string) => void;
+}) {
   const [open, setOpen] = useState(false);
-  const current = CHAT_MODELS.find((m) => m.id === model) || CHAT_MODELS[0];
   return (
-    <div className="lc-chatmodel">
-      <button className="lc-chatmodel-btn" onClick={() => setOpen((o) => !o)} title="对话模型">
-        <span>对话由 {current.label} 驱动</span>
-        <Icon name="chevronDown" size={11} />
+    <div className="lc-pick">
+      <button className={`lc-tag ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)}>
+        {icon && <Icon name={icon} size={14} />}
+        {caption && <span className="lc-tag-cap">{caption}</span>}
+        <span className="lc-tag-val">{value}</span>
+        <Icon name="chevronDown" size={12} className="lc-tag-chev" />
       </button>
       {open && (
         <>
           <div className="lc-backdrop" onClick={() => setOpen(false)} />
-          <div className="lc-chatmodel-menu">
-            {CHAT_MODELS.map((m) => (
+          <div className="lc-pop">
+            {options.map((o) => (
               <button
-                key={m.id}
-                className={`lc-chatmodel-opt ${m.id === model ? 'sel' : ''}`}
-                onClick={() => { onModel(m.id); setOpen(false); }}
+                key={o.id}
+                className={`lc-pop-opt ${o.label === value ? 'sel' : ''}`}
+                onClick={() => { onPick(o.id); setOpen(false); }}
               >
-                {m.label}
+                <span>{o.label}</span>
+                {o.hint && <span className="lc-pop-hint">{o.hint}</span>}
+                {o.label === value && <Icon name="check" size={13} className="lc-pop-check" />}
               </button>
             ))}
           </div>
@@ -110,7 +125,7 @@ function ChatModelMenu({ model, onModel }: { model: string; onModel: (m: string)
 }
 
 /* --------------------------- 单条消息 --------------------------- */
-function Bubble({ m }: { m: LunaMessage }) {
+function Bubble({ m, onMedia }: { m: LunaMessage; onMedia?: () => void }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const isUser = m.role === 'user';
   return (
@@ -127,9 +142,10 @@ function Bubble({ m }: { m: LunaMessage }) {
               src={m.image}
               alt="设计图"
               className="lc-msg-img"
+              onLoad={onMedia}
               onClick={() => setLightbox(m.image!)}
             />
-            {m.imageTier && (
+            {m.imageTier && !isUser && (
               <span className="lc-img-tag">
                 <Icon name="image" size={12} /> {tierShort(m.imageTier)} · {tierCost(m.imageTier)}积分
               </span>
@@ -149,8 +165,10 @@ function Bubble({ m }: { m: LunaMessage }) {
 export default function Luna() {
   const auth = useAuth();
   const chat = useChatStore();
+  const sub = useSubscription();
   const { setToast } = useApp();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [mode, setMode] = useState<LunaMode>('chat');
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
@@ -158,6 +176,9 @@ export default function Luna() {
   const [editDraft, setEditDraft] = useState('');
   const [sideOpen, setSideOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [ratioId, setRatioId] = useState('auto');
+  const [styleId, setStyleId] = useState('none');
+  const [templateId, setTemplateId] = useState('none');
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -192,11 +213,18 @@ export default function Luna() {
   const active = chat.active;
   const messages = active?.messages || [];
   const hasThread = messages.length > 0;
+  const tier: ImageTier = active?.imageTier || chat.draftTier;
 
-  /* 自动滚动到底部 */
+  /* 自动滚动到底部：图片是异步解码的，刚插进 DOM 时高度还没算出来，
+     只滚一次会停在半路。这里补一次延迟滚动兜住「图片撑高」的情况。 */
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+    const t = window.setTimeout(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }, 140);
+    return () => window.clearTimeout(t);
   }, [messages.length, chat.busy, active?.id]);
 
   /* textarea 自适应高度 */
@@ -205,7 +233,7 @@ export default function Luna() {
     if (!ta) return;
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
-  }, [input]);
+  }, [input, mode]);
 
   const onPickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files && e.target.files[0];
@@ -217,10 +245,31 @@ export default function Luna() {
     reader.readAsDataURL(f);
   };
 
+  const ratio = RATIOS.find((r) => r.id === ratioId) || RATIOS[0];
+  const style = STYLES.find((s) => s.id === styleId) || STYLES[0];
+  const template = TEMPLATES.find((t) => t.id === templateId) || TEMPLATES[0];
+
   const doSend = () => {
+    if (chat.busy) return;
     const text = input.trim();
-    if ((!text && !pendingImage) || chat.busy) return;
     const img = pendingImage || undefined;
+
+    if (mode === 'image') {
+      if (!text && !img) {
+        setToast('先描述一下画面，比如「国风茶叶礼盒，米白底，烫金纹样，正面视角」');
+        return;
+      }
+      setPendingImage(null);
+      setInput('');
+      void chat.generateImage(text || '按参考图生成一张包装效果图', {
+        size: ratio.size,
+        style: style.prompt + template.prompt,
+        reference: img,
+      });
+      return;
+    }
+
+    if ((!text && !img) || chat.busy) return;
     setPendingImage(null);
     setInput('');
     void chat.sendText(text, img);
@@ -256,6 +305,16 @@ export default function Luna() {
   const filtered = chat.conversations.filter((c) =>
     query.trim() ? c.title.toLowerCase().includes(query.trim().toLowerCase()) : true);
 
+  /* 图片解码完成会把内容撑高：只在「本来就在底部附近」时跟随，
+     用户往上翻看历史时不被强行拽回去。 */
+  const followMedia = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 260) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  };
+
   /* ------------------------------ 未登录 ------------------------------ */
   if (!auth.user) {
     return (
@@ -276,6 +335,8 @@ export default function Luna() {
     : chat.syncState === 'error'
       ? '同步失败'
       : '已同步到云端';
+  const canSend = !!input.trim() || !!pendingImage;
+  const balance = sub.usedLeft;
 
   return (
     <div className="lc-shell">
@@ -284,76 +345,76 @@ export default function Luna() {
       {/* ------------------------------ 左侧栏（桌面常驻 / 移动抽屉） ------------------------------ */}
       <aside className={`lc-side ${sideOpen ? '' : 'collapsed'} ${drawerOpen ? 'drawer-open' : ''}`}>
         <div className="lc-side-inner">
-        {/* 桌面端品牌头：与右上角的收起按钮组成一组，手机抽屉不渲染 */}
-        {!isMobile && <div className="lc-side-head">
-          <img src="./logo.png" alt="Luna" />
-          <span className="lc-side-head-text"><strong>Luna</strong><small>你的专属设计师</small></span>
-        </div>}
-        <button className="lc-new" onClick={makeNew}>
-          <Icon name="plus" size={16} />
-          <span>新建对话</span>
-        </button>
+          {/* 桌面端品牌头：与右上角的收起按钮组成一组，手机抽屉不渲染 */}
+          {!isMobile && <div className="lc-side-head">
+            <img src="./logo.png" alt="Luna" />
+            <span className="lc-side-head-text"><strong>Luna</strong><small>你的专属设计师</small></span>
+          </div>}
+          <button className="lc-new" onClick={makeNew}>
+            <Icon name="plus" size={16} />
+            <span>新建对话</span>
+          </button>
 
-        <div className="lc-search">
-          <Icon name="search" size={15} />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索对话"
-          />
-        </div>
+          <div className="lc-search">
+            <Icon name="search" size={15} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索对话"
+            />
+          </div>
 
-        <div className="lc-group-label">聊天</div>
-        <div className="lc-list">
-          {filtered.map((c) => (
-            <div
-              key={c.id}
-              className={`lc-item ${c.id === chat.activeId ? 'active' : ''}`}
-              onClick={() => pickConversation(c.id)}
-            >
-              <Icon name="message" size={15} className="lc-item-ic" />
-              {editingId === c.id ? (
-                <input
-                  className="lc-item-edit"
-                  value={editDraft}
-                  autoFocus
-                  onChange={(e) => setEditDraft(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitEdit();
-                    if (e.key === 'Escape') setEditingId(null);
-                  }}
-                  onBlur={commitEdit}
-                />
-              ) : (
-                <span className="lc-item-title">{c.title}</span>
-              )}
-              <div className="lc-item-ops" onClick={(e) => e.stopPropagation()}>
-                <button title="重命名" onClick={() => startEdit(c.id, c.title)}>
-                  <Icon name="edit" size={14} />
-                </button>
-                <button title="删除" onClick={() => void chat.deleteConversation(c.id)}>
-                  <Icon name="trash" size={14} />
-                </button>
+          <div className="lc-group-label">聊天</div>
+          <div className="lc-list">
+            {filtered.map((c) => (
+              <div
+                key={c.id}
+                className={`lc-item ${c.id === chat.activeId ? 'active' : ''}`}
+                onClick={() => pickConversation(c.id)}
+              >
+                <Icon name="message" size={15} className="lc-item-ic" />
+                {editingId === c.id ? (
+                  <input
+                    className="lc-item-edit"
+                    value={editDraft}
+                    autoFocus
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitEdit();
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
+                    onBlur={commitEdit}
+                  />
+                ) : (
+                  <span className="lc-item-title">{c.title}</span>
+                )}
+                <div className="lc-item-ops" onClick={(e) => e.stopPropagation()}>
+                  <button title="重命名" onClick={() => startEdit(c.id, c.title)}>
+                    <Icon name="edit" size={14} />
+                  </button>
+                  <button title="删除" onClick={() => void chat.deleteConversation(c.id)}>
+                    <Icon name="trash" size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {filtered.length === 0 && <div className="lc-list-empty">没有对话</div>}
+          </div>
+
+          <div className="lc-side-foot">
+            <div className="lc-user">
+              <div className="lc-user-avatar">
+                {auth.user.avatarUrl
+                  ? <img src={auth.user.avatarUrl} alt="头像" />
+                  : initial}
+              </div>
+              <div className="lc-user-meta">
+                <div className="lc-user-name">{auth.user.label || auth.user.email}</div>
+                <div className={`lc-user-sync ${chat.syncState}`}>{syncLabel}</div>
               </div>
             </div>
-          ))}
-          {filtered.length === 0 && <div className="lc-list-empty">没有对话</div>}
-        </div>
-
-        <div className="lc-side-foot">
-          <div className="lc-user">
-            <div className="lc-user-avatar">
-              {auth.user.avatarUrl
-                ? <img src={auth.user.avatarUrl} alt="头像" />
-                : initial}
-            </div>
-            <div className="lc-user-meta">
-              <div className="lc-user-name">{auth.user.label || auth.user.email}</div>
-              <div className={`lc-user-sync ${chat.syncState}`}>{syncLabel}</div>
-            </div>
           </div>
-        </div>
         </div>
 
         {/* 收起后只留一列图标快捷入口，点「搜索」会直接把侧栏展开 */}
@@ -395,12 +456,11 @@ export default function Luna() {
           </button>
           <span className="lc-mobile-top-title">Luna</span>
         </div>
+
         {hasThread ? (
           <div className="lc-scroll" ref={scrollRef}>
             <div className="lc-thread">
-              {messages.map((m, i) => (
-                <Bubble key={m.id} m={m} />
-              ))}
+              {messages.map((m) => <Bubble key={m.id} m={m} onMedia={followMedia} />)}
               {chat.busy && (
                 <div className="lc-msg assistant">
                   <div className="lc-msg-avatar"><img src="./logo.png" alt="Luna" /></div>
@@ -415,32 +475,47 @@ export default function Luna() {
           </div>
         ) : (
           <div className="lc-welcome">
-            <h1>我是 Luna，你的专属设计师。</h1>
-            <p>产品、品牌、包装、海报，任何设计想法都可以丢给我。</p>
+            <h1>{mode === 'image' ? '想画点什么，直接说。' : '我是 Luna，你的专属设计师。'}</h1>
+            <p>
+              {mode === 'image'
+                ? '描述画面、风格和用途，我直接出图；需要先聊清楚需求也行。'
+                : '产品、品牌、包装、海报，任何设计想法都可以丢给我。'}
+            </p>
+            <div className="lc-seg" role="tablist" aria-label="对话模式">
+              <button
+                className={`lc-seg-btn ${mode === 'chat' ? 'on' : ''}`}
+                role="tab" aria-selected={mode === 'chat'}
+                onClick={() => setMode('chat')}
+              >对话</button>
+              <button
+                className={`lc-seg-btn ${mode === 'image' ? 'on' : ''}`}
+                role="tab" aria-selected={mode === 'image'}
+                onClick={() => setMode('image')}
+              >图像生成</button>
+            </div>
           </div>
         )}
 
         {/* ------------------------------ 输入区 ------------------------------ */}
         <div className="lc-dock">
+          <div className="lc-dock-inner">
           {pendingImage && (
             <div className="lc-pending">
               <img src={pendingImage} alt="待发送" />
-              <span>参考图已就绪</span>
-              <button onClick={() => setPendingImage(null)}>
+              <span>{mode === 'image' ? '参考图已就绪，会按它出图' : '参考图已就绪'}</span>
+              <button onClick={() => setPendingImage(null)} aria-label="移除参考图">
                 <Icon name="close" size={13} />
               </button>
             </div>
           )}
+
           <div className="lc-composer">
-            <button className="lc-icon-btn" title="上传参考图" onClick={() => fileRef.current?.click()}>
-              <Icon name="plus" size={18} />
-            </button>
             <textarea
               ref={taRef}
               className="lc-textarea"
               value={input}
               rows={1}
-              placeholder="告诉 Luna 你的想法…"
+              placeholder={mode === 'image' ? '描述你想要的图片' : '告诉 Luna 你的想法…'}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -449,24 +524,96 @@ export default function Luna() {
                 }
               }}
             />
-            <div className="lc-composer-right">
-              <TierMenu tier={active?.imageTier || chat.draftTier} onTier={chat.setTier} />
+
+            <div className="lc-bar">
+              <div className="lc-bar-left">
+                <button className="lc-round" title={mode === 'image' ? '上传参考图' : '上传参考图'} onClick={() => fileRef.current?.click()}>
+                  <Icon name="plus" size={18} />
+                </button>
+                <span className="lc-bar-sep" />
+
+                {mode === 'chat' ? (
+                  <>
+                    <span className="lc-tag on"><Icon name="message" size={14} />对话</span>
+                    <button className="lc-tag" onClick={() => setMode('image')} title="切换到图像生成">
+                      <Icon name="image" size={14} />图像生成
+                      <Icon name="chevronRight" size={12} className="lc-tag-chev" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="lc-tag on removable" onClick={() => setMode('chat')} title="退出图像生成">
+                      <Icon name="image" size={14} />图像生成
+                      <Icon name="close" size={12} className="lc-tag-chev" />
+                    </button>
+                    <Pick
+                      icon="spark"
+                      caption="模型"
+                      value={tierName(tier)}
+                      options={TIERS.map((t) => ({
+                        id: t,
+                        label: tierName(t),
+                        hint: `${tierCost(t)} 积分`,
+                      }))}
+                      onPick={(id) => chat.setTier(id as ImageTier)}
+                    />
+                    <Pick
+                      caption="比例"
+                      value={ratio.label}
+                      options={RATIOS.map((r) => ({ id: r.id, label: r.label }))}
+                      onPick={setRatioId}
+                    />
+                    <Pick
+                      caption="风格"
+                      value={style.label}
+                      options={STYLES.map((s) => ({ id: s.id, label: s.label }))}
+                      onPick={setStyleId}
+                    />
+                    <Pick
+                      caption="模板"
+                      value={template.label}
+                      options={TEMPLATES.map((t) => ({ id: t.id, label: t.label }))}
+                      onPick={setTemplateId}
+                    />
+                  </>
+                )}
+              </div>
+
               <button
-                className="lc-icon-btn"
-                title="按当前档位生成图片"
-                onClick={() => void chat.generateImage()}
-                disabled={chat.busy}
+                className="lc-send"
+                title={mode === 'image' ? '生成图片' : '发送'}
+                onClick={doSend}
+                disabled={chat.busy || !canSend}
               >
-                <Icon name="image" size={18} />
-              </button>
-              <button className="lc-send" title="发送" onClick={doSend} disabled={chat.busy || (!input.trim() && !pendingImage)}>
-                <Icon name="send" size={17} />
+                <Icon name={mode === 'image' ? 'image' : 'send'} size={17} />
               </button>
             </div>
           </div>
+
+          {/* 底部一行状态：对话模型（免费用户固定，不可自选） / 生图积分说明 */}
           <div className="lc-dock-hint">
-            <ChatModelMenu model={chat.chatModel} onModel={chat.setChatModel} />
-            <span>· 生图按档位消耗积分，对话免费</span>
+            {mode === 'image' ? (
+              <span className="lc-hint-text">
+                生图 {tierCost(tier)} 积分/张
+                {typeof balance === 'number' ? ` · 当前余额 ${balance}` : ''}
+              </span>
+            ) : sub.isPro ? (
+              <>
+                <Pick
+                  icon="spark"
+                  caption="对话模型"
+                  value={CHAT_MODELS.find((m) => m.id === chat.chatModel)?.label || 'DeepSeek-V4'}
+                  options={CHAT_MODELS.map((m) => ({ id: m.id, label: m.label }))}
+                  onPick={chat.setChatModel}
+                />
+                <span className="lc-hint-text">· 生图按档位消耗积分</span>
+              </>
+            ) : (
+              <span className="lc-hint-text">
+                <Icon name="spark" size={12} /> 对话由 DeepSeek-V4 驱动 · 生图按档位消耗积分
+              </span>
+            )}
+          </div>
           </div>
         </div>
       </section>

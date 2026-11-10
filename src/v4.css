@@ -78,6 +78,14 @@
   /* 侧栏液态玻璃背景：无彩色冷白微渐变 */
   --v4-side-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(246, 246, 249, 0.72) 100%);
 
+  /* —— Luna 对话页专用：纯白底 + 一层液态玻璃（不许出现渐变）—— */
+  --lc-glass: rgba(246, 246, 248, 0.72);
+  --lc-glass-strong: rgba(255, 255, 255, 0.9);
+  --lc-hair: rgba(15, 15, 20, 0.07);
+  --lc-hair-strong: rgba(15, 15, 20, 0.14);
+  --lc-chip: rgba(15, 15, 20, 0.045);
+  --lc-chip-on: rgba(15, 15, 20, 0.09);
+
   /* —— 覆盖 V1/V3 遗留变量，让工具页同步到新体系 —— */
   --ink: #171717;
   --ink-2: #3d3d3d;
@@ -625,6 +633,14 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
   --v4-stage-bg: #0e0e0d;
   /* 侧栏深色液态玻璃：无彩色深灰微渐变 */
   --v4-side-bg: linear-gradient(180deg, rgba(42, 40, 38, 0.82) 0%, rgba(26, 25, 23, 0.72) 100%);
+
+  /* Luna 对话页深色版 */
+  --lc-glass: rgba(24, 23, 22, 0.66);
+  --lc-glass-strong: rgba(32, 31, 29, 0.92);
+  --lc-hair: rgba(255, 255, 255, 0.09);
+  --lc-hair-strong: rgba(255, 255, 255, 0.18);
+  --lc-chip: rgba(255, 255, 255, 0.07);
+  --lc-chip-on: rgba(255, 255, 255, 0.13);
 }
 
 [data-theme="dark"] body { background: var(--v4-paper); color: var(--v4-ink); }
@@ -1031,7 +1047,8 @@ body.on-luna .footer-min { display: none; }
   display: flex; flex-direction: column;
   border: none;
   border-radius: 0;
-  background: transparent;
+  /* 对话区纯白：不用任何渐变，靠留白与玻璃侧栏形成层次 */
+  background: var(--v4-paper);
   overflow: hidden;
 }
 /* 移动端专属顶栏与抽屉遮罩：桌面端默认隐藏 */
@@ -1040,10 +1057,32 @@ body.on-luna .footer-min { display: none; }
 /* min-height:0 是滚动生效的关键：默认 auto 会让内容把 flex 子项撑开，
  * 超出部分被 .lc-main 裁掉，表现为「对话根本滑不动」。 */
 .lc-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-.lc-thread { max-width: 760px; margin: 0 auto; padding: 28px 28px 36px; display: flex; flex-direction: column; gap: 28px; }
+.lc-thread { max-width: 780px; margin: 0 auto; padding: 26px 28px 36px; display: flex; flex-direction: column; gap: 26px; }
 .lc-welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; }
-.lc-welcome h1 { font-size: 30px; font-weight: 600; color: var(--v4-ink); margin: 0 0 14px; }
+.lc-welcome h1 { font-size: 30px; font-weight: 600; color: var(--v4-ink); margin: 0 0 14px; letter-spacing: -.01em; }
 .lc-welcome p { font-size: 14px; line-height: 1.8; color: var(--v4-ink-2); max-width: 480px; margin: 0; }
+
+/* 欢迎页的模式切换（对话 / 图像生成）：灰底凹槽 + 白色滑块 */
+.lc-seg {
+  display: inline-flex; gap: 2px;
+  margin-top: 28px; padding: 3px;
+  border-radius: var(--v4-r-pill);
+  background: var(--lc-chip);
+}
+.lc-seg-btn {
+  height: 34px; padding: 0 22px;
+  border: 0; border-radius: var(--v4-r-pill);
+  background: transparent;
+  font-size: 13px; font-weight: 500; color: var(--v4-ink-2);
+  cursor: pointer;
+  transition: background var(--v4-dur) var(--v4-ease), color var(--v4-dur) var(--v4-ease), box-shadow var(--v4-dur) var(--v4-ease);
+}
+.lc-seg-btn:hover { color: var(--v4-ink); }
+.lc-seg-btn.on {
+  background: var(--lc-glass-strong);
+  color: var(--v4-ink);
+  box-shadow: 0 1px 3px rgba(16, 18, 22, 0.12);
+}
 
 /* ---------------- 消息 ---------------- */
 .lc-msg { display: flex; gap: 12px; align-items: flex-start; }
@@ -1098,124 +1137,135 @@ body.on-luna .footer-min { display: none; }
 .lc-dot:nth-child(3) { animation-delay: .3s; }
 @keyframes lc-bounce { 0%,80%,100% { opacity:.3; transform: translateY(0);} 40% { opacity:1; transform: translateY(-3px);} }
 
-/* ---------------- 输入区 ---------------- */
-.lc-dock { padding: 12px 20px 16px; border-top: none; background: transparent; }
+/* ---------------- 输入区：一层液态玻璃 composer ---------------- */
+.lc-dock { padding: 10px 20px 14px; border-top: none; background: transparent; }
+.lc-dock-inner { max-width: 780px; margin: 0 auto; }
 .lc-pending {
   display: inline-flex; align-items: center; gap: 8px;
   margin-bottom: 10px;
-  padding: 6px 10px 6px 6px;
-  border: 1px solid var(--v4-glass-border);
-  border-radius: var(--v4-r-md);
-  background: var(--v4-ios-fill);
+  padding: 5px 10px 5px 5px;
+  border: 1px solid var(--lc-hair);
+  border-radius: 12px;
+  background: var(--lc-glass-strong);
   font-size: 12px; color: var(--v4-ink-2);
 }
-.lc-pending img { width: 30px; height: 30px; border-radius: var(--v4-r-sm); object-fit: cover; }
+.lc-pending img { width: 28px; height: 28px; border-radius: 8px; object-fit: cover; }
 .lc-pending button { border: none; background: transparent; color: var(--v4-ink-3); cursor: pointer; display: flex; }
 .lc-pending button:hover { color: var(--v4-ink); }
+
+/* composer 本体：半透明白 + 背景模糊 + 内高光，无渐变、无重投影 */
 .lc-composer {
-  display: flex; align-items: flex-end; gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--v4-line);
-  border-radius: var(--v4-r-lg);
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 18, 22, 0.04);
+  display: flex; flex-direction: column;
+  padding: 8px 8px 8px;
+  border: 1px solid var(--lc-hair);
+  border-radius: 22px;
+  background: var(--lc-glass-strong);
+  -webkit-backdrop-filter: var(--v4-glass-blur-menu);
+  backdrop-filter: var(--v4-glass-blur-menu);
+  box-shadow: inset 0 1px 0 var(--v4-glass-border-hi), 0 10px 26px -22px rgba(16, 18, 22, 0.4);
   transition: border-color var(--v4-dur) var(--v4-ease), box-shadow var(--v4-dur) var(--v4-ease);
 }
-.lc-composer:focus-within { border-color: var(--v4-line-strong); box-shadow: 0 2px 8px rgba(16, 18, 22, 0.08); }
-.lc-icon-btn {
-  width: 34px; height: 34px; flex-shrink: 0;
-  border: none; border-radius: var(--v4-r-sm); background: transparent;
-  color: var(--v4-ink-2);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: background-color var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease), transform var(--v4-dur-fast) var(--v4-ease);
+.lc-composer:focus-within {
+  border-color: var(--lc-hair-strong);
+  box-shadow: inset 0 1px 0 var(--v4-glass-border-hi), 0 14px 32px -22px rgba(16, 18, 22, 0.46);
 }
-.lc-icon-btn:hover { background: var(--v4-surface); color: var(--v4-ink); }
-.lc-icon-btn:active { transform: scale(0.92); }
-.lc-icon-btn:disabled { opacity: .4; cursor: default; }
 .lc-textarea {
-  flex: 1;
+  width: 100%;
   border: none; outline: none; resize: none;
   background: transparent;
-  font-size: 14px; line-height: 1.6;
+  font-size: 14.5px; line-height: 1.65;
   color: var(--v4-ink);
-  padding: 8px 6px;
+  padding: 8px 10px 6px;
   max-height: 200px;
   font-family: inherit;
 }
-.lc-composer-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.lc-textarea::placeholder { color: var(--v4-ink-3); }
 
-/* 档位下拉 */
-.lc-tier { position: relative; }
-.lc-tier-btn {
-  display: flex; align-items: center; gap: 5px;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--v4-glass-border);
-  border-radius: var(--v4-r-md);
-  background: var(--v4-ios-fill);
-  font-size: 12px; color: var(--v4-ink);
-  cursor: pointer;
-  transition: border-color var(--v4-dur-fast) var(--v4-ease), background-color var(--v4-dur-fast) var(--v4-ease);
+/* 底部工具条：左边模式与参数，右边发送 */
+/* 注意：这里不能给 .lc-bar-left 加 overflow（横向滚动会裁掉绝对定位的下拉），
+   空间不够时让它换行，下拉菜单才能正常弹出。 */
+.lc-bar { display: flex; align-items: flex-end; gap: 8px; }
+.lc-bar-left {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 4px; row-gap: 4px;
+  flex: 1; min-width: 0;
 }
-.lc-tier-btn:hover { border-color: var(--v4-line-strong); background: var(--v4-ios-fill-hover); }
-.lc-tier-brand { font-weight: 600; font-size: 12px; }
+.lc-bar-sep { width: 1px; height: 18px; background: var(--lc-hair); flex: none; margin: 0 3px; }
+.lc-round {
+  width: 32px; height: 32px; flex: none;
+  border: 0; border-radius: 50%;
+  background: var(--lc-chip); color: var(--v4-ink-2);
+  display: grid; place-items: center; cursor: pointer;
+  transition: background var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease), transform var(--v4-dur-fast) var(--v4-ease);
+}
+.lc-round:hover { background: var(--lc-chip-on); color: var(--v4-ink); }
+.lc-round:active { transform: scale(0.94); }
+
+/* 模式 chip / 参数 chip：选中态只用一层更实的灰，不用彩色 */
+.lc-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 32px; padding: 0 10px; flex: none;
+  border: 1px solid transparent; border-radius: 10px;
+  background: transparent;
+  color: var(--v4-ink-2);
+  font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; cursor: pointer;
+  transition: background var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease);
+}
+.lc-tag:hover { background: var(--lc-chip); color: var(--v4-ink); }
+.lc-tag.on { background: var(--lc-chip-on); color: var(--v4-ink); font-weight: 600; }
+.lc-tag.open { background: var(--lc-chip); color: var(--v4-ink); }
+.lc-tag-cap { color: var(--v4-ink-3); font-weight: 400; }
+.lc-tag-val { color: var(--v4-ink); font-weight: 500; }
+.lc-tag-chev { color: var(--v4-ink-3); }
+
+/* 下拉（向上弹出） */
+.lc-pick { position: relative; display: inline-flex; flex: none; }
 .lc-backdrop { position: fixed; inset: 0; z-index: 20; }
-.lc-tier-menu {
-  position: absolute; bottom: 40px; right: 0; z-index: 21;
-  min-width: 150px;
-  padding: 4px;
-  border: 1px solid var(--v4-line);
-  border-radius: var(--v4-r-lg);
-  background: #ffffff;
-  box-shadow: 0 12px 32px -8px rgba(16, 18, 22, 0.18), 0 1px 2px rgba(16, 18, 22, 0.06);
+.lc-pop {
+  position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 21;
+  min-width: 210px; max-height: 300px; overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--lc-hair);
+  border-radius: 14px;
+  background: var(--lc-glass-strong);
+  -webkit-backdrop-filter: var(--v4-glass-blur-menu);
+  backdrop-filter: var(--v4-glass-blur-menu);
+  box-shadow: inset 0 1px 0 var(--v4-glass-border-hi), 0 18px 44px -22px rgba(16, 18, 22, 0.34);
 }
-.lc-tier-opt {
-  display: flex; align-items: center; justify-content: space-between;
-  width: 100%;
-  padding: 9px 10px;
-  border: none; border-radius: var(--v4-r-sm); background: transparent;
-  font-size: 12.5px; color: var(--v4-ink);
-  cursor: pointer;
-  transition: background-color var(--v4-dur-fast) var(--v4-ease);
+.lc-pop-opt {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 8px 9px;
+  border: 0; border-radius: 9px; background: transparent;
+  font-size: 12.5px; color: var(--v4-ink-2); text-align: left; cursor: pointer;
+  white-space: nowrap;
 }
-.lc-tier-opt:hover { background: var(--v4-surface); }
-.lc-tier-opt.sel { font-weight: 600; }
-.lc-tier-opt-cost { color: var(--v4-ink-3); }
+.lc-pop-opt:hover { background: var(--lc-chip); color: var(--v4-ink); }
+.lc-pop-opt.sel { color: var(--v4-ink); font-weight: 600; }
+.lc-pop-hint { margin-left: auto; font-size: 11px; color: var(--v4-ink-3); font-weight: 400; }
+.lc-pop-check { margin-left: auto; color: var(--v4-ink); }
+
 .lc-send {
-  width: 34px; height: 34px; flex-shrink: 0;
-  border: none; border-radius: var(--v4-r-md);
+  width: 34px; height: 34px; flex: none;
+  border: none; border-radius: 50%;
   background: var(--v4-solid-bg); color: var(--v4-solid-fg);
-  display: flex; align-items: center; justify-content: center;
+  display: grid; place-items: center;
   cursor: pointer;
   transition: opacity var(--v4-dur-fast) var(--v4-ease), transform var(--v4-dur-fast) var(--v4-ease);
 }
-.lc-send:hover { opacity: .9; transform: scale(1.05); }
+.lc-send:hover { opacity: 0.9; transform: scale(1.04); }
 .lc-send:active { transform: scale(0.94); }
-.lc-send:disabled { opacity: .35; cursor: default; transform: none; }
-.lc-dock-hint { margin-top: 10px; text-align: center; font-size: 11px; color: var(--v4-ink-3); display: flex; align-items: center; justify-content: center; gap: 6px; }
-.lc-chatmodel { position: relative; display: inline-flex; }
-.lc-chatmodel-btn {
-  display: inline-flex; align-items: center; gap: 3px;
-  font-size: 11px; color: var(--v4-ink-2);
-  background: none; border: none; cursor: pointer; padding: 2px 4px; border-radius: 4px;
+.lc-send:disabled { opacity: 0.3; cursor: default; transform: none; }
+
+.lc-dock-hint {
+  margin-top: 9px; min-height: 20px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: 11px; color: var(--v4-ink-3);
 }
-.lc-chatmodel-btn:hover { background: var(--v4-surface); color: var(--v4-ink); }
-.lc-chatmodel-menu {
-  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
-  z-index: 21; min-width: 180px; padding: 4px;
-  background: #ffffff;
-  border: 1px solid var(--v4-line); border-radius: var(--v4-r-md);
-  box-shadow: 0 12px 32px -8px rgba(16, 18, 22, 0.18), 0 1px 2px rgba(16, 18, 22, 0.06);
-  display: flex; flex-direction: column;
-}
-.lc-chatmodel-opt {
-  display: block; width: 100%; text-align: left;
-  padding: 7px 10px; font-size: 12px; border: none; background: none;
-  border-radius: 4px; cursor: pointer; color: var(--v4-ink-2);
-}
-.lc-chatmodel-opt:hover { background: var(--v4-surface); }
-.lc-chatmodel-opt.sel { background: var(--v4-surface); color: var(--v4-ink); font-weight: 600; }
+.lc-hint-text { display: inline-flex; align-items: center; gap: 4px; color: var(--v4-ink-3); }
+.lc-dock-hint .lc-tag { height: 24px; padding: 0 7px; font-size: 11px; border-radius: 8px; }
+.lc-dock-hint .lc-pop { bottom: calc(100% + 6px); top: auto; left: 50%; transform: translateX(-50%); }
+
 
 /* lightbox */
 .lc-lightbox {
@@ -1590,18 +1640,15 @@ button.ag-row.open { background: var(--v4-ios-fill); }
   .lc-side {
     border: 0;
     border-radius: 26px;
-    /* 极淡的双色渐变只留在玻璃内部，卡片外是干净的页面底色 */
-    background:
-      radial-gradient(130% 72% at 0% 0%, rgba(255, 196, 150, 0.10), transparent 68%),
-      radial-gradient(120% 82% at 100% 100%, rgba(140, 178, 255, 0.10), transparent 70%),
-      var(--v4-glass-bg);
+    /* 纯液态玻璃：只有半透明白 + 背景模糊，不铺任何彩色或线性渐变 */
+    background: var(--lc-glass);
     -webkit-backdrop-filter: var(--v4-glass-blur);
     backdrop-filter: var(--v4-glass-blur);
     /* 用内高光 + 两层柔影代替描边：有玻璃厚度和浮起感，但没有一圈线 */
     box-shadow:
       inset 0 1px 0 var(--v4-glass-border-hi),
-      0 2px 6px -3px rgba(16, 18, 22, 0.10),
-      0 24px 52px -28px rgba(16, 18, 22, 0.24);
+      0 1px 3px -1px rgba(16, 18, 22, 0.06),
+      0 18px 44px -30px rgba(16, 18, 22, 0.22);
     padding: 18px 14px 14px;
   }
   .lc-side.collapsed { width: 62px; padding: 16px 8px; border-radius: 22px; }
@@ -1649,16 +1696,17 @@ button.ag-row.open { background: var(--v4-ios-fill); }
   .lc-side-foot { margin-top: 8px; padding-top: 8px; }
   .lc-user { padding: 8px; border-radius: 14px; background: var(--v4-ios-fill); }
 
-  /* 输入胶囊同样无描边，靠半透明玻璃与柔影浮起 */
+  /* 输入胶囊同样是液态玻璃：半透明白 + 模糊 + 内高光，不再是灰块 */
   .lc-composer {
-    border: 0;
-    background: var(--v4-ios-fill);
+    border: 1px solid var(--lc-hair);
+    background: var(--lc-glass-strong);
     -webkit-backdrop-filter: var(--v4-glass-blur-menu);
     backdrop-filter: var(--v4-glass-blur-menu);
-    box-shadow: inset 0 1px 0 var(--v4-glass-border-hi), 0 18px 44px -32px rgba(16, 18, 22, 0.38);
+    box-shadow: inset 0 1px 0 var(--v4-glass-border-hi), 0 12px 30px -24px rgba(16, 18, 22, 0.4);
   }
   .lc-composer:focus-within {
-    box-shadow: inset 0 0 0 2px rgba(120, 150, 200, 0.16), 0 20px 48px -32px rgba(16, 18, 22, 0.42);
+    border-color: var(--lc-hair-strong);
+    box-shadow: inset 0 1px 0 var(--v4-glass-border-hi), 0 16px 34px -24px rgba(16, 18, 22, 0.46);
   }
 
   /* 本轮新增的玻璃组件统一无描边：头像菜单、账户信息分组卡、展开面板 */
