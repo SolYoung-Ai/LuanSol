@@ -1,0 +1,1 @@
+import{j as r}from"./vendor-react-EfbF1ROp.js";import{E as o,a as t}from"./EditorShell-DUNT4bSN.js";import"./index-P3iUOpp_.js";import"./styles-DgHOje0K.js";import"./export-Cqxsy8Uq.js";import"./vendor-three-BJyRzRQS.js";function d(){return r.jsx(o,{children:r.jsx(t,{})})}export{d as default};
