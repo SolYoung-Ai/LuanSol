@@ -195,7 +195,7 @@ export default function Subscribe() {
         <div className="gl-rate">
           <div className="gl-rate-top"><strong>{t('对话', 'Chat')}</strong></div>
           <div className="gl-rate-num">免费</div>
-          <div className="gl-rate-note">DeepSeek-V4.1-Flash 驱动，不扣积分</div>
+          <div className="gl-rate-note">DeepSeek-V4.1-Flash 免费不限；会员模型按每日 ¥1 额度计，都不扣积分</div>
         </div>
         {IMAGE_MODELS.filter((m) => m.provider === 'ark').map((m) => (
           <div className={`gl-rate ${m.id === 'pro' ? 'hi' : ''}`} key={m.id}>
