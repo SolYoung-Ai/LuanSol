@@ -14,7 +14,7 @@ import type { IconName } from '../components/icons';
 import type { ImageTier, LunaMessage } from '../types';
 import { useAuth } from '../cloud/auth';
 import { useChatStore } from '../cloud/useChatStore';
-import { CHAT_MODELS, chatModel as findChatModel, fmtRMB, turnsForBudget } from '../cloud/chatModels';
+import { CHAT_MODELS, chatModel as findChatModel, turnsForBudget } from '../cloud/chatModels';
 import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
 import { go } from '../ui';
@@ -151,9 +151,8 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
   const cur = findChatModel(value);
   const used = spent ?? 0;
   const left = Math.max(0, budget - used);
+  // 只显示「用掉百分之几」：金额是内部成本口径，摊给用户看反而要解释汇率与分时价
   const pct = Math.min(100, Math.round((used / budget) * 100));
-  // 超支时也只写到 ¥1.00：真实值是 1.05，但界面上「1.05/1.00」会让人以为系统算错了
-  const usedText = Math.min(used, budget);
   const empty = spent !== null && used >= budget;
   const maxTurns = turnsForBudget(cur, left);
 
@@ -185,9 +184,7 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
             <div className={`lc-quota ${empty ? 'full' : ''}`}>
               <div className="lc-quota-head">
                 <span>今日额度 · 会员模型</span>
-                <span className="lc-quota-num">
-                  {spent === null ? '统计中…' : `${fmtRMB(usedText)} / ${fmtRMB(budget)}`}
-                </span>
+                <span className="lc-quota-num">{spent === null ? '统计中…' : `${pct}%`}</span>
               </div>
               <div className="lc-quota-bar">
                 {/* 0% 时不画那 1px 橙点：看起来像「已经花了 1%」，容易让人以为额度被偷跑 */}
@@ -199,8 +196,8 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
                   : empty
                     ? '今日额度已用完，会员模型明天 0 点恢复；DeepSeek-V4.1-Flash 不限'
                     : cur.tier === 'free'
-                      // 默认档不占额度，必须写清楚，否则用户以为聊几句就把 ¥1 花光了
-                      ? '当前是免费默认档，不占额度；切到会员模型才按实际花费计算'
+                      // 默认档不占额度，必须写清楚，否则用户以为聊几句就把额度花光了
+                      ? '当前是免费默认档，不占额度；切到 PRO 模型才计算今日额度'
                       : `按当前 ${cur.short} 估算约还能聊 ${maxTurns} 轮`}
               </div>
             </div>
@@ -223,6 +220,7 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
                   key={m.id}
                   role="menuitem"
                   className={`lc-pop-opt model ${m.id === value ? 'sel' : ''} ${locked ? 'locked' : ''}`}
+                  title={m.soon ? '这个模型在方舟账号里尚未开通，开通后这里会自动可选' : undefined}
                   onClick={() => {
                     if (m.soon) return;
                     if (planLocked) { onNeedPro(); return; }

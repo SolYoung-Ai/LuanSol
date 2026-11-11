@@ -420,6 +420,10 @@ const UPSTREAM_HINTS = [
     zh: '描述触发了厂商的内容安全审核。去掉人物特征、医疗功效、仿冒品牌这类说法，写得更中性一些再试。',
   },
   {
+    re: /AccessDenied|access denied|Forbidden|do not have access/i,
+    zh: '这个模型还没有在你的火山方舟账号里开通（接口返回 403）。到方舟控制台「模型广场」找到对应模型点「开通」，或用同一账号下的可用模型继续。',
+  },
+  {
     re: /rate.?limit|too many requests|\b429\b/i,
     zh: '上游限流了，等几秒再试。',
   },
