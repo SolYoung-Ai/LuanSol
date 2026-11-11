@@ -13,6 +13,7 @@
  *
  * 独立成文件（不 import React）的原因：纯函数便于在 Node 里直接跑测试。
  * ============================================================ */
+import { createEmptyBrief } from './engine/brief';
 import {
   createInitialWorkflow,
   emptyProductInfo,
@@ -65,7 +66,23 @@ export function migrateWorkflow(raw: unknown): ProjectWorkflow | undefined {
 
 /** 单个项目迁移：没有 workflow 的老项目原样返回 */
 export function migrateProject(p: Project): Project {
-  if (!p || typeof p !== 'object' || !p.workflow) return p;
+  if (!p || typeof p !== 'object') return p;
+  /* 项目骨架也在这里补齐：云端可能存在早期版本写上去、字段不全的行
+     （没有 brief / brief.size），工作台渲染 `p.brief.size.l` 会直接 TypeError，
+     整页打崩成「这个页面没能显示出来」。缺什么补什么，比各处写 p.brief?.size 更彻底。 */
+  const base = createEmptyBrief();
+  const brief = (p.brief && typeof p.brief === 'object')
+    ? { ...base, ...p.brief, size: { ...base.size, ...(p.brief as { size?: object }).size } }
+    : base;
+  const safe: Project = {
+    ...p,
+    name: typeof p.name === 'string' && p.name.trim() ? p.name : '未命名包装项目',
+    brief,
+    createdAt: Number(p.createdAt) || Date.now(),
+    updatedAt: Number(p.updatedAt) || Date.now(),
+    status: p.status || 'draft',
+  };
+  if (!p.workflow) return safe;
   const workflow = migrateWorkflow(p.workflow);
-  return workflow ? { ...p, workflow } : p;
+  return workflow ? { ...safe, workflow } : safe;
 }

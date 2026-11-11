@@ -26,6 +26,7 @@ export default function Start() {
 
   return <div className="hp-start">
     <div className="hp-start-inner">
+      <h1 className="hp-start-title">开始创造吧，设计师！</h1>
       <EntryCards busy={busy} onPick={choose} />
       <p className="hp-start-note">不确定选哪个？先选「从零开始」，下一步补充产品信息即可。</p>
     </div>

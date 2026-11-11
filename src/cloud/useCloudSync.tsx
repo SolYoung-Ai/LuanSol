@@ -11,7 +11,10 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { useApp } from '../store';
 import { useAuth } from './auth';
 import { useSubscription } from './subscription';
-import { listProjects, pushMany, pushProject, pullAll, removeProject, removeManyProjects, projectIdOf, timeLabel } from './projects';
+import {
+  listProjects, pushMany, pushProject, pullAll, removeProject, removeManyProjects,
+  projectIdOf, timeLabel, listDeleted, markDeleted,
+} from './projects';
 
 export type SyncState = 'off' | 'idle' | 'syncing' | 'ok' | 'error';
 
@@ -32,6 +35,17 @@ export interface CloudSync {
 /* 记录「哪个本机项目属于哪个云端账号」：
  * 同一台设备换账号登录时，绝不能把上一个账号的项目推到新账号下
  * （服务端 RLS 会拒绝，前端也不应该尝试）。 */
+/* 已删除项目（墓碑）的本地缓存：{ uid: [projectId...] }。
+ * 云端表是权威，但离线 / 请求失败时也要能立刻压制「刚删掉又回来」，
+ * 所以删的那一刻先落本地，下一次同步再补写到云端。 */
+const DEL_KEY = 'lunasol.deleted.v1';
+function readDeleted(): Record<string, string[]> {
+  try { return JSON.parse(localStorage.getItem(DEL_KEY) || '{}') as Record<string, string[]>; } catch { return {}; }
+}
+function writeDeleted(m: Record<string, string[]>) {
+  try { localStorage.setItem(DEL_KEY, JSON.stringify(m)); } catch { /* 配额不足时忽略 */ }
+}
+
 const OWNER_KEY = 'lunasol.cloud.owners.v1';
 function readOwners(): Record<string, string> {
   try { return JSON.parse(localStorage.getItem(OWNER_KEY) || '{}') as Record<string, string>; } catch { return {}; }
@@ -44,7 +58,7 @@ function writeOwners(m: Record<string, string>) {
 function useCloudSyncState(): CloudSync {
   const { user } = useAuth();
   const { isPro, loading: subLoading } = useSubscription();
-  const { s, update, mergeCloudProjects, setToast } = useApp();
+  const { s, update, mergeCloudProjects, dropProjects, setToast } = useApp();
   const [state, setState] = useState<SyncState>('off');
   const [message, setMessage] = useState('未登录：项目只保存在本机浏览器');
   const [lastSync, setLastSync] = useState<number | null>(null);
@@ -53,6 +67,9 @@ function useCloudSyncState(): CloudSync {
   const pushedAt = useRef<Record<string, number>>({});
   const owners = useRef<Record<string, string>>(readOwners());
   const cloudIdsRef = useRef<Set<string>>(new Set());
+  /** 已删除的 project_id（本地缓存 ∪ 云端墓碑）：同步时用它压制复活 */
+  const tombstones = useRef<Set<string>>(new Set());
+  const deletedStore = useRef<Record<string, string[]>>(readDeleted());
   const running = useRef(false);
   const projectsRef = useRef(s.projects);
   projectsRef.current = s.projects;
@@ -67,6 +84,32 @@ function useCloudSyncState(): CloudSync {
     writeOwners(next);
   }, []);
 
+  /** 记下「这些项目已被删除」：先写本地（立刻生效），再补写云端（供其他设备读取） */
+  const rememberDeleted = useCallback((uid: string, ids: string[]) => {
+    if (!uid || !ids.length) return;
+    const next = { ...deletedStore.current };
+    const set = new Set([...(next[uid] || []), ...ids]);
+    next[uid] = Array.from(set).slice(-1000);
+    deletedStore.current = next;
+    writeDeleted(next);
+    ids.forEach((id) => tombstones.current.add(id));
+    void markDeleted(uid, ids).then((r) => {
+      if (!r.ok) setMessage(`删除记录暂时没同步到云端：${r.message}（下次同步会自动补写）`);
+    });
+  }, []);
+
+  /** 拉取墓碑（本地 ∪ 云端），并把只在本地的那批补写上去 */
+  const refreshTombstones = useCallback(async (uid: string): Promise<Set<string>> => {
+    const local = deletedStore.current[uid] || [];
+    const r = await listDeleted(uid);
+    const cloudIds = r.ok ? r.data : [];
+    const missing = local.filter((id) => !cloudIds.includes(id));
+    if (missing.length) void markDeleted(uid, missing);
+    const set = new Set([...local, ...cloudIds]);
+    tombstones.current = set;
+    return set;
+  }, []);
+
   /** 全量同步：先合并云端，再把本地多出来的项目上传。
    *  云同步是会员权益：免费用户只在本机保存，不自动上传；
    *  但「取回云端项目」始终开放，避免会员到期后取不回已有作品。 */
@@ -78,26 +121,39 @@ function useCloudSyncState(): CloudSync {
     setState('syncing');
     setMessage('正在与云端合并…');
     try {
+      /* 先取「删过哪些」再去拉项目：顺序反过来的话，已删除的项目会先在界面上闪一下 */
+      const tombs = await refreshTombstones(user.id);
+
       const pulled = await pullAll();
-      if (pulled.ok) {
-        mergeCloudProjects(pulled.data);
-        claim(pulled.data.map((p) => p.id), user.id);
-        cloudIdsRef.current = new Set(pulled.data.map((p) => p.id));
-        setCloudCount(cloudIdsRef.current.size);
-      } else {
+      if (!pulled.ok) {
         setState('error');
         setMessage(pulled.message);
         return;
       }
-      const cloudIds = new Set(pulled.data.map((p) => p.id));
+      /* 云端仍带着墓碑里的 id = 之前那次 DELETE 没成功（或另一台设备刚把它传回去）。
+         这类行不合并，并顺手清掉云端残行，避免它一直占着列表与次数。 */
+      const ghosts = pulled.data.filter((p) => tombs.has(p.id));
+      const alive = pulled.data.filter((p) => !tombs.has(p.id));
+      if (ghosts.length) void removeManyProjects(user.id, ghosts.map((p) => p.id));
+
+      mergeCloudProjects(alive);
+      claim(alive.map((p) => p.id), user.id);
+      cloudIdsRef.current = new Set(alive.map((p) => p.id));
+      setCloudCount(cloudIdsRef.current.size);
+      /* 其他设备删过的项目，本机若还留着副本也一并丢弃：这就是「一处删除，处处消失」 */
+      if (tombs.size) dropProjects(Array.from(tombs));
+
+      const cloudIds = cloudIdsRef.current;
       // 等一拍让 store 合并结果落到 projectsRef，再决定要上传哪些
       await new Promise((r) => setTimeout(r, 60));
       const ups = projectsRef.current.filter((p) => {
         if (cloudIds.has(p.id)) return false;
+        if (tombs.has(p.id)) return false;      // 删过的永不回传
         const o = owners.current[p.id];
         return !o || o === user.id;   // 属于其他账号的本机项目不上传
       });
-      const skipped = projectsRef.current.filter((p) => !cloudIds.has(p.id) && owners.current[p.id] && owners.current[p.id] !== user.id).length;
+      const skipped = projectsRef.current.filter((p) => !cloudIds.has(p.id) && !tombs.has(p.id)
+        && owners.current[p.id] && owners.current[p.id] !== user.id).length;
       if (ups.length) {
         const r = await pushMany(user.id, ups);
         if (r.failed.length) {
@@ -127,6 +183,7 @@ function useCloudSyncState(): CloudSync {
       mergedFor.current = null;
       pushedAt.current = {};
       cloudIdsRef.current = new Set();
+      tombstones.current = new Set();
       setCloudCount(null);
       setState('off');
       setMessage('未登录：项目只保存在本机浏览器');
@@ -149,6 +206,7 @@ function useCloudSyncState(): CloudSync {
   useEffect(() => {
     if (!user || !isPro) return;
     const dirty = s.projects.filter((p) => {
+      if (tombstones.current.has(p.id)) return false;   // 删过的不再上传
       const o = owners.current[p.id];
       if (o && o !== user.id) return false;
       return (pushedAt.current[p.id] ?? 0) < p.updatedAt;
@@ -176,12 +234,17 @@ function useCloudSyncState(): CloudSync {
   const downloadAll = useCallback(async () => {
     if (!user) { setToast('请先登录再下载云端项目'); return; }
     setState('syncing');
+    const tombs = await refreshTombstones(user.id);
     const r = await pullAll();
     if (!r.ok) { setState('error'); setMessage(r.message); setToast(r.message); return; }
-    mergeCloudProjects(r.data);
-    claim(r.data.map((p) => p.id), user.id);
+    const alive = r.data.filter((p) => !tombs.has(p.id));
+    const ghosts = r.data.filter((p) => tombs.has(p.id));
+    if (ghosts.length) void removeManyProjects(user.id, ghosts.map((p) => p.id));
+    mergeCloudProjects(alive);
+    claim(alive.map((p) => p.id), user.id);
+    if (tombs.size) dropProjects(Array.from(tombs));
     const list = await listProjects();
-    if (list.ok) { cloudIdsRef.current = new Set(list.data.map((x) => projectIdOf(x.id))); setCloudCount(cloudIdsRef.current.size); }
+    if (list.ok) { cloudIdsRef.current = new Set(list.data.map((x) => projectIdOf(x.id))); setCloudCount(alive.length); }
     setState('ok');
     setLastSync(Date.now());
     setMessage(`已从云端取回 ${r.data.length} 个项目`);
@@ -214,27 +277,33 @@ function useCloudSyncState(): CloudSync {
 
   const removeOne = useCallback(async (id: string) => {
     if (!user) return false;
+    /* 先记墓碑再发 DELETE：DELETE 失败（网络抖动 / 网关 5xx）时，
+       这个 id 仍然会被墓碑压住，不会再从云端被拉回来。 */
+    rememberDeleted(user.id, [id]);
     const r = await removeProject(user.id, id);
-    if (!r.ok) { setToast(r.message); return false; }
     delete pushedAt.current[id];
     cloudIdsRef.current.delete(projectIdOf(id));
     setCloudCount(cloudIdsRef.current.size);
-    setToast('已从云端删除该项目');
+    setToast(r.ok
+      ? '已删除，其他设备下次同步也会消失'
+      : `已从各端删除；云端副本稍后自动清理（${r.message}）`);
     return true;
-  }, [user, setToast]);
+  }, [user, setToast, rememberDeleted]);
 
   const removeMany = useCallback(async (ids: string[]) => {
     if (!user) return { ok: 0, failed: [...ids] };
+    rememberDeleted(user.id, ids);
     const r = await removeManyProjects(user.id, ids);
     ids.forEach((id) => {
       delete pushedAt.current[id];
       cloudIdsRef.current.delete(projectIdOf(id));
     });
     setCloudCount(cloudIdsRef.current.size);
-    if (r.failed.length > 0) setToast(`已删除 ${r.ok} 个，${r.failed.length} 个失败（刷新后会回来）`);
-    else setToast(`已删除 ${r.ok} 个项目`);
-    return r;
-  }, [user, setToast]);
+    // 云端 DELETE 失败的个数不等于「会回来」：墓碑已经生效，下次同步会顺手把残行清掉
+    if (r.failed.length > 0) setToast(`已删除 ${ids.length} 个（${r.failed.length} 个云端副本稍后自动清理，不会再出现）`);
+    else setToast(`已删除 ${ids.length} 个项目，其他设备同步后也会消失`);
+    return { ok: ids.length - r.failed.length, failed: r.failed };
+  }, [user, setToast, rememberDeleted]);
 
   return { state, message, lastSync, cloudCount, ownerOf, syncNow, downloadAll, pushOne, removeOne, removeMany };
 }

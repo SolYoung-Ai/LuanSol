@@ -15,7 +15,7 @@ import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
 import { PRICING } from '../cloud/plans';
 import { callImage } from '../engine/seedream';
-import { OPEN_IMAGE_MODELS, imageCost } from '../cloud/models';
+import { OPEN_IMAGE_MODELS, imageCost, resolveTier } from '../cloud/models';
 import { assembleFromConceptImage, buildBrief, inferStructure, refineTextColors } from './assembler';
 import { Icon } from '../components/icons';
 
@@ -159,7 +159,10 @@ export default function ConceptStage() {
 
   /** 单张重新生成 */
   const regenerate = async (img: ConceptImage) => {
-    const cost = tierCost(draftTier);
+    // 会员到期后仍停在上次选的 GPT Image 2：按当前身份归一，避免按 86/93 积分下单
+    const tier = resolveTier(draftTier, sub.isPro);
+    if (tier !== draftTier) setDraftTier(tier);
+    const cost = tierCost(tier);
     const balance = sub.usedLeft ?? 0;
     if (auth.user && balance < cost) {
       setToast(`积分不足：重新生成需 ${cost} 积分，当前余额 ${balance}。`);
@@ -169,10 +172,10 @@ export default function ConceptStage() {
     setRegenBusy(img.id);
     try {
       const uid = auth.user?.id;
-      const src = await callImage(draftPrompt, { tier: draftTier, referenceImage: wf.referenceImages[0]?.src, uid });
+      const src = await callImage(draftPrompt, { tier, referenceImage: wf.referenceImages[0]?.src, uid });
       const { w, h } = await naturalSize(src);
       const next = images.map((it) => it.id === img.id
-        ? { ...it, src, prompt: draftPrompt, model: draftTier, tier: draftTier, at: Date.now(), naturalW: w, naturalH: h }
+        ? { ...it, src, prompt: draftPrompt, model: tier, tier, at: Date.now(), naturalW: w, naturalH: h }
         : it);
       patchWorkflow(project.id, { conceptImages: next, selectedConceptImageId: img.id });
       if (auth.user) {
@@ -280,11 +283,27 @@ export default function ConceptStage() {
                 ) : (
                   <div className="wf-regen-panel">
                     <div className="wf-seg wf-seg-sm">
-                      {OPEN_IMAGE_MODELS.map((m) => (
-                        <button key={m.id} className={`wf-seg-btn ${draftTier === m.id ? 'on' : ''}`} onClick={() => setDraftTier(m.id)}>
-                          {m.short} {m.cost}积分
-                        </button>
-                      ))}
+                      {OPEN_IMAGE_MODELS.map((m) => {
+                        // GPT Image 2 两档为会员专属：免费版灰显，点了走订阅引导
+                        const locked = !!m.pro && !sub.isPro;
+                        return (
+                          <button
+                            key={m.id}
+                            className={`wf-seg-btn ${draftTier === m.id && !locked ? 'on' : ''}`}
+                            style={locked ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                            title={locked ? '会员专属模型' : m.note}
+                            onClick={() => {
+                              if (locked) {
+                                sub.setPaywall(true, 'GPT Image 2 是会员专属生图模型：出图质量最高，支持文字出图与参考图改图。免费版可用 Seedream 5.0 Flash / Pro。');
+                                return;
+                              }
+                              setDraftTier(m.id);
+                            }}
+                          >
+                            {m.short} {m.cost}积分{locked ? ' · 会员' : ''}
+                          </button>
+                        );
+                      })}
                     </div>
                     <textarea className="wf-textarea" rows={3} value={draftPrompt}
                       onChange={(e) => setDraftPrompt(e.target.value)} placeholder="对这一张的额外要求…" />

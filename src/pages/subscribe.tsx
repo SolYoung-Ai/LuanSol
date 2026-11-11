@@ -252,6 +252,7 @@ export default function Subscribe() {
         <ul className="gl-plan-feats">
           <li><Icon name="check" size={13} />签到双倍（+20/天，月上限 600）</li>
           <li><Icon name="check" size={13} />全部对话模型解锁</li>
+          <li><Icon name="check" size={13} />GPT Image 2 生图模型开放（旗舰出图 / 参考图改图）</li>
           <li><Icon name="check" size={13} />云端同步 + 历史版本</li>
           <li><Icon name="check" size={13} />印刷级文件导出（PDF / SVG / DXF / ZIP）</li>
         </ul>

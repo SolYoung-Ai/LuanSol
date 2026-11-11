@@ -19,7 +19,7 @@ import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
 import { go } from '../ui';
 import { LoginDialog } from '../cloud/LoginDialog';
-import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageModel } from '../cloud/models';
+import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageModel, resolveTier } from '../cloud/models';
 import { SideNavLinks, SideAccount, SideBrand, SideFold } from '../components/SideNav';
 
 type LunaMode = 'chat' | 'image';
@@ -83,16 +83,18 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
 }
 
 /* --------------------------- 通用下拉（composer 内） --------------------------- */
-interface Option { id: string; label: string; hint?: string }
+interface Option { id: string; label: string; hint?: string; locked?: boolean }
 
 function Pick({
-  icon, caption, value, options, onPick,
+  icon, caption, value, options, onPick, onLocked,
 }: {
   icon?: IconName;
   caption?: string;
   value: string;
   options: Option[];
   onPick: (id: string) => void;
+  /** 点了会员专属档位时调用：不选中，改成弹订阅引导 */
+  onLocked?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -110,12 +112,15 @@ function Pick({
             {options.map((o) => (
               <button
                 key={o.id}
-                className={`lc-pop-opt ${o.label === value ? 'sel' : ''}`}
-                onClick={() => { onPick(o.id); setOpen(false); }}
+                className={`lc-pop-opt ${o.label === value ? 'sel' : ''} ${o.locked ? 'locked' : ''}`}
+                onClick={() => {
+                  if (o.locked && onLocked) { setOpen(false); onLocked(o.id); return; }
+                  onPick(o.id); setOpen(false);
+                }}
               >
                 <span>{o.label}</span>
-                {o.hint && <span className="lc-pop-hint">{o.hint}</span>}
-                {o.label === value && <Icon name="check" size={13} className="lc-pop-check" />}
+                <span className="lc-pop-hint">{o.locked ? '会员' : (o.hint || '')}</span>
+                {o.label === value && !o.locked && <Icon name="check" size={13} className="lc-pop-check" />}
               </button>
             ))}
           </div>
@@ -339,7 +344,9 @@ export default function Luna() {
   const active = chat.active;
   const messages = active?.messages || [];
   const hasThread = messages.length > 0;
-  const tier: ImageTier = active?.imageTier || chat.draftTier;
+  // 会员到期后老会话里可能还留着 GPT Image 2：这里先归一到当前身份可用的档位，
+  // 否则界面会显示一个买不到的档、并按 86/93 积分下单
+  const tier: ImageTier = resolveTier(active?.imageTier || chat.draftTier, sub.isPro);
 
   /* 自动滚动到底部：图片是异步解码的，刚插进 DOM 时高度还没算出来，
      只滚一次会停在半路。这里补一次延迟滚动兜住「图片撑高」的情况。 */
@@ -741,8 +748,10 @@ export default function Luna() {
                         id: m.id,
                         label: m.label,
                         hint: `${m.cost} 积分`,
+                        locked: !!m.pro && !sub.isPro,
                       }))}
                       onPick={(id) => chat.setTier(id as ImageTier)}
+                      onLocked={() => sub.setPaywall(true, 'GPT Image 2 是会员专属生图模型：出图质量最高，支持文字出图与参考图改图。免费版可用 Seedream 5.0 Flash / Pro，开通会员后这两档自动解锁。')}
                     />
                     <Pick
                       caption="比例"

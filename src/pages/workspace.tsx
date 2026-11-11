@@ -40,8 +40,8 @@ const groupOf = (p: Project) => STRUCTURES.find((s) => s.id === p.structure)?.gr
 const STRUCT_NAME = (p: Project) => STRUCTURES.find((s) => s.id === p.structure)?.name || p.structure;
 const statusLabel = (p: Project) => (p.status === 'draft' ? '草稿' : p.status === 'designing' ? '设计中' : '已完成');
 /** 尺寸还没填过时不要显示「0×0mm」——那看起来像坏数据，而是如实说「尺寸待定」 */
-const sizeLabel = (s: { l: number; w: number; h?: number }) =>
-  s.l || s.w ? `${s.l}×${s.w}${s.h ? `×${s.h}` : ''}mm` : '尺寸待定';
+const sizeLabel = (s?: { l: number; w: number; h?: number } | null) =>
+  s && (s.l || s.w) ? `${s.l}×${s.w}${s.h ? `×${s.h}` : ''}mm` : '尺寸待定';
 const matchFilter = (p: Project, f: FilterId) =>
   f === 'all' ? true : f === 'done' ? (p.status === 'checked' || p.status === 'exported') : p.status === f;
 const fmt = (t: number) => {
@@ -89,7 +89,7 @@ export default function Workspace() {
     const kw = q.trim().toLowerCase();
     const filtered = s.projects.filter((p) => matchFilter(p, filter)
       && (structGroup === 'all' || groupOf(p) === structGroup)
-      && (!kw || `${p.name} ${STRUCT_NAME(p)} ${p.brief.product} ${p.brief.brand}`.toLowerCase().includes(kw)));
+      && (!kw || `${p.name} ${STRUCT_NAME(p)} ${p.brief?.product || ''} ${p.brief?.brand || ''}`.toLowerCase().includes(kw)));
     const sorted = [...filtered].sort((a, b) =>
       sort === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : sort === 'created' ? b.createdAt - a.createdAt : b.updatedAt - a.updatedAt);
     return sorted;
@@ -277,7 +277,7 @@ export default function Workspace() {
             <button className="v4-work-cover" onClick={onCover}>
               {p.design && p.design.faces.front
                 ? <DesignView face={p.design.faces.front} />
-                : <div className="v4-work-blank"><strong>LUNASOL</strong><span>{p.brief.product || '未命名产品'}</span></div>}
+                : <div className="v4-work-blank"><strong>LUNASOL</strong><span>{p.brief?.product || '未命名产品'}</span></div>}
               {!batchMode && <span className="v4-work-status">{statusLabel(p)}</span>}
               {batchMode && <span style={checkBoxStyle(checked, true)}>
                 {checked && <Icon name="check" size={13} strokeWidth={2.4} />}

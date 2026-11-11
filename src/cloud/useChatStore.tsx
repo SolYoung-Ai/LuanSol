@@ -15,7 +15,7 @@ import { useAuth } from './auth';
 import { loadAI, llmChatWithReasoning } from '../engine/llm';
 import { isCancelled } from '../engine/cancel';
 import { callImage } from '../engine/seedream';
-import { imageCost, imageShort } from './models';
+import { imageCost, imageShort, isProOnlyTier, resolveTier } from './models';
 import {
   CHAT_DAILY_BUDGET_RMB, CHAT_MODELS, FREE_CHAT_MODEL, chatModel as findChatModel,
 } from './chatModels';
@@ -332,10 +332,16 @@ function useChatStoreState(): ChatStore {
 
   /* ----------------------------- 切换生图档 ----------------------------- */
   const setTier = useCallback((tier: ImageTier) => {
+    // 会员专属档（GPT Image 2）不让免费用户选中：界面已经灰显，这里再兜一层，
+    // 免得从别的入口（快捷键 / 老状态）绕过界面把 86/93 积分的档位设进来
+    if (isProOnlyTier(tier) && !sub.isPro) {
+      setToast('GPT Image 2 为会员专属生图模型，开通会员后可用');
+      return;
+    }
     // 还没开始对话时只记在草稿上，等发出第一条消息时带进新会话
     if (!activeId) { setDraftTier(tier); return; }
     updateConv(activeId, (c) => ({ ...c, imageTier: tier, updatedAt: Date.now() }));
-  }, [activeId, updateConv]);
+  }, [activeId, updateConv, sub.isPro, setToast]);
 
   /* ----------------------------- 发送文本 ----------------------------- */
   const sendText = useCallback(async (textRaw: string, image?: string) => {
@@ -462,8 +468,9 @@ function useChatStoreState(): ChatStore {
     let convId = activeId;
     let target = convId ? conversationsRef.current.find((c) => c.id === convId) : null;
 
-    // 先算积分再落消息：余额不够时不应该在历史里留下一条「说了但没画」的孤立气泡
-    const tierForCheck: ImageTier = target?.imageTier || draftTier;
+    // 先算积分再落消息：余额不够时不应该在历史里留下一条「说了但没画」的孤立气泡。
+    // 档位先按当前身份归一：会员到期后残留的 GPT Image 2 会退回 Flash，避免卖出不该卖的档
+    const tierForCheck: ImageTier = resolveTier(target?.imageTier || draftTier, sub.isPro);
     const cost = tierCost(tierForCheck);
     const balance = sub.usedLeft ?? 0;
     if (balance < cost) {
@@ -515,7 +522,11 @@ function useChatStoreState(): ChatStore {
     const id: string = convId;
     // 旧会话可能没有 imageTier（早期数据），缺省时必须和界面显示保持同一档，
     // 否则会出现「界面写 6 积分、实际按 10 积分扣」的错账。
-    const tier: ImageTier = conv.imageTier || draftTier;
+    const rawTier: ImageTier = conv.imageTier || draftTier;
+    const tier: ImageTier = resolveTier(rawTier, sub.isPro);
+    if (tier !== rawTier) {
+      setToast(`「${imageShort(rawTier)}」是会员专属档，已改用 ${imageShort(tier)} 生成`);
+    }
 
     setBusy(true);
     const ctrl = new AbortController();

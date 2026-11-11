@@ -14,7 +14,7 @@ import { accountKey, otpTarget, emailTarget, isEmail, rowId, projectIdOf, ownsPr
 import { LOGIN_CONFIG } from '../src/cloud/loginConfig';
 import { decideGate, usageStat, CREDIT_BUCKET_FREE, CREDIT_BUCKET_PRO } from '../src/cloud/subscription';
 import { PRICING } from '../src/cloud/plans';
-import { IMAGE_MODELS, OPEN_IMAGE_MODELS, HYPER3D_COST, imageCost, imageModel } from '../src/cloud/models';
+import { IMAGE_MODELS, OPEN_IMAGE_MODELS, HYPER3D_COST, imageCost, imageModel, isProOnlyTier, resolveTier } from '../src/cloud/models';
 import {
   CHAT_MODELS, CHAT_DAILY_BUDGET_RMB, FREE_CHAT_MODEL, chatModel, costOfUsage, isPeakNow, turnsForBudget,
 } from '../src/cloud/chatModels';
@@ -673,7 +673,12 @@ export async function runTests(): Promise<Result[]> {
     const m = migrateProject(old);
     A(m.workflow === undefined, '无 workflow 的项目不应被凭空补出 workflow');
     A(m.name === '更早的项目', '项目字段被改动');
-    return '原样返回';
+    // 字段不全的云端行会把工作台打崩（p.brief.size.l）：载入即补全，缺什么给默认值
+    A(!!m.brief && typeof m.brief.size?.l === 'number', 'brief.size 没有被补全（工作台会白屏）');
+    const broken = migrateProject({ id: 'p1', name: 'x', brief: {} } as unknown as Project);
+    A(typeof broken.brief.size.w === 'number', 'brief 缺 size 时未补全');
+    A(broken.createdAt > 0 && broken.updatedAt > 0, '时间戳没有兜底');
+    return '原样返回（缺字段已补全）';
   });
 
   await t('鉴权错误 · 会话恢复失败不展示给用户', () => {
@@ -749,6 +754,18 @@ export async function runTests(): Promise<Result[]> {
     A(!imageModel('gpt2-text').needsRef, 'gpt2-text 不应要求参考图');
     A(ref.provider === 'bai' && imageModel('flash').provider === 'ark', '厂商路由标记错误');
     return 'gpt2-ref 需参考图，其余不需要';
+  });
+
+  await t('生图档位 · GPT Image 2 是会员专属，免费版自动回落 Flash', () => {
+    A(isProOnlyTier('gpt2-text') && isProOnlyTier('gpt2-ref'), 'GPT Image 2 两档必须标记为会员专属');
+    A(!isProOnlyTier('flash') && !isProOnlyTier('pro'), 'Seedream 两档不应对免费版加锁');
+    // 免费版会话里残留的会员档必须回落，否则会按 86/93 积分卖出不该卖的档
+    A(resolveTier('gpt2-ref', false) === 'flash', '免费版残留 gpt2-ref 应回落 flash');
+    A(resolveTier('gpt2-text', false) === 'flash', '免费版残留 gpt2-text 应回落 flash');
+    A(resolveTier('gpt2-ref', true) === 'gpt2-ref', '会员应保留 gpt2-ref');
+    A(resolveTier('pro', false) === 'pro', '免费版仍可选 Seedream Pro');
+    A(resolveTier(undefined, false) === 'flash', '未指定档位应默认 flash');
+    return 'gpt2 两档仅会员可用，其余不受影响';
   });
 
   await t('对话模型 · 7 款目录与默认档（会员 6 款 / 默认免费）', () => {

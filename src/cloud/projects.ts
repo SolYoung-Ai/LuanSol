@@ -126,6 +126,48 @@ export async function pullAll(): Promise<CloudResult<Project[]>> {
   return { ok: true, data: out };
 }
 
+/* ------------------------- 删除墓碑（tombstone） -------------------------
+ * 只发一条 DELETE 不够：请求失败、或者另一台设备本地还留着副本，
+ * 下一次同步就会把它拉回来 / 传回去。墓碑表记下「这个 id 被删过」，
+ * 同步与上传都以它为准，死数据才不会被复活。
+ * 见 cloudbase/migrations/20261111134000_lunasol_deleted_projects.sql
+ */
+const DEL_TABLE = 'lunasol_deleted_projects';
+
+/** 读取本账号所有已删除的 project_id（一次同步只查一次） */
+export async function listDeleted(uid: string): Promise<CloudResult<string[]>> {
+  const d = await db();
+  if (!d) return fail('云服务未配置');
+  try {
+    const r = await d.from(DEL_TABLE).select('project_id').eq('owner_id', uid).limit(500);
+    if (!r) return { ok: true, data: [] };
+    if (r.error) return fail(`读取删除记录失败：${errText(r.error)}`);
+    return { ok: true, data: ((r.data || []) as { project_id?: string }[]).map((x) => String(x.project_id || '')).filter(Boolean) };
+  } catch (e) {
+    return fail(errText(e) || '读取删除记录异常');
+  }
+}
+
+/** 记录删除（幂等 upsert）。失败时调用方仍会在本地记一份，下次同步补写。 */
+export async function markDeleted(uid: string, ids: string[]): Promise<CloudResult<number>> {
+  const d = await db();
+  if (!d) return fail('云服务未配置');
+  if (!ids.length) return { ok: true, data: 0 };
+  let ok = 0;
+  const errors: string[] = [];
+  for (const projectId of ids) {
+    try {
+      const w = await d.from(DEL_TABLE).upsert(
+        { owner_id: uid, project_id: projectId, deleted_at: new Date().toISOString() },
+        { onConflict: 'owner_id,project_id' },
+      );
+      if (w.error) errors.push(errText(w.error)); else ok += 1;
+    } catch (e) { errors.push(errText(e)); }
+  }
+  if (ok === 0 && errors.length) return fail(`记录删除失败：${errors[0]}`);
+  return { ok: true, data: ok };
+}
+
 /* ------------------------------- 删除 ------------------------------- */
 export async function removeProject(uid: string, projectId: string): Promise<CloudResult> {
   const d = await db();

@@ -3368,6 +3368,18 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   padding: 56px 24px 72px;
 }
 .hp-start-inner { width: 100%; max-width: 900px; }
+
+/* 开始页的抬头：一句话，字号大但不抢卡片的主角位置。
+   中文标题用负字距 + 600 字重，收得紧一点更像品牌语而不是段落标题。 */
+.hp-start-title {
+  margin: 0 0 44px;
+  font-size: clamp(30px, 4.6vw, 52px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  text-align: center;
+  color: var(--v4-ink);
+}
 .hp-start-note {
   margin: 18px 2px 0;
   font-size: 12px;
@@ -3381,6 +3393,7 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
     align-items: flex-start;
     padding: 36px 16px 56px;
   }
+  .hp-start-title { margin: 6px 0 26px; font-size: 30px; letter-spacing: -0.02em; }
 }
 
 

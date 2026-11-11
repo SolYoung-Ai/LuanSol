@@ -91,6 +91,8 @@ interface AppCtx {
   loadProject: (id: string) => void;
   /** 把云端项目并入本地：同 id 取 updatedAt 更新的一方，云端独有则新增 */
   mergeCloudProjects: (list: Project[]) => void;
+  /** 批量丢弃本机项目（云端已判死 / 其他设备删过），不再上传、不再合并回来 */
+  dropProjects: (ids: string[]) => void;
   deleteProject: (id: string) => void;
   duplicateProject: (id: string) => void;
   newProject: () => void;
@@ -252,6 +254,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  /** 按 id 批量丢弃（同步层的「墓碑」用它清理其他设备残留的副本）。
+   *  与 deleteProject 的区别：这是被动清理，不触发「用户主动删除」的磁盘保护标记。 */
+  const dropProjects = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    const set = new Set(ids);
+    setS((prev) => {
+      const rest = prev.projects.filter((p) => !set.has(p.id));
+      if (rest.length === prev.projects.length) return prev;
+      return { ...prev, projects: rest, activeId: prev.activeId && set.has(prev.activeId) ? null : prev.activeId };
+    });
+  }, []);
+
   const duplicateProject = useCallback((id: string) => setS((prev) => {
     const p = prev.projects.find((x) => x.id === id);
     if (!p) return prev;
@@ -384,7 +398,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppCtx = {
     s, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
-    saveProject, syncProject, loadProject, mergeCloudProjects, deleteProject, duplicateProject, newProject, startEmptyDraft,
+    saveProject, syncProject, loadProject, mergeCloudProjects, dropProjects, deleteProject, duplicateProject, newProject, startEmptyDraft,
     createWorkflowProject, patchWorkflow, updateProject,
     addVersion, restoreVersion,
     addAsset, removeAsset, toggleFavoriteAsset,

@@ -31,8 +31,8 @@ import type { WorkflowStage } from '../types';
 
 /** 三个主入口。工作台包含设计流程的全部子路由，都算「在工作台里」。 */
 const SIDE_LINKS: { zh: string; en: string; path: string; icon: IconName; match: string[] }[] = [
-  // 首页放在最上面：对话、工作台、审美市场三块都在这一页里
-  { zh: '首页', en: 'Home', path: '/start', icon: 'home', match: ['/start', '/home'] },
+  // 「开始」放在最上面：两张创作入口卡都在这页，点进去就是工作台流程
+  { zh: '开始', en: 'Start', path: '/start', icon: 'home', match: ['/start', '/home'] },
   { zh: 'Luna', en: 'Luna', path: '/luna', icon: 'spark', match: ['/luna'] },
   {
     zh: '工作台', en: 'Workspace', path: '/workspace', icon: 'folder',

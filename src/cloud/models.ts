@@ -28,6 +28,8 @@ export interface ImageModel {
   note: string;
   /** false = 已定价但暂未开放（灰显，不可选） */
   open: boolean;
+  /** true = 会员专属：免费版看不到也选不了（点它走订阅引导） */
+  pro?: boolean;
 }
 
 export const IMAGE_MODELS: readonly ImageModel[] = [
@@ -57,6 +59,7 @@ export const IMAGE_MODELS: readonly ImageModel[] = [
     provider: 'bai',
     note: '出图质量最高，只用文字描述',
     open: true,
+    pro: true,
   },
   {
     id: 'gpt2-ref',
@@ -67,6 +70,7 @@ export const IMAGE_MODELS: readonly ImageModel[] = [
     needsRef: true,
     note: '带参考图改图，按图生图计费',
     open: true,
+    pro: true,
   },
 ];
 
@@ -91,6 +95,20 @@ export function imageLabel(id: ImageTier | undefined | null): string {
 
 export function imageShort(id: ImageTier | undefined | null): string {
   return imageModel(id).short;
+}
+
+/** 这一档是否会员专属（免费版选不了） */
+export function isProOnlyTier(id: ImageTier | undefined | null): boolean {
+  return imageModel(id).pro === true;
+}
+
+/** 当前身份下真正可用的生图档位：
+ *  免费版若还存着会员档（比如会员到期后继续用老会话），一律退回默认 Flash，
+ *  绝不拿会员档偷偷下单——那会按 86/93 积分扣一个本来不该卖的档位。 */
+export function resolveTier(id: ImageTier | undefined | null, isPro: boolean): ImageTier {
+  const m = imageModel(id);
+  if (m.pro && !isPro) return 'flash';
+  return m.id;
 }
 
 /** 3D 生成（Hyper3D-Gen2）目前只定价、未接入界面，价格单独放这里方便后面接 */
