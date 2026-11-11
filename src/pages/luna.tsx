@@ -8,7 +8,7 @@
  * 全页不使用渐变：白底 + 极淡描边 + 一层柔和投影，靠留白分层。
  * 人设统一来自 engine/persona.ts，全站同一份。
  * ============================================================ */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Fragment, useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/icons';
 import type { IconName } from '../components/icons';
 import type { ImageTier, LunaMessage } from '../types';
@@ -48,12 +48,31 @@ const STYLES = [
   { id: '3d', label: '3D 立体', prompt: '3D 渲染风格，柔和布光，圆润体积感，细腻材质。' },
 ];
 
+/* 模板 = 一段「成品形态」前缀，拼在用户描述前面。
+ * 这里覆盖平台真正能做的三类设计：包装、平面印刷、周边物料，
+ * 每一项都写清「什么成品 + 什么视角」，出图才不会跑成随便一张插画。
+ * group 只用于分组标题，选中值仍是 id，不影响已保存的旧项目。 */
 const TEMPLATES = [
   { id: 'none', label: '不限', prompt: '' },
-  { id: 'box', label: '包装盒', prompt: '产品包装盒效果图，正面视角，' },
-  { id: 'bag', label: '手提袋', prompt: '纸质手提袋效果图，' },
-  { id: 'label', label: '瓶贴', prompt: '瓶身标签效果图，' },
-  { id: 'poster', label: '海报', prompt: '海报版面效果图，' },
+  // 包装
+  { id: 'box', group: '包装', label: '包装盒', prompt: '产品包装盒效果图，正面视角，' },
+  { id: 'gift', group: '包装', label: '礼盒', prompt: '天地盖礼盒效果图，正面视角，' },
+  { id: 'bag', group: '包装', label: '手提袋', prompt: '纸质手提袋效果图，' },
+  { id: 'pouch', group: '包装', label: '自立袋', prompt: '自立袋包装效果图，正面视角，' },
+  { id: 'label', group: '包装', label: '瓶贴', prompt: '瓶身标签效果图，' },
+  { id: 'seal', group: '包装', label: '封口贴', prompt: '圆形封口贴效果图，' },
+  { id: 'carton', group: '包装', label: '快递箱', prompt: '电商快递纸箱效果图，正面视角，' },
+  { id: 'cup', group: '包装', label: '纸杯', prompt: '一次性纸杯效果图，' },
+  // 平面印刷
+  { id: 'poster', group: '平面印刷', label: '海报', prompt: '海报版面效果图，' },
+  { id: 'leaflet', group: '平面印刷', label: '三折页', prompt: '三折页宣传单效果图，平铺展开，' },
+  { id: 'card', group: '平面印刷', label: '名片', prompt: '名片正反面效果图，' },
+  { id: 'hangtag', group: '平面印刷', label: '吊牌', prompt: '产品吊牌效果图，' },
+  { id: 'insert', group: '平面印刷', label: '说明卡', prompt: '产品说明卡效果图，' },
+  // 周边物料
+  { id: 'tote', group: '周边物料', label: '帆布袋', prompt: '帆布袋效果图，' },
+  { id: 'tee', group: '周边物料', label: 'T恤', prompt: 'T恤印花效果图，' },
+  { id: 'banner', group: '周边物料', label: '展架', prompt: '易拉宝展架效果图，' },
 ];
 
 // 前端按纯文本渲染（不解析 Markdown），把模型偶尔带出的 Markdown 符号清掉，
@@ -83,10 +102,10 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
 }
 
 /* --------------------------- 通用下拉（composer 内） --------------------------- */
-interface Option { id: string; label: string; hint?: string; locked?: boolean }
+interface Option { id: string; label: string; hint?: string; locked?: boolean; group?: string }
 
 function Pick({
-  icon, caption, value, options, onPick, onLocked,
+  icon, caption, value, options, onPick, onLocked, tall,
 }: {
   icon?: IconName;
   caption?: string;
@@ -95,6 +114,8 @@ function Pick({
   onPick: (id: string) => void;
   /** 点了会员专属档位时调用：不选中，改成弹订阅引导 */
   onLocked?: (id: string) => void;
+  /** 选项多的时候给更高的弹层，避免一进来就要滚（模板有 16 项） */
+  tall?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -108,20 +129,25 @@ function Pick({
       {open && (
         <>
           <div className="lc-backdrop" onClick={() => setOpen(false)} />
-          <div className="lc-pop">
-            {options.map((o) => (
-              <button
-                key={o.id}
-                className={`lc-pop-opt ${o.label === value ? 'sel' : ''} ${o.locked ? 'locked' : ''}`}
-                onClick={() => {
-                  if (o.locked && onLocked) { setOpen(false); onLocked(o.id); return; }
-                  onPick(o.id); setOpen(false);
-                }}
-              >
-                <span>{o.label}</span>
-                <span className="lc-pop-hint">{o.locked ? '会员' : (o.hint || '')}</span>
-                {o.label === value && !o.locked && <Icon name="check" size={13} className="lc-pop-check" />}
-              </button>
+          <div className={`lc-pop ${tall ? 'tall' : ''}`}>
+            {options.map((o, i) => (
+              <Fragment key={o.id}>
+                {/* 分组标题：只在 group 变化时出现一次，列表长了才好找 */}
+                {o.group && o.group !== options[i - 1]?.group && (
+                  <div className="lc-pop-group">{o.group}</div>
+                )}
+                <button
+                  className={`lc-pop-opt ${o.label === value ? 'sel' : ''} ${o.locked ? 'locked' : ''}`}
+                  onClick={() => {
+                    if (o.locked && onLocked) { setOpen(false); onLocked(o.id); return; }
+                    onPick(o.id); setOpen(false);
+                  }}
+                >
+                  <span>{o.label}</span>
+                  <span className="lc-pop-hint">{o.locked ? '会员' : (o.hint || '')}</span>
+                  {o.label === value && !o.locked && <Icon name="check" size={13} className="lc-pop-check" />}
+                </button>
+              </Fragment>
             ))}
           </div>
         </>
@@ -769,8 +795,9 @@ export default function Luna() {
                     <Pick
                       caption="模板"
                       value={template.label}
-                      options={TEMPLATES.map((t) => ({ id: t.id, label: t.label }))}
+                      options={TEMPLATES.map((t) => ({ id: t.id, label: t.label, group: t.group }))}
                       onPick={setTemplateId}
+                      tall
                     />
                   </>
                 )}

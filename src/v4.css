@@ -1309,6 +1309,26 @@ body.on-start .global-back { display: none; }
   font-size: 11px; line-height: 1.55; color: var(--v4-ink-2);
 }
 
+/* 窄屏：模板是这一排最右的胶囊，按左对齐会顶出屏幕，改成右对齐贴住胶囊右边缘 */
+@media (max-width: 860px) {
+  .lc-pop.tall { left: auto; right: 0; max-width: calc(100vw - 32px); max-height: 64vh; }
+}
+
+/* 模板下拉有 16 项：把行高压紧 + 弹层放高，桌面端一屏看全，不靠滚动找 */
+.lc-pop.tall { max-height: min(620px, 78vh); min-width: 210px; }
+.lc-pop.tall .lc-pop-opt { padding: 5px 9px; }
+/* 分组标题（包装 / 平面印刷 / 周边物料） */
+.lc-pop-group {
+  padding: 7px 9px 3px;
+  font-size: 10px; letter-spacing: .1em;
+  color: var(--v4-ink-3);
+}
+.lc-pop-group:not(:first-child) {
+  margin-top: 1px;
+  border-top: 1px solid var(--lc-hair);
+  padding-top: 7px;
+}
+
 /* 对话模型弹层（2026-11 扩充到 7 款）：今日额度条 + 两行式选项。
    额度是「钱」不是「次数」，所以用一条细进度条 + ¥ 数字，橙线只在没超额时出现；
    用完时灰掉，和「已停用」的状态一致，不用红色报警。 */
