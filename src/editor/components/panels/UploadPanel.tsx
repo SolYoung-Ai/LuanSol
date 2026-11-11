@@ -8,9 +8,11 @@ import React, { useRef, useState } from 'react';
 import { useEditor } from '../../EditorContext';
 import { useApp } from '../../../store';
 import { Icon } from '../../../components/icons';
+import { useLang } from '../../../i18n';
 
 export default function UploadPanel() {
   const ed = useEditor();
+  const { t } = useLang();
   const { setToast } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -22,14 +24,14 @@ export default function UploadPanel() {
     if (!files || busy) return;
     const arr = Array.from(files);
     if (arr.length === 0) return;
-    if (arr.some((f) => f.size > 12 * 1024 * 1024)) { setToast('单张图片请小于 12MB'); return; }
+    if (arr.some((f) => f.size > 12 * 1024 * 1024)) { setToast(t('单张图片请小于 12MB', 'Each image must be under 12MB')); return; }
     setBusy(true);
     try {
       const n = await ed.uploadImages(arr);
-      if (n === 0) setToast('没有可用的图片，请换 PNG / JPG / SVG');
-      else setToast(`已上传 ${n} 张，并加入当前画布`);
+      if (n === 0) setToast(t('没有可用的图片，请换 PNG / JPG / SVG', 'No usable images — try PNG / JPG / SVG'));
+      else setToast(t(`已上传 ${n} 张，并加入当前画布`, `Uploaded ${n} image(s) and added them to the artboard`));
     } catch (e) {
-      setToast(e instanceof Error ? e.message : '上传失败，请重试');
+      setToast(e instanceof Error ? e.message : t('上传失败，请重试', 'Upload failed — please try again'));
     } finally {
       setBusy(false);
     }
@@ -38,8 +40,8 @@ export default function UploadPanel() {
   return (
     <div className="ed-panel">
       <div className="ed-panel-head">
-        <div className="ed-panel-title"><Icon name="upload" size={17} /><span>上传</span></div>
-        <p>把自己的 Logo、产品图、图案放进设计里</p>
+        <div className="ed-panel-title"><Icon name="upload" size={17} /><span>{t('上传', 'Upload')}</span></div>
+        <p>{t('把自己的 Logo、产品图、图案放进设计里', 'Drop your own logo, product photo or pattern into the design')}</p>
       </div>
 
       <div className="ed-panel-body">
@@ -60,33 +62,33 @@ export default function UploadPanel() {
           onDrop={(e) => { e.preventDefault(); setOver(false); void handleFiles(e.dataTransfer.files); }}
         >
           <span className="ed-dropzone-ico"><Icon name="upload" size={24} /></span>
-          <strong>{busy ? '正在处理图片…' : '点击上传，或把图片拖到这里'}</strong>
-          <em>支持 PNG / JPG / WEBP / SVG，单张 ≤ 12MB</em>
+          <strong>{busy ? t('正在处理图片…', 'Processing images…') : t('点击上传，或把图片拖到这里', 'Click to upload, or drag images here')}</strong>
+          <em>{t('支持 PNG / JPG / WEBP / SVG，单张 ≤ 12MB', 'PNG / JPG / WEBP / SVG, up to 12MB each')}</em>
         </div>
 
         <div className="ed-tips">
-          <div><Icon name="image" size={14} /><span>产品图建议去背透明 PNG，放到包装上更干净。</span></div>
-          <div><Icon name="layers" size={14} /><span>上传后自动成为独立图层，可拖动、缩放、调透明度。</span></div>
-          <div><Icon name="download" size={14} /><span>导出的 PNG / PDF 会使用原图分辨率，不会模糊。</span></div>
+          <div><Icon name="image" size={14} /><span>{t('产品图建议去背透明 PNG，放到包装上更干净。', 'A cut-out transparent PNG of your product looks cleanest on the package.')}</span></div>
+          <div><Icon name="layers" size={14} /><span>{t('上传后自动成为独立图层，可拖动、缩放、调透明度。', 'Uploads become their own layer — drag, resize and set opacity freely.')}</span></div>
+          <div><Icon name="download" size={14} /><span>{t('导出的 PNG / PDF 会使用原图分辨率，不会模糊。', 'Exported PNG / PDF keeps the original resolution, so nothing goes blurry.')}</span></div>
         </div>
 
-        <div className="ed-section-label">我的上传</div>
+        <div className="ed-section-label">{t('我的上传', 'My uploads')}</div>
         {mine.length === 0 ? (
           <div className="ed-hint-card">
             <Icon name="folder" size={16} />
-            <p>还没有上传记录。上传过的图片会留在这里，方便在其他包装面重复使用。</p>
+            <p>{t('还没有上传记录。上传过的图片会留在这里，方便在其他包装面重复使用。', 'Nothing uploaded yet. Anything you upload stays here so you can reuse it on other faces.')}</p>
           </div>
         ) : (
           <div className="ed-asset-grid">
             {mine.map((a) => (
               <div className="ed-asset" key={a.id}>
-                <button className="ed-asset-img" onClick={() => ed.addAssetToCanvas(a.id)} title="加入当前画布">
+                <button className="ed-asset-img" onClick={() => ed.addAssetToCanvas(a.id)} title={t('加入当前画布', 'Add to the artboard')}>
                   <img src={a.src} alt={a.name} />
                   <span className="ed-asset-add"><Icon name="plus" size={13} /></span>
                 </button>
                 <div className="ed-asset-meta">
                   <span title={a.name}>{a.name}</span>
-                  <button onClick={() => ed.removeAsset(a.id)} title="删除素材"><Icon name="trash" size={12} /></button>
+                  <button onClick={() => ed.removeAsset(a.id)} title={t('删除素材', 'Delete asset')}><Icon name="trash" size={12} /></button>
                 </div>
               </div>
             ))}

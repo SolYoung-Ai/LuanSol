@@ -121,8 +121,29 @@ export const MATERIALS: MaterialDef[] = [
   },
 ];
 
-export const MATERIAL_GROUPS: { id: MaterialGroup; label: string }[] = [
-  { id: 'shape', label: '形状' },
-  { id: 'icon', label: '图标' },
-  { id: 'pattern', label: '纹样' },
+export const MATERIAL_GROUPS: { id: MaterialGroup; label: string; labelEn: string }[] = [
+  { id: 'shape', label: '形状', labelEn: 'Shapes' },
+  { id: 'icon', label: '图标', labelEn: 'Icons' },
+  { id: 'pattern', label: '纹样', labelEn: 'Patterns' },
 ];
+
+/** 素材名的英文对照：中文名同时进图层名与提示词，界面按语言取英文 */
+export const MATERIAL_NAME_EN: Record<string, string> = {
+  sq: 'Square', rrect: 'Rounded rect', circle: 'Circle', ellipse: 'Ellipse',
+  tri: 'Triangle', diamond: 'Diamond', hex: 'Hexagon', star: 'Star',
+  heart: 'Heart', capsule: 'Capsule', archshape: 'Arch', drop: 'Teardrop',
+  arrow: 'Arrow', burst: 'Burst badge', cross: 'Cross', semicircle: 'Semicircle',
+  leaf: 'Leaf', cup: 'Teacup', sunicon: 'Sun', moon: 'Crescent',
+  mountain: 'Mountains', waveicon: 'Water wave', flower: 'Flower', wheat: 'Wheat',
+  recycle: 'Recyclable', globe: 'Globe', shield: 'Quality mark', crown: 'Crown',
+  tag: 'Tag', snow: 'Snowflake', fire: 'Flame', tea: 'Tea bud',
+  mountainline: 'Distant hills', organic: 'Organic leaf', noadd: 'No additives', vegan: 'Vegan',
+  p_stripe: 'Diagonal stripes', p_dot: 'Polka dots', p_grid: 'Grid', p_check: 'Checkerboard',
+  p_wave: 'Waves', p_cloud: 'Cloud motif', p_sunburst: 'Sunburst', p_scale: 'Fish scale',
+};
+
+/** 按语言取素材名 / 分组名 */
+export const materialName = (id: string, name: string, lang: string) =>
+  (lang === 'en' ? MATERIAL_NAME_EN[id] || name : name);
+export const groupLabel = (g: { label: string; labelEn: string }, lang: string) =>
+  (lang === 'en' ? g.labelEn : g.label);

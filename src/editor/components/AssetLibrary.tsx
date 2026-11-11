@@ -5,15 +5,16 @@ import { Icon } from '../../components/icons';
 import { useEditor } from '../EditorContext';
 import { inputStyle } from '../constants';
 import type { Asset, AssetCategory } from '../../types';
+import { useLang } from '../../i18n';
 
-const CATEGORIES: { id: AssetCategory | 'all'; label: string }[] = [
-  { id: 'all', label: '全部' },
-  { id: 'background', label: '背景' },
-  { id: 'illustration', label: '插画' },
-  { id: 'texture', label: '纹理' },
-  { id: 'pattern', label: '图案' },
-  { id: 'sticker', label: '贴纸' },
-  { id: 'product', label: '产品' },
+const CATEGORIES: { id: AssetCategory | 'all'; zh: string; en: string }[] = [
+  { id: 'all', zh: '全部', en: 'All' },
+  { id: 'background', zh: '背景', en: 'Backgrounds' },
+  { id: 'illustration', zh: '插画', en: 'Illustration' },
+  { id: 'texture', zh: '纹理', en: 'Texture' },
+  { id: 'pattern', zh: '图案', en: 'Pattern' },
+  { id: 'sticker', zh: '贴纸', en: 'Sticker' },
+  { id: 'product', zh: '产品', en: 'Product' },
 ];
 
 const GEN_CATEGORIES: AssetCategory[] = ['background', 'illustration', 'texture', 'pattern', 'sticker', 'product'];
@@ -25,6 +26,7 @@ const wrap: React.CSSProperties = {
 
 export default function AssetLibrary() {
   const ed = useEditor();
+  const { lang, t } = useLang();
   const assets = ed.s.assets;
   const [filter, setFilter] = useState<AssetCategory | 'all'>('all');
   const [favOnly, setFavOnly] = useState(false);
@@ -44,20 +46,20 @@ export default function AssetLibrary() {
     <div style={wrap}>
       {/* 生成区 */}
       <div style={{ padding: 16, borderBottom: '1px solid #e6e1d6' }}>
-        <div style={{ fontSize: 12, color: '#666', marginBottom: 8, fontWeight: 600 }}>AI 生成素材</div>
+        <div style={{ fontSize: 12, color: '#666', marginBottom: 8, fontWeight: 600 }}>{t('AI 生成素材', 'Generate an asset')}</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <select
             value={genCat}
             onChange={(e) => setGenCat(e.target.value as AssetCategory)}
             style={{ ...inputStyle, width: 96 }}
           >
-            {GEN_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORIES.find((x) => x.id === c)?.label}</option>)}
+            {GEN_CATEGORIES.map((c) => <option key={c} value={c}>{(() => { const x = CATEGORIES.find((y) => y.id === c); return x ? (lang === 'en' ? x.en : x.zh) : c; })()}</option>)}
           </select>
           <input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onGenerate()}
-            placeholder="描述要生成的素材，如：极简植物线描插画"
+            placeholder={t('描述要生成的素材，如：极简植物线描插画', 'Describe the asset, e.g. minimal botanical line illustration')}
             style={inputStyle}
           />
           <button
@@ -69,7 +71,7 @@ export default function AssetLibrary() {
               opacity: ed.assetBusy ? 0.6 : 1, whiteSpace: 'nowrap',
             }}
           >
-            {ed.assetBusy ? '生成中' : '生成'}
+            {ed.assetBusy ? t('生成中', 'Generating') : t('生成', 'Generate')}
           </button>
         </div>
         <button
@@ -80,7 +82,7 @@ export default function AssetLibrary() {
             padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#555',
           }}
         >
-          <Icon name="upload" size={14} /> 上传本地素材
+          <Icon name="upload" size={14} /> {t('上传本地素材', 'Upload a local asset')}
         </button>
         <input ref={ed.assetFileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={ed.onPickAssetFiles} />
       </div>
@@ -101,7 +103,7 @@ export default function AssetLibrary() {
               padding: '3px 10px', fontSize: 11, cursor: 'pointer',
             }}
           >
-            {c.label}
+            {lang === 'en' ? c.en : c.zh}
           </button>
         ))}
         <button
@@ -112,7 +114,7 @@ export default function AssetLibrary() {
             color: favOnly ? '#e8783a' : '#888', fontSize: 11,
           }}
         >
-          <Icon name={favOnly ? 'check' : 'spark'} size={13} /> 只看收藏
+          <Icon name={favOnly ? 'check' : 'spark'} size={13} /> {t('只看收藏', 'Favourites only')}
         </button>
       </div>
 
@@ -123,7 +125,7 @@ export default function AssetLibrary() {
             textAlign: 'center', color: '#999', fontSize: 13, padding: '48px 0',
           }}>
             <Icon name="folder" size={28} />
-            <div style={{ marginTop: 10 }}>暂无素材，生成或上传一个开始</div>
+            <div style={{ marginTop: 10 }}>{t('暂无素材，生成或上传一个开始', 'No assets yet — generate or upload one to start')}</div>
           </div>
         ) : (
           <div style={{
@@ -152,18 +154,18 @@ export default function AssetLibrary() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <button
                       onClick={() => ed.addAssetToCanvas(a.id)}
-                      title="加入当前画布"
+                      title={t('加入当前画布', 'Add to the artboard')}
                       style={{
                         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                         background: '#333', color: '#fff', border: 'none', borderRadius: 4,
                         padding: '4px 0', fontSize: 10, cursor: 'pointer',
                       }}
                     >
-                      <Icon name="plus" size={12} /> 上画布
+                      <Icon name="plus" size={12} /> {t('上画布', 'Add')}
                     </button>
                     <button
                       onClick={() => ed.toggleFavoriteAsset(a.id)}
-                      title="收藏"
+                      title={t('收藏', 'Favourite')}
                       style={{
                         background: 'none', border: '1px solid #ddd', borderRadius: 4,
                         width: 26, height: 24, cursor: 'pointer',
@@ -175,7 +177,7 @@ export default function AssetLibrary() {
                     </button>
                     <button
                       onClick={() => ed.removeAsset(a.id)}
-                      title="删除"
+                      title={t('删除', 'Delete')}
                       style={{
                         background: 'none', border: '1px solid #ddd', borderRadius: 4,
                         width: 26, height: 24, cursor: 'pointer', color: '#999',

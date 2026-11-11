@@ -4,6 +4,7 @@ import { useEditor } from '../EditorContext';
 import { Icon, IconName } from '../../components/icons';
 import { miniBtn, smallBtn } from '../constants';
 import type { Layer } from '../../types';
+import { useLang } from '../../i18n';
 
 function LayerTypeIcon({ layer }: { layer: Layer }) {
   const name: IconName = layer.type === 'text' ? 'text' : layer.type === 'image' ? 'image' : 'shape';
@@ -20,14 +21,15 @@ function IconAction({ icon, title, onClick }: { icon: IconName; title: string; o
 
 export default function LayersPanel() {
   const ed = useEditor();
+  const { t } = useLang();
   const face = ed.face;
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>图层列表</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{t('图层列表', 'Layers')}</div>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: '#999' }}>{face?.layers.length || 0} 个图层</span>
+        <span style={{ fontSize: 11, color: '#999' }}>{t(`${face?.layers.length || 0} 个图层`, `${face?.layers.length || 0} layers`)}</span>
       </div>
 
       {/* 倒序显示：顶部图层在列表上方 */}
@@ -51,10 +53,10 @@ export default function LayersPanel() {
               }}>
                 {layer.name}
               </span>
-              <IconAction icon={layer.hidden ? 'eyeOff' : 'eye'} title="显示/隐藏" onClick={() => ed.toggleVisible(layer.id)} />
-              <IconAction icon={layer.locked ? 'lock' : 'unlock'} title="锁定/解锁" onClick={() => ed.toggleLock(layer.id)} />
-              <IconAction icon="copy" title="复制" onClick={() => ed.duplicateLayer(layer.id)} />
-              <IconAction icon="trash" title="删除" onClick={() => ed.deleteLayer(layer.id)} />
+              <IconAction icon={layer.hidden ? 'eyeOff' : 'eye'} title={t('显示/隐藏', 'Show / hide')} onClick={() => ed.toggleVisible(layer.id)} />
+              <IconAction icon={layer.locked ? 'lock' : 'unlock'} title={t('锁定/解锁', 'Lock / unlock')} onClick={() => ed.toggleLock(layer.id)} />
+              <IconAction icon="copy" title={t('复制', 'Duplicate')} onClick={() => ed.duplicateLayer(layer.id)} />
+              <IconAction icon="trash" title={t('删除', 'Delete')} onClick={() => ed.deleteLayer(layer.id)} />
             </div>
 
             {/* 选中时展开更多操作 */}
@@ -62,19 +64,19 @@ export default function LayersPanel() {
               <div style={{ display: 'flex', gap: 4, marginTop: 8, paddingTop: 8, borderTop: '1px solid #eee' }}>
                 <button onClick={(e) => { e.stopPropagation(); ed.renameLayer(layer.id); }} style={smallBtn}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <Icon name="edit" size={12} />重命名
+                    <Icon name="edit" size={12} />{t('重命名', 'Rename')}
                   </span>
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); ed.moveLayerUp(layer.id); }} style={smallBtn} title="上移一层">
+                <button onClick={(e) => { e.stopPropagation(); ed.moveLayerUp(layer.id); }} style={smallBtn} title={t('上移一层', 'Move up')}>
                   <Icon name="chevronUp" size={13} />
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); ed.moveLayerDown(layer.id); }} style={smallBtn} title="下移一层">
+                <button onClick={(e) => { e.stopPropagation(); ed.moveLayerDown(layer.id); }} style={smallBtn} title={t('下移一层', 'Move down')}>
                   <Icon name="chevronDown" size={13} />
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); ed.bringToFront(layer.id); }} style={smallBtn} title="置顶">
+                <button onClick={(e) => { e.stopPropagation(); ed.bringToFront(layer.id); }} style={smallBtn} title={t('置顶', 'Bring to front')}>
                   <Icon name="chevronUp" size={13} />
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); ed.sendToBack(layer.id); }} style={smallBtn} title="置底">
+                <button onClick={(e) => { e.stopPropagation(); ed.sendToBack(layer.id); }} style={smallBtn} title={t('置底', 'Send to back')}>
                   <Icon name="chevronDown" size={13} />
                 </button>
               </div>
@@ -85,7 +87,7 @@ export default function LayersPanel() {
 
       {(!face || face.layers.length === 0) && (
         <div style={{ textAlign: 'center', color: '#aaa', fontSize: 12, padding: '20px 0' }}>
-          暂无图层
+          {t('暂无图层', 'No layers yet')}
         </div>
       )}
     </div>

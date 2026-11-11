@@ -8,9 +8,11 @@
  * ============================================================ */
 import React, { useEffect } from 'react';
 import { go } from '../ui';
+import { useLang } from '../i18n';
 import { EntryCards, useEntryPick } from '../workflow/EntryCards';
 
 export default function Start() {
+  const { t } = useLang();
   const { busy, pick } = useEntryPick();
 
   // 整屏页：隐藏页脚与全局「返回」，避免屏幕下方多出一排与导航重复的链接
@@ -26,9 +28,12 @@ export default function Start() {
 
   return <div className="hp-start">
     <div className="hp-start-inner">
-      <h1 className="hp-start-title">开始创造吧，设计师！</h1>
+      <h1 className="hp-start-title">{t('开始创造吧，设计师！', 'Let’s make something, designer.')}</h1>
       <EntryCards busy={busy} onPick={choose} />
-      <p className="hp-start-note">不确定选哪个？先选「从零开始」，下一步补充产品信息即可。</p>
+      <p className="hp-start-note">
+        {t('不确定选哪个？先选「从零开始」，下一步补充产品信息即可。',
+          'Not sure which one? Pick “Start from scratch” — you can add product details on the next step.')}
+      </p>
     </div>
   </div>;
 }

@@ -21,6 +21,11 @@ import { go } from '../ui';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageListCost, imageModel, imagePromoLabel, isPromoTier, resolveTier } from '../cloud/models';
 import { SideNavLinks, SideAccount, SideBrand, SideFold } from '../components/SideNav';
+import { useLang } from '../i18n';
+
+/** 名称类常量存双语：模块加载时拿不到当前语言，只能在渲染时挑。
+ *  prompt 一律保持中文——它进的是生图模型提示词，决定画面里的文字语言。 */
+type L = { zh: string; en: string };
 
 type LunaMode = 'chat' | 'image';
 
@@ -30,49 +35,53 @@ const tierShort = (t: ImageTier) => imageShort(t);
 const tierCost = (t: ImageTier) => imageCost(t);
 
 /** 比例 → Seedream 实际出图尺寸（自动则交给服务端默认 1024×1024） */
-const RATIOS = [
-  { id: 'auto', label: '自动', size: undefined as string | undefined },
-  { id: '1:1', label: '1:1', size: '1024x1024' },
-  { id: '3:4', label: '3:4', size: '864x1152' },
-  { id: '4:3', label: '4:3', size: '1152x864' },
-  { id: '16:9', label: '16:9', size: '1280x720' },
-  { id: '9:16', label: '9:16', size: '720x1280' },
+const RATIOS: { id: string; label: L; size: string | undefined }[] = [
+  { id: 'auto', label: { zh: '自动', en: 'Auto' }, size: undefined },
+  { id: '1:1', label: { zh: '1:1', en: '1:1' }, size: '1024x1024' },
+  { id: '3:4', label: { zh: '3:4', en: '3:4' }, size: '864x1152' },
+  { id: '4:3', label: { zh: '4:3', en: '4:3' }, size: '1152x864' },
+  { id: '16:9', label: { zh: '16:9', en: '16:9' }, size: '1280x720' },
+  { id: '9:16', label: { zh: '9:16', en: '9:16' }, size: '720x1280' },
 ];
 
-const STYLES = [
-  { id: 'none', label: '不限', prompt: '' },
-  { id: 'photo', label: '商业摄影', prompt: '商业摄影棚拍风格，柔光，干净背景，高清质感。' },
-  { id: 'minimal', label: '极简平面', prompt: '极简平面设计，大面积留白，克制配色，干净排版。' },
-  { id: 'ink', label: '东方水墨', prompt: '中国水墨画风格，宣纸质感，淡墨晕染，留白意境。' },
-  { id: 'retro', label: '复古手绘', prompt: '复古手绘插画风格，做旧纸张质感，暖色调。' },
-  { id: '3d', label: '3D 立体', prompt: '3D 渲染风格，柔和布光，圆润体积感，细腻材质。' },
+const STYLES: { id: string; label: L; prompt: string }[] = [
+  { id: 'none', label: { zh: '不限', en: 'Any' }, prompt: '' },
+  { id: 'photo', label: { zh: '商业摄影', en: 'Product photo' }, prompt: '商业摄影棚拍风格，柔光，干净背景，高清质感。' },
+  { id: 'minimal', label: { zh: '极简平面', en: 'Minimal graphic' }, prompt: '极简平面设计，大面积留白，克制配色，干净排版。' },
+  { id: 'ink', label: { zh: '东方水墨', en: 'Ink wash' }, prompt: '中国水墨画风格，宣纸质感，淡墨晕染，留白意境。' },
+  { id: 'retro', label: { zh: '复古手绘', en: 'Retro hand-drawn' }, prompt: '复古手绘插画风格，做旧纸张质感，暖色调。' },
+  { id: '3d', label: { zh: '3D 立体', en: '3D render' }, prompt: '3D 渲染风格，柔和布光，圆润体积感，细腻材质。' },
 ];
 
 /* 模板 = 一段「成品形态」前缀，拼在用户描述前面。
  * 这里覆盖平台真正能做的三类设计：包装、平面印刷、周边物料，
  * 每一项都写清「什么成品 + 什么视角」，出图才不会跑成随便一张插画。
  * group 只用于分组标题，选中值仍是 id，不影响已保存的旧项目。 */
-const TEMPLATES = [
-  { id: 'none', label: '不限', prompt: '' },
+const PACK: L = { zh: '包装', en: 'Packaging' };
+const PRINT: L = { zh: '平面印刷', en: 'Print' };
+const MERCH: L = { zh: '周边物料', en: 'Merch' };
+
+const TEMPLATES: { id: string; label: L; group?: L; prompt: string }[] = [
+  { id: 'none', label: { zh: '不限', en: 'Any' }, prompt: '' },
   // 包装
-  { id: 'box', group: '包装', label: '包装盒', prompt: '产品包装盒效果图，正面视角，' },
-  { id: 'gift', group: '包装', label: '礼盒', prompt: '天地盖礼盒效果图，正面视角，' },
-  { id: 'bag', group: '包装', label: '手提袋', prompt: '纸质手提袋效果图，' },
-  { id: 'pouch', group: '包装', label: '自立袋', prompt: '自立袋包装效果图，正面视角，' },
-  { id: 'label', group: '包装', label: '瓶贴', prompt: '瓶身标签效果图，' },
-  { id: 'seal', group: '包装', label: '封口贴', prompt: '圆形封口贴效果图，' },
-  { id: 'carton', group: '包装', label: '快递箱', prompt: '电商快递纸箱效果图，正面视角，' },
-  { id: 'cup', group: '包装', label: '纸杯', prompt: '一次性纸杯效果图，' },
+  { id: 'box', group: PACK, label: { zh: '包装盒', en: 'Box' }, prompt: '产品包装盒效果图，正面视角，' },
+  { id: 'gift', group: PACK, label: { zh: '礼盒', en: 'Gift box' }, prompt: '天地盖礼盒效果图，正面视角，' },
+  { id: 'bag', group: PACK, label: { zh: '手提袋', en: 'Paper bag' }, prompt: '纸质手提袋效果图，' },
+  { id: 'pouch', group: PACK, label: { zh: '自立袋', en: 'Stand-up pouch' }, prompt: '自立袋包装效果图，正面视角，' },
+  { id: 'label', group: PACK, label: { zh: '瓶贴', en: 'Bottle label' }, prompt: '瓶身标签效果图，' },
+  { id: 'seal', group: PACK, label: { zh: '封口贴', en: 'Seal sticker' }, prompt: '圆形封口贴效果图，' },
+  { id: 'carton', group: PACK, label: { zh: '快递箱', en: 'Shipping carton' }, prompt: '电商快递纸箱效果图，正面视角，' },
+  { id: 'cup', group: PACK, label: { zh: '纸杯', en: 'Paper cup' }, prompt: '一次性纸杯效果图，' },
   // 平面印刷
-  { id: 'poster', group: '平面印刷', label: '海报', prompt: '海报版面效果图，' },
-  { id: 'leaflet', group: '平面印刷', label: '三折页', prompt: '三折页宣传单效果图，平铺展开，' },
-  { id: 'card', group: '平面印刷', label: '名片', prompt: '名片正反面效果图，' },
-  { id: 'hangtag', group: '平面印刷', label: '吊牌', prompt: '产品吊牌效果图，' },
-  { id: 'insert', group: '平面印刷', label: '说明卡', prompt: '产品说明卡效果图，' },
+  { id: 'poster', group: PRINT, label: { zh: '海报', en: 'Poster' }, prompt: '海报版面效果图，' },
+  { id: 'leaflet', group: PRINT, label: { zh: '三折页', en: 'Tri-fold leaflet' }, prompt: '三折页宣传单效果图，平铺展开，' },
+  { id: 'card', group: PRINT, label: { zh: '名片', en: 'Business card' }, prompt: '名片正反面效果图，' },
+  { id: 'hangtag', group: PRINT, label: { zh: '吊牌', en: 'Hang tag' }, prompt: '产品吊牌效果图，' },
+  { id: 'insert', group: PRINT, label: { zh: '说明卡', en: 'Insert card' }, prompt: '产品说明卡效果图，' },
   // 周边物料
-  { id: 'tote', group: '周边物料', label: '帆布袋', prompt: '帆布袋效果图，' },
-  { id: 'tee', group: '周边物料', label: 'T恤', prompt: 'T恤印花效果图，' },
-  { id: 'banner', group: '周边物料', label: '展架', prompt: '易拉宝展架效果图，' },
+  { id: 'tote', group: MERCH, label: { zh: '帆布袋', en: 'Tote bag' }, prompt: '帆布袋效果图，' },
+  { id: 'tee', group: MERCH, label: { zh: 'T恤', en: 'T-shirt' }, prompt: 'T恤印花效果图，' },
+  { id: 'banner', group: MERCH, label: { zh: '展架', en: 'Roll-up banner' }, prompt: '易拉宝展架效果图，' },
 ];
 
 // 前端按纯文本渲染（不解析 Markdown），把模型偶尔带出的 Markdown 符号清掉，
@@ -87,13 +96,14 @@ const toPlainText = (s: string) =>
 
 /* --------------------------- 思考过程折叠块 --------------------------- */
 function ReasoningBlock({ reasoning }: { reasoning: string }) {
+  const { t } = useLang();
   // 默认折叠，避免一大串思考内容刷屏；用户点击标题可自行展开
   const [open, setOpen] = useState(false);
   return (
     <div className="lc-reason">
       <button className="lc-reason-head" onClick={() => setOpen((o) => !o)}>
         <Icon name="brain" size={14} />
-        <span>思考过程</span>
+        <span>{t('思考过程', 'Reasoning')}</span>
         <Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} className="lc-reason-chev" />
       </button>
       {open && <div className="lc-reason-body">{reasoning}</div>}
@@ -117,6 +127,7 @@ function Pick({
   /** 选项多的时候给更高的弹层，避免一进来就要滚（模板有 16 项） */
   tall?: boolean;
 }) {
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   return (
     <div className="lc-pick">
@@ -144,7 +155,7 @@ function Pick({
                   }}
                 >
                   <span>{o.label}</span>
-                  <span className="lc-pop-hint">{o.locked ? '会员' : (o.hint || '')}</span>
+                  <span className="lc-pop-hint">{o.locked ? t('会员', 'Pro') : (o.hint || '')}</span>
                   {o.label === value && !o.locked && <Icon name="check" size={13} className="lc-pop-check" />}
                 </button>
               </Fragment>
@@ -175,8 +186,10 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
   onUnavailable: (label: string) => void;
   onRefresh: () => void;
 }) {
+  const { lang, t } = useLang();
   const [open, setOpen] = useState(false);
   const cur = findChatModel(value);
+  const shortOf = (m: { short: string; shortEn?: string }) => (lang === 'en' ? (m.shortEn || m.short) : m.short);
   const used = spent ?? 0;
   const left = Math.max(0, budget - used);
   // 只显示「用掉百分之几」：金额是内部成本口径，摊给用户看反而要解释汇率与分时价
@@ -194,25 +207,25 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
       <button
         className={`lc-tag on ${open ? 'open' : ''}`}
         onClick={toggle}
-        title={`对话模型：${cur.label}`}
+        title={t(`对话模型：${cur.label}`, `Chat model: ${cur.label}`)}
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <Icon name="message" size={14} />对话
-        <span className="lc-tag-sub">{cur.short}</span>
+        <Icon name="message" size={14} />{t('对话', 'Chat')}
+        <span className="lc-tag-sub">{shortOf(cur)}</span>
         <Icon name="chevronDown" size={12} className="lc-tag-chev" />
       </button>
       {open && (
         <>
           <div className="lc-backdrop" onClick={() => setOpen(false)} />
           <div className="lc-pop wide" role="menu">
-            <div className="lc-pop-title">选择语言模型</div>
+            <div className="lc-pop-title">{t('选择语言模型', 'Choose a language model')}</div>
 
             {/* 今日额度：所有人共用一口 ¥1 的桶，会员模型按真实 token 花费计入 */}
             <div className={`lc-quota ${empty ? 'full' : ''}`}>
               <div className="lc-quota-head">
-                <span>今日额度 · 会员模型</span>
-                <span className="lc-quota-num">{spent === null ? '统计中…' : `${pct}%`}</span>
+                <span>{t('今日额度 · 会员模型', 'Today’s quota · Pro models')}</span>
+                <span className="lc-quota-num">{spent === null ? t('统计中…', 'Calculating…') : `${pct}%`}</span>
               </div>
               <div className="lc-quota-bar">
                 {/* 0% 时不画那 1px 橙点：看起来像「已经花了 1%」，容易让人以为额度被偷跑 */}
@@ -220,13 +233,16 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
               </div>
               <div className="lc-quota-note">
                 {spent === null
-                  ? '连接云端后显示今日用量'
+                  ? t('连接云端后显示今日用量', 'Connect to the cloud to see today’s usage')
                   : empty
-                    ? '今日额度已用完，会员模型明天 0 点恢复；DeepSeek-V4.1-Flash 不限'
+                    ? t('今日额度已用完，会员模型明天 0 点恢复；DeepSeek-V4.1-Flash 不限',
+                      'Quota used up — Pro models reset at midnight; DeepSeek-V4.1-Flash has no limit')
                     : cur.tier === 'free'
                       // 默认档不占额度，必须写清楚，否则用户以为聊几句就把额度花光了
-                      ? '当前是免费默认档，不占额度；切到 PRO 模型才计算今日额度'
-                      : `按当前 ${cur.short} 估算约还能聊 ${maxTurns} 轮`}
+                      ? t('当前是免费默认档，不占额度；切到 PRO 模型才计算今日额度',
+                        'You are on the free default model, which uses no quota — only Pro models count')
+                      : t(`按当前 ${shortOf(cur)} 估算约还能聊 ${maxTurns} 轮`,
+                        `About ${maxTurns} more turns at the current rate`)}
               </div>
             </div>
 
@@ -235,20 +251,23 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
               const quotaLocked = m.tier === 'pro' && empty;
               const locked = planLocked || quotaLocked || !!m.soon;
               const right = m.soon
-                ? '待开通'
+                ? t('待开通', 'Soon')
                 : quotaLocked
-                  ? '额度用完'
+                  ? t('额度用完', 'Quota used up')
                   : planLocked
-                    ? '会员'
+                    ? t('会员', 'Pro')
                     : m.tier === 'free'
-                      ? '不限'
-                      : `约 ${turnsForBudget(m, left)} 轮`;
+                      ? t('不限', 'Unlimited')
+                      : t(`约 ${turnsForBudget(m, left)} 轮`, `~${turnsForBudget(m, left)} turns`);
               return (
                 <button
                   key={m.id}
                   role="menuitem"
                   className={`lc-pop-opt model ${m.id === value ? 'sel' : ''} ${locked ? 'locked' : ''}`}
-                  title={m.soon ? '这个模型在方舟账号里尚未开通，开通后这里会自动可选' : undefined}
+                  title={m.soon
+                    ? t('这个模型在方舟账号里尚未开通，开通后这里会自动可选',
+                      'Not enabled on the platform account yet — it becomes selectable automatically once it is')
+                    : undefined}
                   onClick={() => {
                     if (m.soon) { onUnavailable(m.label); return; }
                     if (planLocked) { onNeedPro(); return; }
@@ -258,7 +277,7 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
                 >
                   <span className="lc-pop-main">
                     <span className="lc-pop-name">{m.label}</span>
-                    <span className="lc-pop-sub">{m.note}</span>
+                    <span className="lc-pop-sub">{lang === 'en' ? m.noteEn : m.note}</span>
                   </span>
                   <span className="lc-pop-hint">{right}</span>
                   {m.id === value && !locked && <Icon name="check" size={13} className="lc-pop-check" />}
@@ -266,8 +285,14 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
               );
             })}
 
-            {!pro && <div className="lc-pop-note">免费版可用 DeepSeek-V4.1-Flash；其余 6 款开通会员后解锁</div>}
-            {pro && <div className="lc-pop-note">会员模型共用今日额度，按实际 token 花费计算，每天 0 点重置；默认档不占额度</div>}
+            {!pro && <div className="lc-pop-note">
+              {t('免费版可用 DeepSeek-V4.1-Flash；其余 6 款开通会员后解锁',
+                'The free plan includes DeepSeek-V4.1-Flash; the other six unlock with membership')}
+            </div>}
+            {pro && <div className="lc-pop-note">
+              {t('会员模型共用今日额度，按实际 token 花费计算，每天 0 点重置；默认档不占额度',
+                'Pro models share today’s quota, charged by actual token usage and reset at midnight; the default model is free')}
+            </div>}
           </div>
         </>
       )}
@@ -277,11 +302,12 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
 
 /* --------------------------- 单条消息 --------------------------- */
 function Bubble({ m, onMedia }: { m: LunaMessage; onMedia?: () => void }) {
+  const { t } = useLang();
   const [lightbox, setLightbox] = useState<string | null>(null);
   const isUser = m.role === 'user';
   return (
     <div className={`lc-msg ${isUser ? 'user' : 'assistant'}`}>
-      <div className="lc-msg-avatar">{isUser ? '我' : <img src="./logo.png" alt="Luna" />}</div>
+      <div className="lc-msg-avatar">{isUser ? t('我', 'Me') : <img src="./logo.png" alt="Luna" />}</div>
       <div className="lc-msg-body">
         {m.reasoning && <ReasoningBlock reasoning={m.reasoning} />}
         {m.content && m.content !== '（参考图）' && (
@@ -291,21 +317,21 @@ function Bubble({ m, onMedia }: { m: LunaMessage; onMedia?: () => void }) {
         {m.cancelled && (
           <div className="lc-msg-cancelled">
             <span className="lc-msg-cancelled-bar" aria-hidden />
-            已取消，本次未扣积分
+            {t('已取消，本次未扣积分', 'Cancelled — no credits were charged')}
           </div>
         )}
         {m.image && (
           <div className="lc-msg-imgwrap">
             <img
               src={m.image}
-              alt="设计图"
+              alt={t('设计图', 'Design')}
               className="lc-msg-img"
               onLoad={onMedia}
               onClick={() => setLightbox(m.image!)}
             />
             {m.imageTier && !isUser && (
               <span className="lc-img-tag">
-                <Icon name="image" size={12} /> {tierShort(m.imageTier)} · {tierCost(m.imageTier)}积分
+                <Icon name="image" size={12} /> {tierShort(m.imageTier)} · {t(`${tierCost(m.imageTier)} 积分`, `${tierCost(m.imageTier)} credits`)}
               </span>
             )}
           </div>
@@ -313,7 +339,7 @@ function Bubble({ m, onMedia }: { m: LunaMessage; onMedia?: () => void }) {
       </div>
       {lightbox && (
         <div className="lc-lightbox" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="放大预览" />
+          <img src={lightbox} alt={t('放大预览', 'Enlarged preview')} />
         </div>
       )}
     </div>
@@ -325,6 +351,9 @@ export default function Luna() {
   const chat = useChatStore();
   const sub = useSubscription();
   const { setToast } = useApp();
+  const { lang, t } = useLang();
+  /** 双语常量取当前语言 */
+  const L = (v: L) => (lang === 'en' ? v.en : v.zh);
   const [loginOpen, setLoginOpen] = useState(false);
   const [mode, setMode] = useState<LunaMode>('chat');
   const [input, setInput] = useState('');
@@ -398,7 +427,7 @@ export default function Luna() {
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!f) return;
-    if (f.size > 4 * 1024 * 1024) { setToast('图片请小于 4MB'); return; }
+    if (f.size > 4 * 1024 * 1024) { setToast(t('图片请小于 4MB', 'The image must be smaller than 4 MB.')); return; }
     const reader = new FileReader();
     reader.onload = () => {
       setPendingImage(String(reader.result));
@@ -406,7 +435,8 @@ export default function Luna() {
       // 这里明说一句，避免用户以为还是文字档的价却按改图档扣。
       if (imageModel(tier).id === 'gpt2-text') {
         chat.setTier('gpt2-ref');
-        setToast(`已切到「${imageLabel('gpt2-ref')}」（${imageCost('gpt2-ref')} 积分/张），因为这次带了参考图`);
+        setToast(t(`已切到「${imageLabel('gpt2-ref')}」（${imageCost('gpt2-ref')} 积分/张），因为这次带了参考图`,
+          `Switched to “${imageLabel('gpt2-ref')}” (${imageCost('gpt2-ref')} credits each) because a reference image is attached.`));
       }
     };
     reader.readAsDataURL(f);
@@ -423,22 +453,25 @@ export default function Luna() {
 
     if (mode === 'image') {
       if (!text && !img) {
-        setToast('先描述一下画面，比如「国风茶叶礼盒，米白底，烫金纹样，正面视角」');
+        setToast(t('先描述一下画面，比如「国风茶叶礼盒，米白底，烫金纹样，正面视角」',
+          'Describe the scene first, e.g. “oriental tea gift box, cream background, gold foil pattern, front view”.'));
         return;
       }
       // 该档位必须有参考图，否则云函数会直接拒绝（不扣分，但白等一场）
       if (imageModel(tier).needsRef && !img) {
-        setToast(`「${imageLabel('gpt2-ref')}」需要先上传参考图；只用文字的话请切到「${imageLabel('gpt2-text')}」档（${imageCost('gpt2-text')} 积分）`);
+        setToast(t(`「${imageLabel('gpt2-ref')}」需要先上传参考图；只用文字的话请切到「${imageLabel('gpt2-text')}」档（${imageCost('gpt2-text')} 积分）`,
+          `“${imageLabel('gpt2-ref')}” needs a reference image. To work from text only, switch to “${imageLabel('gpt2-text')}” (${imageCost('gpt2-text')} credits).`));
         return;
       }
       // 余额不足时先拦住：绝不能先把输入框清空再被拒——用户刚写好的提示词会凭空消失
       if (typeof balance === 'number' && balance < tierCost(tier)) {
-        setToast(`积分不足：${tierCost(tier)} 积分/张，当前余额 ${balance}。去「积分与充值」签到或兑换后再试。`);
+        setToast(t(`积分不足：${tierCost(tier)} 积分/张，当前余额 ${balance}。去「积分与充值」签到或兑换后再试。`,
+          `Not enough credits: ${tierCost(tier)} per image, balance ${balance}. Top up on the Credits page and try again.`));
         return;
       }
       setPendingImage(null);
       setInput('');
-      void chat.generateImage(text || '按参考图生成一张包装效果图', {
+      void chat.generateImage(text || t('按参考图生成一张包装效果图', 'Generate a packaging mockup from the reference image'), {
         size: ratio.size,
         style: style.prompt + template.prompt,
         reference: img,
@@ -497,9 +530,14 @@ export default function Luna() {
     return (
       <div className="page page-narrow">
         <div style={{ textAlign: 'center', paddingTop: 80 }}>
-          <h1 style={{ fontSize: 32, marginBottom: 12 }}>先登录，再和 Luna 聊设计</h1>
-          <p style={{ color: '#737373', marginBottom: 24 }}>对话会按账号保存到云端，换设备也能看到。</p>
-          <button className="v4-btn-dark" onClick={() => setLoginOpen(true)}>登录 / 注册</button>
+          <h1 style={{ fontSize: 32, marginBottom: 12 }}>
+            {t('先登录，再和 Luna 聊设计', 'Sign in to talk design with Luna')}
+          </h1>
+          <p style={{ color: '#737373', marginBottom: 24 }}>
+            {t('对话会按账号保存到云端，换设备也能看到。',
+              'Conversations are saved to your account, so they follow you across devices.')}
+          </p>
+          <button className="v4-btn-dark" onClick={() => setLoginOpen(true)}>{t('登录 / 注册', 'Sign in')}</button>
         </div>
         <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={() => {}} />
       </div>
@@ -509,12 +547,12 @@ export default function Luna() {
   const initial = (auth.user.label || auth.user.email || 'U').slice(0, 1).toUpperCase();
   // 只有真的同步成功才说「已同步」：免费用户与尚未同步时都如实显示「本机保存」
   const syncLabel = !sub.isPro
-    ? '本机保存'
+    ? t('本机保存', 'Saved locally')
     : chat.syncState === 'syncing'
-      ? '同步中…'
+      ? t('同步中…', 'Syncing…')
       : chat.syncState === 'error'
-        ? '同步失败'
-        : chat.syncState === 'ok' ? '已同步到云端' : '本机保存';
+        ? t('同步失败', 'Sync failed')
+        : chat.syncState === 'ok' ? t('已同步到云端', 'Synced to the cloud') : t('本机保存', 'Saved locally');
   const canSend = !!input.trim() || !!pendingImage;
   const balance = sub.usedLeft;
 
@@ -533,7 +571,7 @@ export default function Luna() {
           {!isMobile && <><SideNavLinks /><div className="sd-divider" /></>}
           <button className="lc-new" onClick={makeNew}>
             <Icon name="plus" size={16} />
-            <span>新建对话</span>
+            <span>{t('新建对话', 'New chat')}</span>
           </button>
 
           <div className="lc-search">
@@ -541,11 +579,11 @@ export default function Luna() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索对话"
+              placeholder={t('搜索对话', 'Search chats')}
             />
           </div>
 
-          <div className="lc-group-label">聊天</div>
+          <div className="lc-group-label">{t('聊天', 'Chats')}</div>
           <div className="lc-list">
             {filtered.map((c) => (
               <div
@@ -571,16 +609,16 @@ export default function Luna() {
                   <span className="lc-item-title">{c.title}</span>
                 )}
                 <div className="lc-item-ops" onClick={(e) => e.stopPropagation()}>
-                  <button title="重命名" onClick={() => startEdit(c.id, c.title)}>
+                  <button title={t('重命名', 'Rename')} onClick={() => startEdit(c.id, c.title)}>
                     <Icon name="edit" size={14} />
                   </button>
-                  <button title="删除" onClick={() => void chat.deleteConversation(c.id)}>
+                  <button title={t('删除', 'Delete')} onClick={() => void chat.deleteConversation(c.id)}>
                     <Icon name="trash" size={14} />
                   </button>
                 </div>
               </div>
             ))}
-            {filtered.length === 0 && <div className="lc-list-empty">没有对话</div>}
+            {filtered.length === 0 && <div className="lc-list-empty">{t('没有对话', 'No chats yet')}</div>}
           </div>
 
           <div className="lc-side-foot">
@@ -589,7 +627,7 @@ export default function Luna() {
             {!isMobile ? <SideAccount syncLabel={syncLabel} /> : <div className="lc-user">
               <div className="lc-user-avatar">
                 {auth.user.avatarUrl
-                  ? <img src={auth.user.avatarUrl} alt="头像" />
+                  ? <img src={auth.user.avatarUrl} alt={t('头像', 'Avatar')} />
                   : initial}
               </div>
               <div className="lc-user-meta">
@@ -602,21 +640,21 @@ export default function Luna() {
 
         {/* 收起后只留一列图标快捷入口，点「搜索」会直接把侧栏展开 */}
         {!isMobile && !sideOpen && <div className="lc-rail">
-          <button className="lc-rail-logo" title="展开侧栏" aria-label="展开侧栏" onClick={() => setSideOpen(true)}>
+          <button className="lc-rail-logo" title={t('展开侧栏', 'Expand sidebar')} aria-label={t('展开侧栏', 'Expand sidebar')} onClick={() => setSideOpen(true)}>
             <img src="./logo.png" alt="" />
           </button>
-          <button className="lc-rail-btn" title="新建对话" aria-label="新建对话" onClick={makeNew}>
+          <button className="lc-rail-btn" title={t('新建对话', 'New chat')} aria-label={t('新建对话', 'New chat')} onClick={makeNew}>
             <Icon name="plus" size={18} />
           </button>
-          <button className="lc-rail-btn" title="展开侧栏并搜索" aria-label="展开侧栏并搜索" onClick={() => setSideOpen(true)}>
+          <button className="lc-rail-btn" title={t('展开侧栏并搜索', 'Expand and search')} aria-label={t('展开侧栏并搜索', 'Expand and search')} onClick={() => setSideOpen(true)}>
             <Icon name="search" size={18} />
           </button>
           {/* 收起后仍要能跳去别的页，否则「左栏」一收就把导航弄丢了 */}
           <div className="lc-rail-sep" />
-          <button className="lc-rail-btn" title="工作台" aria-label="工作台" onClick={() => go('/workspace')}>
+          <button className="lc-rail-btn" title={t('工作台', 'Workspace')} aria-label={t('工作台', 'Workspace')} onClick={() => go('/workspace')}>
             <Icon name="folder" size={18} />
           </button>
-          <button className="lc-rail-btn" title="审美市场" aria-label="审美市场" onClick={() => go('/market')}>
+          <button className="lc-rail-btn" title={t('审美市场', 'Aesthetic Index')} aria-label={t('审美市场', 'Aesthetic Index')} onClick={() => go('/market')}>
             <Icon name="grid" size={18} />
           </button>
         </div>}
@@ -628,11 +666,11 @@ export default function Luna() {
           : <button
             className="lc-side-toggle"
             onClick={toggleSide}
-            title="关闭菜单"
-            aria-label="关闭菜单"
+            title={t('关闭菜单', 'Close menu')}
+            aria-label={t('关闭菜单', 'Close menu')}
           >
             <Icon name="close" size={16} />
-            <span className="lc-side-toggle-text">关闭菜单</span>
+            <span className="lc-side-toggle-text">{t('关闭菜单', 'Close menu')}</span>
           </button>}
       </aside>
 
@@ -646,7 +684,8 @@ export default function Luna() {
       <section className="lc-main">
         {/* 移动端顶栏：打开对话抽屉；桌面端隐藏 */}
         <div className="lc-mobile-top">
-          <button className="lc-drawer-btn" onClick={() => setDrawerOpen(true)} title="打开对话列表" aria-label="打开对话列表">
+          <button className="lc-drawer-btn" onClick={() => setDrawerOpen(true)}
+            title={t('打开对话列表', 'Open chat list')} aria-label={t('打开对话列表', 'Open chat list')}>
             <Icon name="menu" size={20} />
           </button>
           <span className="lc-mobile-top-title">Luna</span>
@@ -662,8 +701,10 @@ export default function Luna() {
                   <div className="lc-msg-avatar"><img src="./logo.png" alt="Luna" /></div>
                   <div className="lc-preflight">
                     <span className="lc-preflight-count">{chat.preflight}</span>
-                    <span className="lc-preflight-text">秒后开始生成</span>
-                    <button className="lc-preflight-cancel" onClick={chat.cancel}>取消</button>
+                    <span className="lc-preflight-text">
+                      {t('秒后开始生成', 's until generation starts')}
+                    </span>
+                    <button className="lc-preflight-cancel" onClick={chat.cancel}>{t('取消', 'Cancel')}</button>
                   </div>
                 </div>
               )}
@@ -682,23 +723,27 @@ export default function Luna() {
           </div>
         ) : (
           <div className="lc-welcome">
-            <h1>{mode === 'image' ? '想画点什么，直接说。' : '我是 Luna，你的专属设计师。'}</h1>
+            <h1>{mode === 'image'
+              ? t('想画点什么，直接说。', 'Tell me what to draw.')
+              : t('我是 Luna，你的专属设计师。', 'I’m Luna, your personal designer.')}</h1>
             <p>
               {mode === 'image'
-                ? '描述画面、风格和用途，我直接出图；需要先聊清楚需求也行。'
-                : '产品、品牌、包装、海报，任何设计想法都可以丢给我。'}
+                ? t('描述画面、风格和用途，我直接出图；需要先聊清楚需求也行。',
+                  'Describe the scene, style and use — I render it directly. We can also talk the brief through first.')
+                : t('产品、品牌、包装、海报，任何设计想法都可以丢给我。',
+                  'Product, brand, packaging, poster — any design idea is welcome.')}
             </p>
-            <div className="lc-seg" role="tablist" aria-label="对话模式">
+            <div className="lc-seg" role="tablist" aria-label={t('对话模式', 'Mode')}>
               <button
                 className={`lc-seg-btn ${mode === 'chat' ? 'on' : ''}`}
                 role="tab" aria-selected={mode === 'chat'}
                 onClick={() => setMode('chat')}
-              >对话</button>
+              >{t('对话', 'Chat')}</button>
               <button
                 className={`lc-seg-btn ${mode === 'image' ? 'on' : ''}`}
                 role="tab" aria-selected={mode === 'image'}
                 onClick={() => setMode('image')}
-              >图像生成</button>
+              >{t('图像生成', 'Image')}</button>
             </div>
           </div>
         )}
@@ -708,13 +753,15 @@ export default function Luna() {
           <div className="lc-dock-inner">
           {pendingImage && (
             <div className="lc-pending">
-              <img src={pendingImage} alt="待发送" />
-              <span>{mode === 'image' ? '参考图已就绪，会按它出图' : '参考图已就绪'}</span>
+              <img src={pendingImage} alt={t('待发送', 'Pending')} />
+              <span>{mode === 'image'
+                ? t('参考图已就绪，会按它出图', 'Reference ready — the image will follow it')
+                : t('参考图已就绪', 'Reference ready')}</span>
               <button onClick={() => {
                 setPendingImage(null);
                 // 参考图去掉后回到「文字输入」档，不然会按更贵的图生图档下单
                 if (imageModel(tier).id === 'gpt2-ref') chat.setTier('gpt2-text');
-              }} aria-label="移除参考图">
+              }} aria-label={t('移除参考图', 'Remove reference')}>
                 <Icon name="close" size={13} />
               </button>
             </div>
@@ -726,7 +773,9 @@ export default function Luna() {
               className="lc-textarea"
               value={input}
               rows={1}
-              placeholder={mode === 'image' ? '描述你想要的图片' : '告诉 Luna 你的想法…'}
+              placeholder={mode === 'image'
+                ? t('描述你想要的图片', 'Describe the image you want')
+                : t('告诉 Luna 你的想法…', 'Tell Luna what you have in mind…')}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -738,7 +787,7 @@ export default function Luna() {
 
             <div className="lc-bar">
               <div className="lc-bar-left">
-                <button className="lc-round" title={mode === 'image' ? '上传参考图' : '上传参考图'} onClick={() => fileRef.current?.click()}>
+                <button className="lc-round" title={t('上传参考图', 'Upload reference')} onClick={() => fileRef.current?.click()}>
                   <Icon name="plus" size={18} />
                 </button>
                 <span className="lc-bar-sep" />
@@ -751,53 +800,63 @@ export default function Luna() {
                       spent={chat.chatSpendRmb}
                       budget={chat.chatBudgetRmb}
                       onPick={chat.setChatModel}
-                      onNeedPro={() => sub.setPaywall(true, '会员专属模型（Kimi-K3.1-Pro、DeepSeek-V4-pro、Doubao-Seed、GLM、经济版）开通会员后解锁，每天共用一份额度')}
-                      onQuotaEmpty={() => setToast('今日语言模型额度已用完，明天 0 点恢复；DeepSeek-V4.1-Flash 不限额度，可以继续聊')}
-                      onUnavailable={(label) => setToast(`${label} 还没有在当前火山方舟账号开通，开通后这里会自动可选`)}
+                      onNeedPro={() => sub.setPaywall(true, t(
+                        '会员专属模型（Kimi-K3.1-Pro、DeepSeek-V4-pro、Doubao-Seed、GLM、经济版）开通会员后解锁，每天共用一份额度',
+                        'Members-only models (Kimi-K3.1-Pro, DeepSeek-V4-pro, Doubao-Seed, GLM, Eco) unlock with membership and share one daily quota.'))}
+                      onQuotaEmpty={() => setToast(t(
+                        '今日语言模型额度已用完，明天 0 点恢复；DeepSeek-V4.1-Flash 不限额度，可以继续聊',
+                        'Today’s chat quota is used up — it resets at midnight. DeepSeek-V4.1-Flash has no limit, so you can keep chatting.'))}
+                      onUnavailable={(label) => setToast(t(
+                        `${label} 还没有在当前火山方舟账号开通，开通后这里会自动可选`,
+                        `${label} is not enabled on the platform account yet — it becomes selectable once it is.`))}
                       onRefresh={() => void chat.refreshChatSpend()}
                     />
-                    <button className="lc-tag" onClick={() => setMode('image')} title="切换到图像生成">
-                      <Icon name="image" size={14} />图像生成
+                    <button className="lc-tag" onClick={() => setMode('image')} title={t('切换到图像生成', 'Switch to image generation')}>
+                      <Icon name="image" size={14} />{t('图像生成', 'Image')}
                       <Icon name="chevronRight" size={12} className="lc-tag-chev" />
                     </button>
                   </>
                 ) : (
                   <>
-                    <button className="lc-tag on removable" onClick={() => setMode('chat')} title="退出图像生成">
-                      <Icon name="image" size={14} />图像生成
+                    <button className="lc-tag on removable" onClick={() => setMode('chat')} title={t('退出图像生成', 'Leave image generation')}>
+                      <Icon name="image" size={14} />{t('图像生成', 'Image')}
                       <Icon name="close" size={12} className="lc-tag-chev" />
                     </button>
                     <Pick
                       icon="spark"
-                      caption="模型"
+                      caption={t('模型', 'Model')}
                       value={tierName(tier)}
                       options={OPEN_IMAGE_MODELS.map((m) => ({
                         id: m.id,
                         label: m.label,
                         hint: m.cost < m.listCost
-                          ? `${m.cost} 积分 · 原价 ${m.listCost}`
-                          : `${m.cost} 积分`,
+                          ? t(`${m.cost} 积分 · 原价 ${m.listCost}`, `${m.cost} credits · was ${m.listCost}`)
+                          : t(`${m.cost} 积分`, `${m.cost} credits`),
                         locked: !!m.pro && !sub.isPro,
                       }))}
                       onPick={(id) => chat.setTier(id as ImageTier)}
-                      onLocked={() => sub.setPaywall(true, 'GPT Image 2 是会员专属生图模型：出图质量最高，支持文字出图与参考图改图。免费版可用 Seedream 5.0 Flash / Pro，开通会员后这两档自动解锁。')}
+                      onLocked={() => sub.setPaywall(true, t(
+                        'GPT Image 2 是会员专属生图模型：出图质量最高，支持文字出图与参考图改图。免费版可用 Seedream 5.0 Flash / Pro，开通会员后这两档自动解锁。',
+                        'GPT Image 2 is a members-only model: the best output quality, with text rendering and reference-based editing. The free plan includes Seedream 5.0 Flash / Pro, and both unlock with membership.'))}
                     />
                     <Pick
-                      caption="比例"
-                      value={ratio.label}
-                      options={RATIOS.map((r) => ({ id: r.id, label: r.label }))}
+                      caption={t('比例', 'Ratio')}
+                      value={L(ratio.label)}
+                      options={RATIOS.map((r) => ({ id: r.id, label: L(r.label) }))}
                       onPick={setRatioId}
                     />
                     <Pick
-                      caption="风格"
-                      value={style.label}
-                      options={STYLES.map((s) => ({ id: s.id, label: s.label }))}
+                      caption={t('风格', 'Style')}
+                      value={L(style.label)}
+                      options={STYLES.map((st) => ({ id: st.id, label: L(st.label) }))}
                       onPick={setStyleId}
                     />
                     <Pick
-                      caption="模板"
-                      value={template.label}
-                      options={TEMPLATES.map((t) => ({ id: t.id, label: t.label, group: t.group }))}
+                      caption={t('模板', 'Template')}
+                      value={L(template.label)}
+                      options={TEMPLATES.map((tp) => ({
+                        id: tp.id, label: L(tp.label), group: tp.group ? L(tp.group) : undefined,
+                      }))}
                       onPick={setTemplateId}
                       tall
                     />
@@ -808,17 +867,19 @@ export default function Luna() {
               {/* 预备期：这颗按钮是「取消」，同一位置，不用去别处找；
                   过了 3 秒请求已经发出，按钮回到禁用的发送态，避免给出停不掉的承诺 */}
               {chat.preflight > 0 ? (
-                <button className="lc-send is-stop" title="取消这次生成（还没开始，不扣积分）" aria-label="取消生成" onClick={chat.cancel}>
+                <button className="lc-send is-stop"
+                  title={t('取消这次生成（还没开始，不扣积分）', 'Cancel this generation — it has not started, so nothing is charged')}
+                  aria-label={t('取消生成', 'Cancel generation')} onClick={chat.cancel}>
                   <span className="lc-stop-square" />
                 </button>
               ) : chat.busy ? (
-                <button className="lc-send" title="正在生成…" aria-label="正在生成" disabled>
+                <button className="lc-send" title={t('正在生成…', 'Generating…')} aria-label={t('正在生成', 'Generating')} disabled>
                   <Icon name={mode === 'image' ? 'image' : 'send'} size={17} />
                 </button>
               ) : (
                 <button
                   className="lc-send"
-                  title={mode === 'image' ? '生成图片' : '发送'}
+                  title={mode === 'image' ? t('生成图片', 'Generate image') : t('发送', 'Send')}
                   onClick={doSend}
                   disabled={!canSend}
                 >
@@ -832,9 +893,12 @@ export default function Luna() {
           {mode === 'image' && (
             <div className="lc-dock-hint">
               <span className="lc-hint-text">
-                {tierName(tier)} · {tierCost(tier)} 积分/张
-                {isPromoTier(tier) ? `（${imagePromoLabel(tier)}，原价 ${imageListCost(tier)}）` : ''}
-                {typeof balance === 'number' ? ` · 当前余额 ${balance}` : ''}
+                {tierName(tier)} · {t(`${tierCost(tier)} 积分/张`, `${tierCost(tier)} credits / image`)}
+                {isPromoTier(tier)
+                  ? t(`（${imagePromoLabel(tier)}，原价 ${imageListCost(tier)}）`,
+                    ` (${imagePromoLabel(tier)}, was ${imageListCost(tier)})`)
+                  : ''}
+                {typeof balance === 'number' ? t(` · 当前余额 ${balance}`, ` · balance ${balance}`) : ''}
               </span>
             </div>
           )}

@@ -1,10 +1,12 @@
 /* AI 对话面板：需求摘要、模式提示、对话列表、生成队列、输入与上传、生成方案。 */
 import React from 'react';
 import { useEditor } from '../EditorContext';
+import { useLang } from '../../i18n';
 import { Icon } from '../../components/icons';
 
 export default function AIAssistant() {
   const ed = useEditor();
+  const { t } = useLang();
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#fff', minWidth: 0 }}>
@@ -14,17 +16,17 @@ export default function AIAssistant() {
           onClick={() => ed.setBriefOpen((v) => !v)}
           style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>设计需求摘要</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{t('设计需求摘要', 'Design brief')}</span>
           <div style={{ flex: 1 }} />
           <Icon name={ed.briefOpen ? 'chevronDown' : 'chevronUp'} size={15} style={{ color: '#999' }} />
         </button>
         {ed.briefOpen && (
           <div style={{ marginTop: 8, fontSize: 12, color: '#666', lineHeight: 1.9 }}>
-            <div>产品：{ed.brief.product || '—'}</div>
-            <div>品牌：{ed.brief.brand || '—'}</div>
-            <div>风格：{ed.brief.style || '—'}</div>
-            <div>材质：{ed.brief.material || '—'}</div>
-            <div>主色：{ed.brief.colors.join(', ') || '—'}</div>
+            <div>{t('产品', 'Product')}：{ed.brief.product || '—'}</div>
+            <div>{t('品牌', 'Brand')}：{ed.brief.brand || '—'}</div>
+            <div>{t('风格', 'Style')}：{ed.brief.style || '—'}</div>
+            <div>{t('材质', 'Material')}：{ed.brief.material || '—'}</div>
+            <div>{t('主色', 'Primary colour')}：{ed.brief.colors.join(', ') || '—'}</div>
           </div>
         )}
       </div>
@@ -37,17 +39,17 @@ export default function AIAssistant() {
         borderBottom: '1px solid #eee', lineHeight: 1.5,
       }}>
         {ed.selectedLayer
-          ? `模块修改模式：输入指令只会修改选中的「${ed.selectedL?.name || ''}」`
-          : '整体对话模式：描述你的需求，AI 会帮你梳理设计方向'}
+          ? t(`模块修改模式：输入指令只会修改选中的「${ed.selectedL?.name || ''}」`, `Element edit mode: your instruction only changes “${ed.selectedL?.name || ''}”`)
+          : t('整体对话模式：描述你的需求，AI 会帮你梳理设计方向', 'Conversation mode: describe what you need and AI will help shape the direction')}
       </div>
 
       {/* 对话列表 */}
       <div ref={ed.scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {ed.s.chat.length === 0 && (
           <div style={{ color: '#aaa', fontSize: 13, textAlign: 'center', marginTop: 40, lineHeight: 1.8 }}>
-            描述你的设计想法，
+            {t('描述你的设计想法，', 'Describe your design idea,')}
             <br />
-            或上传参考图开始。
+            {t('或上传参考图开始。', 'or upload a reference to start.')}
           </div>
         )}
         {ed.s.chat.map((m, i) => (
@@ -68,7 +70,7 @@ export default function AIAssistant() {
         {ed.loading && (
           <div style={{ color: '#999', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="clock" size={14} />
-            正在输入...
+            {t('正在输入...', 'Typing…')}
           </div>
         )}
       </div>
@@ -128,7 +130,7 @@ export default function AIAssistant() {
               borderRadius: 8, cursor: 'pointer', color: '#555',
               display: 'flex', alignItems: 'center',
             }}
-            title="上传参考图/Logo/产品照片"
+            title={t('上传参考图/Logo/产品照片', 'Upload a reference, logo or product photo')}
           >
             <Icon name="upload" size={17} />
           </button>
@@ -136,7 +138,7 @@ export default function AIAssistant() {
             value={ed.input}
             onChange={(e) => ed.setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && ed.sendMessage()}
-            placeholder="告诉我你的设计想法..."
+            placeholder={t('告诉我你的设计想法...', 'Tell me your design idea…')}
             style={{
               flex: 1, padding: '9px 12px', border: '1px solid #ddd',
               borderRadius: 8, fontSize: 13,
@@ -166,7 +168,7 @@ export default function AIAssistant() {
           }}
         >
           <Icon name="spark" size={15} />
-          {ed.generating ? '生成中...' : '生成设计方案'}
+          {ed.generating ? t('生成中...', 'Generating…') : t('生成设计方案', 'Generate design options')}
         </button>
       </div>
     </div>

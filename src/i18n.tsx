@@ -10,8 +10,10 @@
  *   也不会出现「词典里有一半 key 没人用」的腐化问题。
  * ============================================================ */
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { setCurrentLang } from './langStore';
 
 export type Lang = 'zh' | 'en';
+export { currentLang, tl } from './langStore';
 const LANG_KEY = 'lunasol.lang';
 
 interface LangApi {
@@ -27,10 +29,14 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLang] = useState<Lang>(() => {
     try { return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'zh'; } catch { return 'zh'; }
   });
+  // 同步写：首帧的子组件就要能读到正确语言，不能等 useEffect
+  setCurrentLang(lang);
 
   useEffect(() => {
     try { localStorage.setItem(LANG_KEY, lang); } catch { /* 隐私模式下写不进去，忽略即可 */ }
     document.documentElement.setAttribute('lang', lang === 'en' ? 'en' : 'zh-CN');
+    // 标签页标题也跟着语言走：它是最容易被漏掉的界面文案
+    document.title = lang === 'en' ? 'LunaSol — Everyone can be a designer' : 'LunaSol — 人人都能成为设计师';
   }, [lang]);
 
   const t = (zh: string, en: string) => (lang === 'en' ? en : zh);

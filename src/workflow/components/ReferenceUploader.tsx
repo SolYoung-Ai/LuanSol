@@ -2,20 +2,22 @@
 import React, { useRef, useState } from 'react';
 import type { ReferenceImage, ReferenceRole } from '../../types';
 import { processImageFile } from '../imageUtils';
+import { useLang } from '../../i18n';
 import { Icon } from '../../components/icons';
 import { uid } from '../../engine/utils';
 
-const ROLE_OPTIONS: { value: ReferenceRole; label: string }[] = [
-  { value: 'packaging', label: '包装参考图' },
-  { value: 'product', label: '产品照片' },
-  { value: 'competitor', label: '竞品包装' },
-  { value: 'logo', label: '品牌 Logo' },
-  { value: 'brandGuideline', label: '品牌视觉规范' },
-  { value: 'font', label: '字体参考' },
-  { value: 'material', label: '材质参考' },
-  { value: 'finishing', label: '印刷工艺参考' },
-  { value: 'sketch', label: '手绘草图' },
-  { value: 'other', label: '其他灵感' },
+/** 用途选项：常量在模块加载时求值，取不到当前语言，所以存两份、渲染时挑 */
+const ROLE_OPTIONS: { value: ReferenceRole; label: { zh: string; en: string } }[] = [
+  { value: 'packaging', label: { zh: '包装参考图', en: 'Packaging reference' } },
+  { value: 'product', label: { zh: '产品照片', en: 'Product photo' } },
+  { value: 'competitor', label: { zh: '竞品包装', en: 'Competitor packaging' } },
+  { value: 'logo', label: { zh: '品牌 Logo', en: 'Brand logo' } },
+  { value: 'brandGuideline', label: { zh: '品牌视觉规范', en: 'Brand guidelines' } },
+  { value: 'font', label: { zh: '字体参考', en: 'Typography reference' } },
+  { value: 'material', label: { zh: '材质参考', en: 'Material reference' } },
+  { value: 'finishing', label: { zh: '印刷工艺参考', en: 'Print finishing reference' } },
+  { value: 'sketch', label: { zh: '手绘草图', en: 'Hand sketch' } },
+  { value: 'other', label: { zh: '其他灵感', en: 'Other inspiration' } },
 ];
 
 interface Props {
@@ -25,6 +27,7 @@ interface Props {
 }
 
 export default function ReferenceUploader({ images, onChange, onError }: Props) {
+  const { lang, t } = useLang();
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -88,10 +91,11 @@ export default function ReferenceUploader({ images, onChange, onError }: Props) 
           <Icon name="upload" size={26} />
         </div>
         <div style={{ fontSize: 14, color: '#333', fontWeight: 600 }}>
-          {processing ? '正在处理图片…' : '点击或拖拽上传参考图片'}
+          {processing ? t('正在处理图片…', 'Processing images…') : t('点击或拖拽上传参考图片', 'Click or drop reference images here')}
         </div>
         <div style={{ fontSize: 12, color: '#999', marginTop: 6 }}>
-          支持 JPG / PNG / WEBP，可一次上传多张，单张不超过 12MB
+          {t('支持 JPG / PNG / WEBP，可一次上传多张，单张不超过 12MB',
+            'JPG / PNG / WEBP · multiple files at once · up to 12 MB each')}
         </div>
         <input
           ref={fileRef}
@@ -127,7 +131,7 @@ export default function ReferenceUploader({ images, onChange, onError }: Props) 
                     borderRadius: 8, overflow: 'hidden', border: '1px solid #eee',
                     background: '#f6f6f6', cursor: 'zoom-in', padding: 0,
                   }}
-                  title="点击预览"
+                  title={t('点击预览', 'Click to preview')}
                 >
                   <img src={img.src} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </button>
@@ -154,7 +158,7 @@ export default function ReferenceUploader({ images, onChange, onError }: Props) 
                       style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ddd', borderRadius: 6, background: '#fff' }}
                     >
                       {ROLE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        <option key={opt.value} value={opt.value}>{lang === 'en' ? opt.label.en : opt.label.zh}</option>
                       ))}
                     </select>
                   </div>
@@ -167,7 +171,7 @@ export default function ReferenceUploader({ images, onChange, onError }: Props) 
                     border: '1px solid #eee', borderRadius: 6, background: '#fff',
                     color: '#999', cursor: 'pointer', display: 'grid', placeItems: 'center',
                   }}
-                  title="删除"
+                  title={t('删除', 'Delete')}
                 >
                   <Icon name="trash" size={14} />
                 </button>
@@ -176,7 +180,8 @@ export default function ReferenceUploader({ images, onChange, onError }: Props) 
               <input
                 value={img.note}
                 onChange={(e) => updateImage(img.id, { note: e.target.value })}
-                placeholder="备注：说明这张图参考哪部分，如「参考配色，不要参考 Logo」"
+                placeholder={t('备注：说明这张图参考哪部分，如「参考配色，不要参考 Logo」',
+                  'Note: which part should be referenced, e.g. “use the colors, not the logo”')}
                 style={{
                   marginTop: 10, width: '100%', fontSize: 12,
                   padding: '7px 10px', border: '1px solid #e4e4e4', borderRadius: 6,

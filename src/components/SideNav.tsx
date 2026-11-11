@@ -52,9 +52,9 @@ const FLOW_STEPS: { n: string; stage: WorkflowStage; zh: string; en: string; dzh
 
 export function SideNavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const hash = useHash();
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const path = hash.split('?')[0];
-  return <nav className="sd-links" aria-label="主导航">
+  return <nav className="sd-links" aria-label={t('主导航', 'Main navigation')}>
     {SIDE_LINKS.map((l) => {
       const on = l.match.some((p) => (p === '/' ? path === '/' : path.startsWith(p)));
       return <button
@@ -73,7 +73,7 @@ export function SideNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 /** 品牌行：字标 + 语言 / 深浅色。从顶部导航搬过来的两个工具按钮，位置换了但功能不变。 */
 export function SideBrand() {
-  const { lang, setLang } = useLang();
+  const { lang, setLang, t } = useLang();
   const [theme, setTheme] = useState<Theme>(() => readTheme());
   const toggleTheme = () => {
     const next: Theme = theme === 'dark' ? 'light' : 'dark';
@@ -82,7 +82,7 @@ export function SideBrand() {
     saveTheme(next);
   };
   return <div className="sd-brand">
-    <button className="sd-wordmark" onClick={() => go('/')} aria-label="LunaSol 首页">
+    <button className="sd-wordmark" onClick={() => go('/')} aria-label={t('LunaSol 首页', 'LunaSol home')}>
       <img src="./logo.png" alt="" />
       <span className="sd-brand-text">
         <strong>Luna<span style={{ color: '#e8783a' }}>Sol</span></strong>
@@ -93,8 +93,8 @@ export function SideBrand() {
         aria-label={lang === 'zh' ? 'Switch to English' : '切换到简体中文'}
         title={lang === 'zh' ? 'Switch to English' : '切换到简体中文'}>{lang === 'zh' ? 'EN' : '中'}</button>
       <button className="sd-icon-btn" onClick={toggleTheme}
-        aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
-        title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
+        aria-label={theme === 'dark' ? t('切换到浅色模式', 'Switch to light mode') : t('切换到深色模式', 'Switch to dark mode')}
+        title={theme === 'dark' ? t('浅色模式', 'Light mode') : t('深色模式', 'Dark mode')}>
         {theme === 'dark'
           ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="4.2" /><path d="M12 3.2v2.2M12 18.6v2.2M3.2 12h2.2M18.6 12h2.2M5.9 5.9l1.6 1.6M16.5 16.5l1.6 1.6M18.1 5.9l-1.6 1.6M7.5 16.5l-1.6 1.6" /></svg>
           : <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M20 14.4A8.6 8.6 0 1 1 9.6 4a6.9 6.9 0 0 0 10.4 10.4Z" /></svg>}
@@ -116,7 +116,7 @@ function flowStageOf(project: { workflow?: { stage?: WorkflowStage }; design?: u
  *  这就是「在侧边预览每一步」——不用先进项目、不用记路由。 */
 export function SideFlow({ onNavigate }: { onNavigate?: () => void }) {
   const { s, patchWorkflow, setToast } = useApp();
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const hash = useHash();
   const project = s.projects.find((p) => p.id === s.activeId);
   const current = flowStageOf(project);
@@ -125,12 +125,16 @@ export function SideFlow({ onNavigate }: { onNavigate?: () => void }) {
     onNavigate?.();
     // 还没有草稿时不能假装跳过去：如实提示，并把用户带到创作入口
     if (!project || !project.workflow) {
-      if (stage !== 'entry') setToast('还没有进行中的草稿，先从「创作入口」开始');
+      if (stage !== 'entry') {
+        setToast(t('还没有进行中的草稿，先从「创作入口」开始',
+          'No draft in progress yet — start from “Start” first.'));
+      }
       go('/new');
       return;
     }
     if (stage === 'editor' && !project.design) {
-      setToast('请先在「设计方案」里选一张，再进编辑器');
+      setToast(t('请先在「设计方案」里选一张，再进编辑器',
+        'Pick one concept under “Concepts” before opening the editor.'));
       return;
     }
     patchWorkflow(project.id, { stage });
@@ -234,19 +238,23 @@ export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
       <div className="sd-acct-av">{avatarUrl ? <img src={avatarUrl} alt="" /> : initial}</div>
       <div className="sd-acct-meta">
         <strong>{auth.user.label}</strong>
-        <span>{syncLabel || (sub.isPro ? '会员' : '免费版')}</span>
+        <span>{syncLabel || (sub.isPro ? t('会员', 'Member') : t('免费版', 'Free'))}</span>
       </div>
       <div className="sd-acct-cr">
         <b>{left ?? '–'}</b>
-        <Coin size={16} title="积分" />
+        <Coin size={16} title={t('积分', 'Credits')} />
       </div>
       <Icon name={open ? 'chevronDown' : 'chevronUp'} size={13} className="sd-acct-chev" />
     </button>
 
-    <div className="sd-usage" title={usage ? `已用 ${usage.used} / 共 ${usage.bucket} 积分` : undefined}>
+    <div className="sd-usage" title={usage
+      ? t(`已用 ${usage.used} / 共 ${usage.bucket} 积分`, `${usage.used} of ${usage.bucket} credits used`)
+      : undefined}>
       <div className="sd-bar"><i style={{ width: `${usedPct}%` }} /></div>
       <span className="sd-usage-text">
-        {usage ? `已使用 ${usedPct}%` : (auth.user ? '统计中…' : t('登录后可用', 'Sign in'))}
+        {usage
+          ? t(`已使用 ${usedPct}%`, `${usedPct}% used`)
+          : (auth.user ? t('统计中…', 'Calculating…') : t('登录后可用', 'Sign in'))}
       </span>
     </div>
 
@@ -258,7 +266,8 @@ export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
 
 /** 贴边的小胶囊：点一下收起 / 展开左栏（Luna 页与全站左栏共用同一颗） */
 export function SideFold({ folded, onClick, label }: { folded: boolean; onClick: () => void; label?: string }) {
-  const text = label || (folded ? '展开导航' : '收起导航');
+  const { t } = useLang();
+  const text = label || (folded ? t('展开导航', 'Expand navigation') : t('收起导航', 'Collapse navigation'));
   return <button className={`sd-fold ${folded ? 'is-folded' : ''}`} onClick={onClick}
     title={text} aria-label={text} aria-expanded={!folded}>
     <Icon name={folded ? 'chevronRight' : 'chevronLeft'} size={12} />

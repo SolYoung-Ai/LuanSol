@@ -9,6 +9,7 @@
  *  - 支付系统尚未接入：activate 通过「激活码」占位开通，后续替换为支付回调。
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { tl } from '../langStore';
 import { db, sdkUsable } from './sdk';
 import { cloudOriginSupported } from './config';
 import { registerAIGate, registerAIReporter, type GateResult } from '../ai/gate';
@@ -70,16 +71,19 @@ export function decideGate(input: {
 }): GateDecision {
   const trial = input.freeTrial ?? FREE_TRIAL;
   if (!input.loggedIn) {
-    return { ok: false, reason: `登录后即可使用平台 AI；新注册用户有 ${trial} 积分免费体验`, need: 'login' };
+    return { ok: false, reason: tl(`登录后即可使用平台 AI；新注册用户有 ${trial} 积分免费体验`, `Sign in to use platform AI — new accounts get ${trial} credits to try it`), need: 'login' };
   }
   if (input.remaining === null) return { ok: true, reason: '', need: 'subscribe' };
   if (input.remaining > 0) return { ok: true, reason: '', need: 'subscribe' };
   return {
     ok: false,
     reason: input.proActive
-      ? '会员额度已用完或已过期，请续费后继续'
+      ? tl('会员额度已用完或已过期，请续费后继续', 'Your membership quota is used up or expired — renew to keep going')
       // 会员不含固定积分包，别在这里承诺「每月 N 积分」——积分只来自签到与充值
-      : `免费体验已用完（${trial} 积分），开通会员可解锁全部模型、云端同步与印刷级导出，积分可通过每日签到或充值获得`,
+      : tl(
+        `免费体验已用完（${trial} 积分），开通会员可解锁全部模型、云端同步与印刷级导出，积分可通过每日签到或充值获得`,
+        `Your ${trial} free credits are used up. A membership unlocks every model, cloud sync and print-grade export; credits come from daily check-ins or top-ups.`,
+      ),
     need: 'subscribe',
   };
 }
@@ -150,7 +154,7 @@ export async function recordUsage(uid: string, n = 1, taskType = 'ai_call'): Pro
         change_type: 'consume',
         amount: n,
         balance_after: balanceAfter,
-        reason: taskType === 'image' ? 'AI 图像生成消耗' : taskType === 'chat' ? 'AI 对话消耗' : 'AI 调用消耗',
+        reason: taskType === 'image' ? tl('AI 图像生成消耗', 'AI image generation') : taskType === 'chat' ? tl('AI 对话消耗', 'AI chat') : tl('AI 调用消耗', 'AI call'),
         task_type: taskType,
       });
     } catch (e) {
@@ -376,8 +380,8 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
    *  既不假装成功，也不给后门。 */
   const activate = useCallback(async (_code: string): Promise<{ ok: boolean; message: string }> => {
     const u = auth.user;
-    if (!u) return { ok: false, message: '请先登录' };
-    return { ok: false, message: '会员开通尚未开放：支付系统接入中，激活通道已停用。开通后会在账户页显示真实有效期。' };
+    if (!u) return { ok: false, message: tl('请先登录', 'Please sign in first') };
+    return { ok: false, message: tl('会员开通尚未开放：支付系统接入中，激活通道已停用。开通后会在账户页显示真实有效期。', 'Membership is not open yet: payments are still being wired up and the activation channel is closed. Once live, the real expiry date appears on the account page.') };
   }, [auth.user]);
 
   const setPaywall = useCallback((open: boolean, reason?: string) => {
@@ -442,18 +446,18 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
 
   const doCheckin = useCallback(async (): Promise<{ ok: boolean; points: number; streak: number; message: string }> => {
     const u = userRef.current;
-    if (!u) return { ok: false, points: 0, streak: 0, message: '请先登录' };
-    if (!sdkUsable()) return { ok: false, points: 0, streak: 0, message: '云服务未连接' };
+    if (!u) return { ok: false, points: 0, streak: 0, message: tl('请先登录', 'Please sign in first') };
+    if (!sdkUsable()) return { ok: false, points: 0, streak: 0, message: tl('云服务未连接', 'Cloud service is not connected') };
     // 三重防重：本地已签标记 / 请求进行中 / 数据库唯一约束兜底
     if (checkinState.checkedToday || checkedDateRef.current === localDateStr()) {
-      return { ok: false, points: 0, streak: checkinState.streak, message: '今天已经签到过了' };
+      return { ok: false, points: 0, streak: checkinState.streak, message: tl('今天已经签到过了', 'Already checked in today') };
     }
     if (checkinBusyRef.current) {
-      return { ok: false, points: 0, streak: checkinState.streak, message: '正在签到，请稍候' };
+      return { ok: false, points: 0, streak: checkinState.streak, message: tl('正在签到，请稍候', 'Checking in — one moment') };
     }
     checkinBusyRef.current = true;
     const d = await db();
-    if (!d) { checkinBusyRef.current = false; return { ok: false, points: 0, streak: 0, message: '数据库未连接' }; }
+    if (!d) { checkinBusyRef.current = false; return { ok: false, points: 0, streak: 0, message: tl('数据库未连接', 'Database is not connected') }; }
 
     try {
       /* 首选：数据库函数。查重、写记录、加积分、写明细都在一个事务里完成，
@@ -467,7 +471,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
           if (p.already) {
             setCheckinState({ checkedToday: true, streak, loading: false });
             checkedDateRef.current = localDateStr();
-            return { ok: false, points: 0, streak, message: '今天已经签到过了' };
+            return { ok: false, points: 0, streak, message: tl('今天已经签到过了', 'Already checked in today') };
           }
           if (p.ok) {
             setCheckinState({ checkedToday: true, streak, loading: false });
@@ -475,10 +479,10 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
             void refresh();
             return {
               ok: true, points, streak,
-              message: points > 0 ? `签到成功！+${points} 积分` : '签到成功（本月签到积分已达上限）',
+              message: points > 0 ? tl(`签到成功！+${points} 积分`, `Checked in! +${points} credits`) : tl('签到成功（本月签到积分已达上限）', 'Checked in (this month\'s check-in credits are maxed out)'),
             };
           }
-          return { ok: false, points: 0, streak, message: String(p.message || '签到失败，请稍后重试') };
+          return { ok: false, points: 0, streak, message: String(p.message || tl('签到失败，请稍后重试', 'Check-in failed — please try again')) };
         }
       }
 
@@ -493,7 +497,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       if (dupRows.length) {
         setCheckinState({ checkedToday: true, streak: Number(dupRows[0].streak) || 0, loading: false });
         checkedDateRef.current = today;
-        return { ok: false, points: 0, streak: Number(dupRows[0].streak) || 0, message: '今天已经签到过了' };
+        return { ok: false, points: 0, streak: Number(dupRows[0].streak) || 0, message: tl('今天已经签到过了', 'Already checked in today') };
       }
 
       const r = await d.from('lunasol_checkin_logs').select('checkin_date,streak').eq('user_id', u.id).order('checkin_date', { ascending: false }).limit(1);
@@ -512,7 +516,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
         // 并发下第二次插入会撞唯一索引：当作「今天已签到」，绝不能继续发积分
         setCheckinState({ checkedToday: true, streak: newStreak, loading: false });
         checkedDateRef.current = today;
-        return { ok: false, points: 0, streak: newStreak, message: '今天已经签到过了' };
+        return { ok: false, points: 0, streak: newStreak, message: tl('今天已经签到过了', 'Already checked in today') };
       }
 
       const cur = subRef.current;
@@ -544,7 +548,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
           : totalPoints;
         await d.from('lunasol_credit_logs').insert({
           owner_id: u.id, change_type: 'checkin', amount: totalPoints, balance_after: balanceAfter,
-          reason: `每日签到（连续 ${newStreak} 天）`, task_type: 'checkin',
+          reason: tl(`每日签到（连续 ${newStreak} 天）`, `Daily check-in (${newStreak}-day streak)`), task_type: 'checkin',
         });
       } catch { /* 明细失败不影响签到本身 */ }
 
@@ -552,7 +556,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       checkedDateRef.current = today;
       return {
         ok: true, points: totalPoints, streak: newStreak,
-        message: `签到成功！+${totalPoints} 积分`,
+        message: tl(`签到成功！+${totalPoints} 积分`, `Checked in! +${totalPoints} credits`),
       };
     } finally {
       checkinBusyRef.current = false;
@@ -562,31 +566,31 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   // 兑换码：优先走数据库函数（积分码 / 会员码一次事务内校验并发放），失败再退回老实现
   const redeemCode = useCallback(async (code: string): Promise<{ ok: boolean; points?: number; message: string }> => {
     const c = code.trim().toUpperCase();
-    if (!c) return { ok: false, message: '请输入兑换码' };
+    if (!c) return { ok: false, message: tl('请输入兑换码', 'Enter a redemption code') };
     const u = auth.user;
-    if (!u) return { ok: false, message: '请先登录再兑换' };
+    if (!u) return { ok: false, message: tl('请先登录再兑换', 'Sign in before redeeming') };
     const db = await import('./sdk').then((m) => m.db()).catch(() => null);
-    if (!db) return { ok: false, message: '数据库未连接，请稍后再试' };
+    if (!db) return { ok: false, message: tl('数据库未连接，请稍后再试', 'Database is not connected — please try again later') };
 
     if (typeof db.rpc === 'function') {
       const res = await db.rpc('lunasol_redeem_code', { p_code: c });
       const p = asObject(res.data);
       if (!res.error && p) {
-        if (!p.ok) return { ok: false, message: String(p.message || '兑换失败') };
+        if (!p.ok) return { ok: false, message: String(p.message || tl('兑换失败', 'Redemption failed')) };
         await refresh();
         return {
           ok: true,
           points: Number(p.points) || 0,
-          message: String(p.message || (p.kind === 'membership' ? '兑换成功！会员已开通' : '兑换成功')),
+          message: String(p.message || (p.kind === 'membership' ? tl('兑换成功！会员已开通', 'Redeemed — your membership is active') : tl('兑换成功', 'Redeemed'))),
         };
       }
       // 数据库函数报错：如实返回错误。原来的「直接改表 + 调 grant_bonus」兼容路径
       // 已失效（前者没有 RLS 更新权限、后者已撤销执行权限），会把兑换码消耗掉
       // 却只返回一句「兑换成功」，用户拿到的是空头承诺，因此整段删除。
-      return { ok: false, message: `兑换失败：${errText(res.error) || '请稍后重试'}` };
+      return { ok: false, message: tl(`兑换失败：${errText(res.error) || '请稍后重试'}`, `Redemption failed: ${errText(res.error) || 'please try again later'}`) };
     }
 
-    return { ok: false, message: '云端兑换服务不可用，请刷新页面后重试' };
+    return { ok: false, message: tl('云端兑换服务不可用，请刷新页面后重试', 'The cloud redemption service is unavailable — refresh the page and try again') };
   }, [auth.user, refresh]);
 
   // 获取积分使用记录

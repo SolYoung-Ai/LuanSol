@@ -7,14 +7,70 @@ import { round } from './utils';
 const EPS = 0.001;
 
 export const STRUCTURES: StructureInfo[] = [
-  { id: 'tuck', name: '常规插舌盒', group: '盒类', desc: '一体成型、上下插舌，最常见的折叠纸盒。', use: '茶叶、零食、轻食、小型礼品', difficulty: 1, first: true },
-  { id: 'topBottom', name: '天地盖盒', group: '盒类', desc: '上下两片套合，开合有仪式感，硬挺度高。', use: '高端茶礼、礼盒、文创、美妆套盒', difficulty: 2, first: true },
-  { id: 'drawer', name: '抽屉盒', group: '盒类', desc: '外套 + 内盒抽拉结构，层次丰富。', use: '茶礼、首饰、香氛、限定礼盒', difficulty: 3, first: true },
-  { id: 'mailer', name: '飞机盒', group: '盒类', desc: '一体折叠、侧翼包覆，运输保护性好、组装快。', use: '电商快递、服装、文创、订阅礼盒', difficulty: 2, first: true },
-  { id: 'pouch', name: '自立袋', group: '袋类', desc: '正面 + 背面 + 底部折角，带顶部封口边。', use: '咖啡豆、零食、茶叶、谷物', difficulty: 2, first: true },
-  { id: 'labelRect', name: '矩形标签', group: '标签类', desc: '直角或圆角矩形贴标，适配瓶身与袋体。', use: '瓶贴、食品标签、护肤品标签', difficulty: 1, first: true },
-  { id: 'labelRound', name: '圆形标签', group: '标签类', desc: '圆形模切贴标，适合封口贴与瓶盖贴。', use: '封口贴、罐贴、手作品牌', difficulty: 1, first: true },
+  {
+    id: 'tuck', name: '常规插舌盒', group: '盒类', difficulty: 1, first: true,
+    nameEn: 'Tuck-end carton',
+    desc: '一体成型、上下插舌，最常见的折叠纸盒。',
+    descEn: 'One-piece blank with top and bottom tuck flaps — the most common folding carton.',
+    use: '茶叶、零食、轻食、小型礼品',
+    useEn: 'Tea, snacks, light food, small gifts',
+  },
+  {
+    id: 'topBottom', name: '天地盖盒', group: '盒类', difficulty: 2, first: true,
+    nameEn: 'Two-piece lid & base box',
+    desc: '上下两片套合，开合有仪式感，硬挺度高。',
+    descEn: 'Separate lid and base that sleeve together — a ceremonial open, high rigidity.',
+    use: '高端茶礼、礼盒、文创、美妆套盒',
+    useEn: 'Premium tea gifts, gift boxes, cultural goods, beauty sets',
+  },
+  {
+    id: 'drawer', name: '抽屉盒', group: '盒类', difficulty: 3, first: true,
+    nameEn: 'Drawer box',
+    desc: '外套 + 内盒抽拉结构，层次丰富。',
+    descEn: 'Outer sleeve with a sliding inner tray — rich layering.',
+    use: '茶礼、首饰、香氛、限定礼盒',
+    useEn: 'Tea gifts, jewellery, fragrance, limited editions',
+  },
+  {
+    id: 'mailer', name: '飞机盒', group: '盒类', difficulty: 2, first: true,
+    nameEn: 'Mailer box',
+    desc: '一体折叠、侧翼包覆，运输保护性好、组装快。',
+    descEn: 'One-piece fold with wrap-around wings — strong protection in transit, fast to assemble.',
+    use: '电商快递、服装、文创、订阅礼盒',
+    useEn: 'E-commerce shipping, apparel, cultural goods, subscription boxes',
+  },
+  {
+    id: 'pouch', name: '自立袋', group: '袋类', difficulty: 2, first: true,
+    nameEn: 'Stand-up pouch',
+    desc: '正面 + 背面 + 底部折角，带顶部封口边。',
+    descEn: 'Front, back and gusseted base with a top seal edge.',
+    use: '咖啡豆、零食、茶叶、谷物',
+    useEn: 'Coffee beans, snacks, tea, grains',
+  },
+  {
+    id: 'labelRect', name: '矩形标签', group: '标签类', difficulty: 1, first: true,
+    nameEn: 'Rectangular label',
+    desc: '直角或圆角矩形贴标，适配瓶身与袋体。',
+    descEn: 'Square or rounded-corner label that fits bottles and pouches.',
+    use: '瓶贴、食品标签、护肤品标签',
+    useEn: 'Bottle labels, food labels, skincare labels',
+  },
+  {
+    id: 'labelRound', name: '圆形标签', group: '标签类', difficulty: 1, first: true,
+    nameEn: 'Round label',
+    desc: '圆形模切贴标，适合封口贴与瓶盖贴。',
+    descEn: 'Die-cut round label, ideal for seals and cap stickers.',
+    use: '封口贴、罐贴、手作品牌',
+    useEn: 'Seal stickers, jar labels, craft brands',
+  },
 ];
+
+/** 结构名与分组名按语言取值：结构名是专有名词，不能随界面语言漂移成内部 id */
+export const structName = (s: StructureInfo, lang: string) => (lang === 'en' ? s.nameEn : s.name);
+export const structDesc = (s: StructureInfo, lang: string) => (lang === 'en' ? s.descEn : s.desc);
+export const structUse = (s: StructureInfo, lang: string) => (lang === 'en' ? s.useEn : s.use);
+export const GROUP_EN: Record<string, string> = { 盒类: 'Boxes', 袋类: 'Bags', 标签类: 'Labels' };
+export const groupName = (g: string, lang: string) => (lang === 'en' ? GROUP_EN[g] || g : g);
 
 export const structureById = (id: StructureId) => STRUCTURES.find((s) => s.id === id) || STRUCTURES[0];
 

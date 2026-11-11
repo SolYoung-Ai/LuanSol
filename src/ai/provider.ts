@@ -14,6 +14,7 @@ import type { AISettings } from '../types';
 import type {
   AIContext, AIRequest, AISource, AITaskId, AITaskResult, AITransport, AIRunRecord,
 } from './types';
+import { tl } from '../langStore';
 
 const LOG_KEY = 'lunasol.ai.runs.v1';
 let runLog: AIRunRecord[] = (() => {
@@ -109,9 +110,25 @@ export async function runAITask(id: AITaskId, ctx: AIContext, ai: AISettings): P
  *  被拦截时直接用闸门给出的真实原因（未登录 / 额度用完 / 会员过期），不做二次臆测。 */
 export function aiResultToast(r: { source: AISource; note?: string }, aiMsg: string, localMsg: string): string {
   if (r.source === 'ai') return aiMsg;
-  if (r.source === 'paywall') return r.note || '需要订阅后才能使用 AI 功能';
+  if (r.source === 'paywall') return r.note || tl('需要订阅后才能使用 AI 功能', 'AI features require a subscription');
   return localMsg;
 }
+
+/** 能力点标题的英文名：中文标题写在 tasks.ts 里（给模型看），界面按语言取 */
+const TITLE_EN: Record<string, string> = {
+  'size.structure': 'Size & structure suggestions',
+  'logo.directions': 'Logo directions',
+  'audience.profile': 'Target audience',
+  'product.category': 'Product category',
+  'style.recommend': 'Style recommendations',
+  'color.primary': 'Primary colour',
+  'palette.schemes': 'Colour schemes',
+  'illustration.motif': 'Motif & illustration',
+  'copy.suggestion': 'Packaging copy',
+  'barcode.advice': 'Barcode compliance',
+  'review.directions': 'Three design directions',
+  'editor.modify': 'Local AI edits',
+};
 
 /** 给设置页展示：接好后台之后到底有哪些能力会生效 */
 export const aiCapabilitySummary = () => ({
@@ -120,7 +137,7 @@ export const aiCapabilitySummary = () => ({
   steps: new Set(TASK_LIST.filter((t) => typeof t.step === 'number').map((t) => t.step)).size,
   global: TASK_LIST.filter((t) => typeof t.step !== 'number').length,
   list: TASK_LIST.map((t) => ({
-    id: t.id, title: t.title, step: t.step,
+    id: t.id, title: t.title, titleEn: TITLE_EN[t.id] || t.title, step: t.step,
     constraints: t.constraints.length,
   })),
 });

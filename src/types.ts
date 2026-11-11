@@ -185,9 +185,12 @@ export interface Dieline {
 export interface StructureInfo {
   id: StructureId;
   name: string;
+  nameEn: string;
   group: '盒类' | '袋类' | '标签类';
   desc: string;
+  descEn: string;
   use: string;
+  useEn: string;
   difficulty: number; // 1-3
   first: boolean;
 }

@@ -49,18 +49,24 @@ export const MARKET_GROUPS: { id: MarketGroup; en: string; blurb: string }[] = [
   { id: '独立工作室', en: 'INDEPENDENT STUDIOS', blurb: '直接看顶级工作室与设计师自己的网站——风格来自长期经营。' },
 ];
 
-export const MARKET_ACCESS: Record<MarketAccess, { label: string; note: string }> = {
+export const MARKET_ACCESS: Record<MarketAccess, { label: string; note: string; labelEn: string; noteEn: string }> = {
   global: {
     label: '国内外可访问',
     note: '国内外网络一般都能直接打开；偶发变慢属于网络波动，刷新即可。',
+    labelEn: 'Accessible worldwide',
+    noteEn: 'Opens directly from most networks. Occasional slowness is network noise — just refresh.',
   },
   overseas: {
     label: '需海外网络',
     note: '国内跨境链路常打不开或极慢，这是网络可达性问题，不是站点下线；如果你在海外，可正常访问。',
+    labelEn: 'Needs overseas network',
+    noteEn: 'Cross-border links from mainland China often fail or crawl. That is reachability, not the site going offline — from overseas it opens normally.',
   },
   paywall: {
     label: '完整内容需订阅',
     note: '免费可看部分内容，完整图库需要注册或付费订阅；国内访问同样可能需要海外网络环境。',
+    labelEn: 'Full content needs a subscription',
+    noteEn: 'Part of the content is free; the full library needs an account or paid subscription. Access from mainland China may also need an overseas network.',
   },
 };
 

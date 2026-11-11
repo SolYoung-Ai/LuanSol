@@ -13,9 +13,10 @@ export function useHash() {
 export const go = (path: string) => { window.location.hash = path.startsWith('/') ? path : `/${path}`; window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
 export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?: () => void }) {
-  return <button className="logo" onClick={onClick || (() => go('/'))} aria-label="LunaSol 首页">
+  const { t } = useLang();
+  return <button className="logo" onClick={onClick || (() => go('/'))} aria-label={t('LunaSol 首页', 'LunaSol home')}>
     <span className="logo-word">Luna<span style={{ color: '#e8783a' }}>Sol</span></span>
-    {!compact && <span className="logo-sub">人人都能成为设计师</span>}
+    {!compact && <span className="logo-sub">{t('人人都能成为设计师', 'Anyone can be a designer')}</span>}
   </button>;
 }
 
@@ -95,7 +96,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
         <button
           className="v4-burger"
           onClick={() => setMobileNavOpen((o) => !o)}
-          aria-label="菜单"
+          aria-label={t('菜单', 'Menu')}
           aria-expanded={mobileNavOpen}
         >
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -136,7 +137,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
         <button
           className="v4-icon-btn"
           onClick={toggleTheme}
-          aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+          aria-label={theme === 'dark' ? t('切换到浅色模式', 'Switch to light mode') : t('切换到深色模式', 'Switch to dark mode')}
           title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
         >
           {theme === 'dark'
@@ -163,7 +164,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
               ? (() => {
                   const cloudAvatar = profile.profile?.avatar_url || '';
                   return cloudAvatar
-                    ? <img src={cloudAvatar} alt="头像" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+                    ? <img src={cloudAvatar} alt={t('头像', 'Avatar')} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
                     : <span className="v4-avatar">{auth.user.label.slice(0, 1).toUpperCase()}</span>;
                 })()
               : <span className="v4-avatar v4-avatar-guest" aria-hidden>
@@ -180,7 +181,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
                 {(() => {
                   const cloudAvatar = profile.profile?.avatar_url || '';
                   return cloudAvatar
-                    ? <img src={cloudAvatar} alt="头像" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+                    ? <img src={cloudAvatar} alt={t('头像', 'Avatar')} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
                     : <span className="v4-avatar v4-avatar-sm">{auth.user.label.slice(0, 1).toUpperCase()}</span>;
                 })()}
                 <div className="v4-menu-user-text"><strong>{auth.user.label}</strong><span>{auth.user.account || t('已登录', 'Signed in')}</span></div>
@@ -207,7 +208,9 @@ export function Button({ variant = 'dark', size = 'md', children, className = ''
 }
 
 export function SectionLabel({ children, en }: { children: React.ReactNode; en?: string }) {
-  return <div className="section-label"><span className="dot" /><span>{children}</span>{en && <em>{en}</em>}</div>;
+  // 英文界面下不再重复挂一个英文小字（原本是给中文标题配的英文注脚）
+  const { lang } = useLang();
+  return <div className="section-label"><span className="dot" /><span>{children}</span>{en && lang !== 'en' && <em>{en}</em>}</div>;
 }
 
 export function Card({ children, className = '', onClick, hover = false }: { children: React.ReactNode; className?: string; onClick?: () => void; hover?: boolean }) {
@@ -237,10 +240,11 @@ export function Empty({ title, desc, action }: { title: string; desc: string; ac
 }
 
 export function Modal({ open, title, onClose, children, wide = false }: { open: boolean; title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+  const { t } = useLang();
   if (!open) return null;
   return <div className="modal-backdrop" onClick={onClose}>
     <div className={`modal ${wide ? 'modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
-      <div className="modal-head"><h3>{title}</h3><button className="icon-btn" onClick={onClose} aria-label="关闭">✕</button></div>
+      <div className="modal-head"><h3>{title}</h3><button className="icon-btn" onClick={onClose} aria-label={t('关闭', 'Close')}>✕</button></div>
       <div className="modal-body">{children}</div>
     </div>
   </div>;

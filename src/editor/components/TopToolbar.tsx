@@ -3,11 +3,12 @@ import React from 'react';
 import { useEditor } from '../EditorContext';
 import { Icon, IconName } from '../../components/icons';
 import { ViewMode } from '../constants';
+import { useLang } from '../../i18n';
 
-const VIEW_TABS: { id: ViewMode; label: string; icon: IconName }[] = [
-  { id: 'design', label: '平面设计', icon: 'square' },
-  { id: '3d', label: '3D 预览', icon: 'box3d' },
-  { id: 'dieline', label: '刀模与印前', icon: 'scissors' },
+const VIEW_TABS: { id: ViewMode; zh: string; en: string; icon: IconName }[] = [
+  { id: 'design', zh: '平面设计', en: 'Artwork', icon: 'square' },
+  { id: '3d', zh: '3D 预览', en: '3D preview', icon: 'box3d' },
+  { id: 'dieline', zh: '刀模与印前', en: 'Dieline & prepress', icon: 'scissors' },
 ];
 
 function ToolButton({ icon, label, onClick, active, title, disabled }: {
@@ -36,9 +37,10 @@ function ToolButton({ icon, label, onClick, active, title, disabled }: {
 
 export default function TopToolbar() {
   const ed = useEditor();
+  const { lang, t } = useLang();
 
   const renameProject = () => {
-    const name = prompt('项目名称', ed.design?.name || '未命名项目');
+    const name = prompt(t('项目名称', 'Project name'), ed.design?.name || t('未命名项目', 'Untitled project'));
     if (name && name.trim()) {
       // 通过保存项目时更新名称
       ed.manualSave();
@@ -54,10 +56,10 @@ export default function TopToolbar() {
       <button
         onClick={() => { window.location.hash = '#/workspace'; }}
         style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#555' }}
-        title="返回工作台"
+        title={t('返回工作台', 'Back to workspace')}
       >
         <Icon name="chevronLeft" size={16} />
-        工作台
+        {t('工作台', 'Workspace')}
       </button>
 
       <div style={{ width: 1, height: 20, background: '#e5e5e5', margin: '0 4px' }} />
@@ -66,9 +68,9 @@ export default function TopToolbar() {
       <button
         onClick={renameProject}
         style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, color: '#222' }}
-        title="点击修改项目名称"
+        title={t('点击修改项目名称', 'Click to rename the project')}
       >
-        {ed.design?.name || '未命名项目'}
+        {ed.design?.name || t('未命名项目', 'Untitled project')}
         <Icon name="edit" size={13} style={{ color: '#999' }} />
       </button>
 
@@ -78,8 +80,8 @@ export default function TopToolbar() {
         fontSize: 12,
         color: ed.saveStatus === 'saved' ? '#16a34a' : ed.saveStatus === 'saving' ? '#d97706' : '#999',
       }}>
-        {ed.saveStatus === 'saving' && <><Icon name="clock" size={13} />保存中…</>}
-        {ed.saveStatus === 'saved' && <><Icon name="check" size={13} />已保存</>}
+        {ed.saveStatus === 'saving' && <><Icon name="clock" size={13} />{t('保存中…', 'Saving…')}</>}
+        {ed.saveStatus === 'saved' && <><Icon name="check" size={13} />{t('已保存', 'Saved')}</>}
       </span>
 
       <div style={{ flex: 1 }} />
@@ -90,7 +92,7 @@ export default function TopToolbar() {
           <ToolButton
             key={tab.id}
             icon={tab.icon}
-            label={tab.label}
+            label={lang === 'en' ? tab.en : tab.zh}
             active={ed.viewMode === tab.id}
             onClick={() => ed.setViewMode(tab.id)}
           />
@@ -100,24 +102,24 @@ export default function TopToolbar() {
       <div style={{ width: 1, height: 20, background: '#e5e5e5', margin: '0 4px' }} />
 
       {/* 网格开关 */}
-      <ToolButton icon="grid" label="网格" active={ed.showGrid} onClick={() => ed.setShowGrid((v) => !v)} />
+      <ToolButton icon="grid" label={t('网格', 'Grid')} active={ed.showGrid} onClick={() => ed.setShowGrid((v) => !v)} />
 
       {/* 印前检查 */}
-      <ToolButton icon="prepress" label="印前检查" onClick={ed.openPrepress} />
+      <ToolButton icon="prepress" label={t('印前检查', 'Prepress check')} onClick={ed.openPrepress} />
 
       <div style={{ width: 1, height: 20, background: '#e5e5e5', margin: '0 4px' }} />
 
       {/* 撤销重做 */}
       <button
         onClick={ed.undo} disabled={!ed.canUndo}
-        title="撤销 (Cmd+Z)"
+        title={t('撤销 (Cmd+Z)', 'Undo (Cmd+Z)')}
         style={{ background: 'none', border: 'none', cursor: ed.canUndo ? 'pointer' : 'not-allowed', padding: 6, opacity: ed.canUndo ? 1 : 0.4, color: '#444' }}
       >
         <Icon name="undo" size={17} />
       </button>
       <button
         onClick={ed.redo} disabled={!ed.canRedo}
-        title="重做 (Cmd+Shift+Z)"
+        title={t('重做 (Cmd+Shift+Z)', 'Redo (Cmd+Shift+Z)')}
         style={{ background: 'none', border: 'none', cursor: ed.canRedo ? 'pointer' : 'not-allowed', padding: 6, opacity: ed.canRedo ? 1 : 0.4, color: '#444' }}
       >
         <Icon name="redo" size={17} />

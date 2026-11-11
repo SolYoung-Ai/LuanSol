@@ -38,7 +38,7 @@ export default function Home() {
     <div className="v4-home-mark" role="img" aria-label="LunaSol">
       <span className="hm-letter">L</span><span className="hm-letter">u</span><span className="hm-letter">n</span><span className="hm-letter">a</span><span className="hm-letter" style={{ color: '#e8783a' }}>S</span><span className="hm-letter" style={{ color: '#e8783a' }}>o</span><span className="hm-letter" style={{ color: '#e8783a' }}>l</span>
     </div>
-    <div className="v4-home-sub">人人都能成为设计师</div>
+    <div className="v4-home-sub">{t('人人都能成为设计师', 'Everyone can be a designer')}</div>
     {/* 一句话说明「这里是做什么的」：支付通道审核要求从公开页能看懂卖的是什么 */}
     <p className="v4-home-desc">
       {t(

@@ -2,9 +2,11 @@
 import React from 'react';
 import { useEditor } from '../EditorContext';
 import { Icon } from '../../components/icons';
+import { useLang } from '../../i18n';
 
 export default function PrepressModal() {
   const ed = useEditor();
+  const { t } = useLang();
   const report = ed.prepressReport;
   if (!ed.prepressOpen || !report) return null;
 
@@ -31,12 +33,12 @@ export default function PrepressModal() {
       >
         {/* 标题 */}
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 18 }}>印前检查报告</h3>
+          <h3 style={{ margin: 0, fontSize: 18 }}>{t('印前检查报告', 'Prepress report')}</h3>
           <div style={{ flex: 1 }} />
           <button
             onClick={ed.closePrepress}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}
-            title="关闭"
+            title={t('关闭', 'Close')}
           >
             <Icon name="close" size={20} />
           </button>
@@ -71,7 +73,7 @@ export default function PrepressModal() {
                 </div>
                 {item.fix && (
                   <div style={{ fontSize: 12, color: '#0369a1', marginTop: 4, marginLeft: 24 }}>
-                    建议：{item.fix}
+                    {t('建议：', 'Suggested fix: ')}{item.fix}
                   </div>
                 )}
               </div>
@@ -90,7 +92,7 @@ export default function PrepressModal() {
             }}
           >
             <Icon name="spark" size={15} />
-            自动修复可处理问题
+            {t('自动修复可处理问题', 'Auto-fix what can be fixed')}
           </button>
           <button
             onClick={ed.closePrepress}
@@ -99,7 +101,7 @@ export default function PrepressModal() {
               border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer',
             }}
           >
-            关闭
+            {t('关闭', 'Close')}
           </button>
         </div>
       </div>

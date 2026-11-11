@@ -57,3 +57,4 @@ export const LOGIN_CONFIG = {
 
 /** 短信关闭时给用户的统一解释，避免各处写出不同口径。 */
 export const NO_SMS_HINT = '本站已关闭短信验证码，请使用邮箱接收验证码';
+export const NO_SMS_HINT_EN = 'SMS codes are disabled on this site — please receive the code by email';

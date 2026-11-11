@@ -5,13 +5,15 @@ import { Icon } from '../../components/icons';
 import Viewer3D from '../../components/Viewer3D';
 import LayerView from './LayerView';
 import DielineView from './DielineView';
-import { FACE_LABELS, MM_TO_PX, zoomBtn } from '../constants';
+import { faceLabel, MM_TO_PX, zoomBtn } from '../constants';
+import { useLang } from '../../i18n';
 import type { FaceId } from '../../types';
 
 const FACE_ORDER: FaceId[] = ['front', 'back', 'left', 'right', 'top'];
 
 export default function DesignCanvas() {
   const ed = useEditor();
+  const { lang, t } = useLang();
   const face = ed.face;
 
   return (
@@ -33,25 +35,25 @@ export default function DesignCanvas() {
               border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer',
             }}
           >
-            {FACE_LABELS[f]}
+            {faceLabel(f, lang)}
           </button>
         ))}
 
         <div style={{ flex: 1 }} />
 
         {/* 缩放控制 */}
-        <button onClick={() => ed.setZoom((z) => Math.max(0.1, +(z - 0.1).toFixed(2)))} style={zoomBtn} title="缩小">
+        <button onClick={() => ed.setZoom((z) => Math.max(0.1, +(z - 0.1).toFixed(2)))} style={zoomBtn} title={t('缩小', 'Zoom out')}>
           <Icon name="minus" size={13} />
         </button>
-        <button onClick={() => ed.setZoom(1)} style={{ ...zoomBtn, minWidth: 52 }} title="重置为 100%">
+        <button onClick={() => ed.setZoom(1)} style={{ ...zoomBtn, minWidth: 52 }} title={t('重置为 100%', 'Reset to 100%')}>
           {Math.round(ed.zoom * 100)}%
         </button>
-        <button onClick={() => ed.setZoom((z) => Math.min(5, +(z + 0.1).toFixed(2)))} style={zoomBtn} title="放大">
+        <button onClick={() => ed.setZoom((z) => Math.min(5, +(z + 0.1).toFixed(2)))} style={zoomBtn} title={t('放大', 'Zoom in')}>
           <Icon name="plus" size={13} />
         </button>
-        <button onClick={ed.fitToScreen} style={{ ...zoomBtn, display: 'flex', alignItems: 'center', gap: 4 }} title="适应屏幕">
+        <button onClick={ed.fitToScreen} style={{ ...zoomBtn, display: 'flex', alignItems: 'center', gap: 4 }} title={t('适应屏幕', 'Fit to screen')}>
           <Icon name="fit" size={13} />
-          适应
+          {t('适应', 'Fit')}
         </button>
       </div>
 

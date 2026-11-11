@@ -4,10 +4,12 @@ import { useApp } from '../../store';
 import { useEditor } from '../EditorContext';
 import { Icon } from '../../components/icons';
 import { MM_TO_PX } from '../constants';
+import { useLang } from '../../i18n';
 import type { Segment } from '../../types';
 
 type Unit = 'mm' | 'cm' | 'inch';
 const UNIT_LABEL: Record<Unit, string> = { mm: '毫米', cm: '厘米', inch: '英寸' };
+const UNIT_LABEL_EN: Record<Unit, string> = { mm: 'mm', cm: 'cm', inch: 'inch' };
 
 function convert(v: number, unit: Unit): number {
   if (unit === 'cm') return v / 10;
@@ -32,12 +34,14 @@ function ToggleChip({ label, active, onClick }: { label: string; active: boolean
 
 export default function DielineView() {
   const { dieline } = useApp();
+  const { lang, t } = useLang();
   const ed = useEditor();
   const [showCut, setShowCut] = useState(true);
   const [showBleed, setShowBleed] = useState(true);
   const [showSafe, setShowSafe] = useState(true);
   const [showDim, setShowDim] = useState(true);
   const [unit, setUnit] = useState<Unit>('mm');
+  const unitLabel = lang === 'en' ? UNIT_LABEL_EN : UNIT_LABEL;
 
   const sheet = dieline.sheets[0];
   const pad = 30;
@@ -59,17 +63,17 @@ export default function DielineView() {
         display: 'flex', gap: 8, padding: '10px 14px', flexWrap: 'wrap',
         borderBottom: '1px solid #eee', alignItems: 'center',
       }}>
-        <ToggleChip label="刀模线" active={showCut} onClick={() => setShowCut((v) => !v)} />
-        <ToggleChip label="出血区" active={showBleed} onClick={() => setShowBleed((v) => !v)} />
-        <ToggleChip label="安全区" active={showSafe} onClick={() => setShowSafe((v) => !v)} />
-        <ToggleChip label="尺寸标注" active={showDim} onClick={() => setShowDim((v) => !v)} />
+        <ToggleChip label={t('刀模线', 'Dieline')} active={showCut} onClick={() => setShowCut((v) => !v)} />
+        <ToggleChip label={t('出血区', 'Bleed')} active={showBleed} onClick={() => setShowBleed((v) => !v)} />
+        <ToggleChip label={t('安全区', 'Safe area')} active={showSafe} onClick={() => setShowSafe((v) => !v)} />
+        <ToggleChip label={t('尺寸标注', 'Dimensions')} active={showDim} onClick={() => setShowDim((v) => !v)} />
 
         <div style={{ flex: 1 }} />
 
         {/* 单位切换 */}
         <div style={{ display: 'flex', gap: 2 }}>
           {(Object.keys(UNIT_LABEL) as Unit[]).map((u) => (
-            <ToggleChip key={u} label={UNIT_LABEL[u]} active={unit === u} onClick={() => setUnit(u)} />
+            <ToggleChip key={u} label={unitLabel[u]} active={unit === u} onClick={() => setUnit(u)} />
           ))}
         </div>
 
@@ -83,7 +87,7 @@ export default function DielineView() {
           }}
         >
           <Icon name="prepress" size={14} />
-          运行印前检查
+          {t('运行印前检查', 'Run prepress check')}
         </button>
       </div>
 
@@ -173,19 +177,19 @@ export default function DielineView() {
           padding: '12px 16px', borderRadius: 8, border: '1px solid #eee',
         }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 20, height: 2, background: '#151515' }} />裁切线（实线）
+            <span style={{ width: 20, height: 2, background: '#151515' }} />{t('裁切线（实线）', 'Cut lines (solid)')}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 20, height: 2, background: '#e05252' }} />压痕线（虚线）
+            <span style={{ width: 20, height: 2, background: '#e05252' }} />{t('压痕线（虚线）', 'Crease lines (dashed)')}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 20, height: 2, background: '#2b7fc3' }} />出血区
+            <span style={{ width: 20, height: 2, background: '#2b7fc3' }} />{t('出血区', 'Bleed area')}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 20, height: 2, background: '#e8a23a' }} />安全区
+            <span style={{ width: 20, height: 2, background: '#e8a23a' }} />{t('安全区', 'Safe area')}
           </span>
           <span style={{ color: '#888' }}>
-            出血 {dieline.bleed}mm · 安全区 {dieline.safe}mm
+            {t(`出血 ${dieline.bleed}mm · 安全区 ${dieline.safe}mm`, `Bleed ${dieline.bleed}mm · safe area ${dieline.safe}mm`)}
           </span>
         </div>
       </div>

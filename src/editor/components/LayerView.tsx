@@ -1,12 +1,14 @@
 /* 单个图层渲染：文字/图片/形状 + 选中框、8 个缩放控制点、旋转手柄。 */
 import React from 'react';
 import { useEditor } from '../EditorContext';
+import { useLang } from '../../i18n';
 import type { Layer, TextLayer, ImageLayer, ShapeLayer } from '../../types';
 import { HandlePos, HANDLE_POSITIONS, MM_TO_PX } from '../constants';
 import { textMarkup } from '../../engine/design';
 
 export default function LayerView({ layer }: { layer: Layer }) {
   const ed = useEditor();
+  const { t } = useLang();
   const selected = ed.selectedLayer === layer.id;
   const z = ed.zoom;
 
@@ -99,7 +101,7 @@ export default function LayerView({ layer }: { layer: Layer }) {
             }}
             onMouseDown={(e) => ed.onRotateMouseDown(e, layer)}
             onClick={(e) => e.stopPropagation()}
-            title="拖拽旋转（Shift 吸附 15°）"
+            title={t('拖拽旋转（Shift 吸附 15°）', 'Drag to rotate (hold Shift to snap 15°)')}
           />
         </>
       )}

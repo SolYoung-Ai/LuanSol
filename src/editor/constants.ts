@@ -82,7 +82,7 @@ export type TextPreset = 'title' | 'subtitle' | 'body' | 'price' | 'label';
 // 三个正式工作视图
 export type ViewMode = 'design' | '3d' | 'dieline';
 
-// 包装面中文标签
+// 包装面标签（英文名单独存：界面按语言取，别把中文硬编码进渲染）
 export const FACE_LABELS: Record<string, string> = {
   front: '正面',
   back: '背面',
@@ -90,3 +90,13 @@ export const FACE_LABELS: Record<string, string> = {
   right: '右侧',
   top: '顶面',
 };
+export const FACE_LABELS_EN: Record<string, string> = {
+  front: 'Front',
+  back: 'Back',
+  left: 'Left',
+  right: 'Right',
+  top: 'Top',
+};
+/** 按语言取包装面名 */
+export const faceLabel = (id: string, lang: string) =>
+  (lang === 'en' ? FACE_LABELS_EN[id] : FACE_LABELS[id]) || id;

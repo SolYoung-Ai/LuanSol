@@ -19,13 +19,15 @@ import ConceptStage from './ConceptStage';
 import { EditorProvider } from '../editor/EditorContext';
 import EditorShell from '../editor/EditorShell';
 import type { ToolId } from '../editor/constants';
+import { useLang } from '../i18n';
 import { Icon } from '../components/icons';
 
-const STEPS: { stage: WorkflowStage; label: string }[] = [
-  { stage: 'entry', label: '创作入口' },
-  { stage: 'requirements', label: '确认需求' },
-  { stage: 'concepts', label: '设计方案' },
-  { stage: 'editor', label: '编辑器' },
+/** 步骤名存双语：模块级常量拿不到当前语言，只能在渲染时挑 */
+const STEPS: { stage: WorkflowStage; label: { zh: string; en: string } }[] = [
+  { stage: 'entry', label: { zh: '创作入口', en: 'Start' } },
+  { stage: 'requirements', label: { zh: '确认需求', en: 'Requirements' } },
+  { stage: 'concepts', label: { zh: '设计方案', en: 'Concepts' } },
+  { stage: 'editor', label: { zh: '编辑器', en: 'Editor' } },
 ];
 
 /** 把任意历史阶段归一到新四步流程，避免旧项目落到空白页。
@@ -66,6 +68,7 @@ function StepBar({
   onStepClick: (s: WorkflowStage) => void;
   onSave: () => void;
 }) {
+  const { lang, t } = useLang();
   const curIdx = STEPS.findIndex((s) => s.stage === current);
   const farIdx = STEPS.findIndex((s) => s.stage === farthest);
   const [saved, setSaved] = useState(false);
@@ -91,16 +94,16 @@ function StepBar({
                 disabled={!clickable}
               >
                 <span className="wf-step-dot">{done ? <Icon name="check" size={12} /> : i + 1}</span>
-                <span className="wf-step-label">{step.label}</span>
+                <span className="wf-step-label">{lang === 'en' ? step.label.en : step.label.zh}</span>
               </button>
               {i < STEPS.length - 1 && <span className="wf-step-sep"><Icon name="chevronRight" size={13} /></span>}
             </React.Fragment>
           );
         })}
         <div style={{ flex: 1 }} />
-        <span className="wf-saved-hint">已自动保存草稿</span>
+        <span className="wf-saved-hint">{t('已自动保存草稿', 'Draft autosaved')}</span>
         <button className="wf-mini-btn" onClick={() => { onSave(); setSaved(true); }}>
-          {saved ? '✓ 已保存' : '保存草稿'}
+          {saved ? t('✓ 已保存', '✓ Saved') : t('保存草稿', 'Save draft')}
         </button>
       </div>
     </div>
@@ -120,6 +123,7 @@ function EmbeddedEditor({ projectId, initialTool }: { projectId: string; initial
 
 export default function CreationFlow() {
   const { s, patchWorkflow, setToast, startEmptyDraft } = useApp();
+  const { t } = useLang();
   const hash = useHash();
   const freshHandled = useRef(false);
   const project = s.projects.find((p) => p.id === s.activeId);
@@ -151,7 +155,7 @@ export default function CreationFlow() {
   const goStage = (stage: WorkflowStage) => {
     if (!project) return;
     if (stage === 'editor' && !project.design) {
-      setToast('请先在设计方案中选一张并继续设计');
+      setToast(t('请先在设计方案中选一张并继续设计', 'Pick a concept and continue before opening the editor.'));
       return;
     }
     patchWorkflow(project.id, { stage });

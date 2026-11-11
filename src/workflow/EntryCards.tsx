@@ -12,34 +12,51 @@ import React, { useState } from 'react';
 import type { CreationMode } from '../types';
 import { emptyProductInfo } from '../types';
 import { useApp } from '../store';
+import { useLang } from '../i18n';
 import { Icon } from '../components/icons';
 import type { IconName } from '../components/icons';
+
+/** 双语片段。常量在模块加载时求值，拿不到当前语言，
+ *  所以这里存两份、渲染时再挑——不能在常量里直接调 t()。 */
+type L = { zh: string; en: string };
 
 interface Choice {
   mode: CreationMode;
   icon: IconName;
-  kicker: string;
-  title: string;
-  desc: string;
-  points: string[];
+  kicker: L;
+  title: L;
+  desc: L;
+  points: L[];
 }
 
 export const CHOICES: Choice[] = [
   {
     mode: 'referenceStyle',
     icon: 'image',
-    kicker: '我有方向',
-    title: '我有参考图 / 设计方向',
-    desc: '手上有喜欢的包装图、品牌规范，或已经想清楚风格。',
-    points: ['上传参考图，AI 按你的方向落地', '可以指定配色、插画元素与卖点'],
+    kicker: { zh: '我有方向', en: 'I have a direction' },
+    title: { zh: '我有参考图 / 设计方向', en: 'I have references' },
+    desc: {
+      zh: '手上有喜欢的包装图、品牌规范，或已经想清楚风格。',
+      en: 'You already have packaging you like, brand guidelines, or a clear idea of the style.',
+    },
+    points: [
+      { zh: '上传参考图，AI 按你的方向落地', en: 'Upload references — AI follows your direction' },
+      { zh: '可以指定配色、插画元素与卖点', en: 'Specify colors, illustration elements and selling points' },
+    ],
   },
   {
     mode: 'fromScratch',
     icon: 'spark',
-    kicker: '从零开始',
-    title: '我没有，从零开始',
-    desc: '只有一个产品，还没有任何设计想法，交给 AI 构思。',
-    points: ['描述产品，AI 帮你定调', '同样可补充信息让方向更准'],
+    kicker: { zh: '从零开始', en: 'From scratch' },
+    title: { zh: '我没有，从零开始', en: 'Start from nothing' },
+    desc: {
+      zh: '只有一个产品，还没有任何设计想法，交给 AI 构思。',
+      en: 'You have a product but no design ideas yet — let AI propose the direction.',
+    },
+    points: [
+      { zh: '描述产品，AI 帮你定调', en: 'Describe the product and AI sets the tone' },
+      { zh: '同样可补充信息让方向更准', en: 'Add more details any time to sharpen the result' },
+    ],
   },
 ];
 
@@ -47,6 +64,7 @@ export const CHOICES: Choice[] = [
  *  否则复用空白 entry 草稿 / 新建一个带工作流的项目。 */
 export function useEntryPick() {
   const { s, createWorkflowProject, patchWorkflow, loadProject, setToast } = useApp();
+  const { t } = useLang();
   const [busy, setBusy] = useState<CreationMode | null>(null);
 
   const pick = (mode: CreationMode): CreationMode | null => {
@@ -71,7 +89,7 @@ export function useEntryPick() {
       }
       return mode;
     } catch (e) {
-      setToast(e instanceof Error ? e.message : '创建项目失败，请重试');
+      setToast(e instanceof Error ? e.message : t('创建项目失败，请重试', 'Could not create the project. Please try again.'));
       setBusy(null);
       return null;
     }
@@ -85,6 +103,8 @@ export function EntryCards({ busy, onPick }: {
   busy?: CreationMode | null;
   onPick: (mode: CreationMode) => void;
 }) {
+  const { lang, t } = useLang();
+  const L = (v: { zh: string; en: string }) => (lang === 'en' ? v.en : v.zh);
   return <div className="wf-choice-grid">
     {CHOICES.map((c) => (
       <button
@@ -94,16 +114,16 @@ export function EntryCards({ busy, onPick }: {
         disabled={!!busy}
       >
         <span className="wf-choice-icon"><Icon name={c.icon} size={24} /></span>
-        <span className="wf-choice-kicker">{c.kicker}</span>
-        <span className="wf-choice-title">{c.title}</span>
-        <span className="wf-choice-desc">{c.desc}</span>
+        <span className="wf-choice-kicker">{L(c.kicker)}</span>
+        <span className="wf-choice-title">{L(c.title)}</span>
+        <span className="wf-choice-desc">{L(c.desc)}</span>
         <span className="wf-choice-points">
           {c.points.map((p) => (
-            <span key={p} className="wf-choice-point"><Icon name="check" size={13} />{p}</span>
+            <span key={p.zh} className="wf-choice-point"><Icon name="check" size={13} />{L(p)}</span>
           ))}
         </span>
         <span className="wf-choice-cta">
-          {busy === c.mode ? '正在准备…' : '选择这条路'} <Icon name="chevronRight" size={15} />
+          {busy === c.mode ? t('正在准备…', 'Preparing…') : t('选择这条路', 'Choose this path')} <Icon name="chevronRight" size={15} />
         </span>
       </button>
     ))}

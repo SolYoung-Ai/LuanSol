@@ -38,26 +38,28 @@ export function isSessionNoise(message?: string | null): boolean {
   return SESSION_NOISE.test(message);
 }
 
-/** 常见 SDK 英文错误 → 用户能看懂的中文。未命中的保持原文，不做臆测。 */
-const DICTIONARY: { test: RegExp; text: string }[] = [
-  { test: /invalid login credentials|invalid password|wrong password|password.*incorrect|incorrect.*password/i, text: '账号或密码不正确，请检查后重试' },
-  { test: /user already registered|already registered|email.*(already )?exists|duplicate/i, text: '这个邮箱已经注册过了，可以直接用密码或验证码登录' },
-  { test: /email not confirmed|not verified|unverified/i, text: '邮箱还没有完成验证，请先完成邮箱验证' },
-  { test: /rate limit|too many requests|too many attempts|too frequent/i, text: '操作太频繁了，请稍等一分钟再试' },
-  { test: /invalid email|email.*(format|invalid)/i, text: '邮箱格式不正确，请检查后重填' },
-  { test: /user not found|no user|not exist/i, text: '这个账号还没有注册，请先设置密码完成注册' },
-  { test: /network|fetch failed|failed to fetch|timeout|timed out/i, text: '网络连接失败，请检查网络后重试' },
+/** 常见 SDK 英文错误 → 用户能看懂的中文 / 英文。未命中的保持原文，不做臆测。 */
+const DICTIONARY: { test: RegExp; zh: string; en: string }[] = [
+  { test: /invalid login credentials|invalid password|wrong password|password.*incorrect|incorrect.*password/i, zh: '账号或密码不正确，请检查后重试', en: 'Incorrect account or password — please check and try again' },
+  { test: /user already registered|already registered|email.*(already )?exists|duplicate/i, zh: '这个邮箱已经注册过了，可以直接用密码或验证码登录', en: 'This email is already registered — sign in with your password or a code instead' },
+  { test: /email not confirmed|not verified|unverified/i, zh: '邮箱还没有完成验证，请先完成邮箱验证', en: 'This email has not been verified yet — please verify it first' },
+  { test: /rate limit|too many requests|too many attempts|too frequent/i, zh: '操作太频繁了，请稍等一分钟再试', en: 'Too many attempts — please wait a minute and try again' },
+  { test: /invalid email|email.*(format|invalid)/i, zh: '邮箱格式不正确，请检查后重填', en: 'That email address is not valid — please check it and re-enter' },
+  { test: /user not found|no user|not exist/i, zh: '这个账号还没有注册，请先设置密码完成注册', en: 'This account does not exist yet — set a password to sign up first' },
+  { test: /network|fetch failed|failed to fetch|timeout|timed out/i, zh: '网络连接失败，请检查网络后重试', en: 'Network connection failed — check your connection and try again' },
 ];
 
 /**
  * 把原始错误消息转换成界面文案。
  * 返回空串表示「应当静默忽略」，调用方据此决定不展示。
+ * lang 传 'en' 时返回英文；默认中文，保持既有调用与单测行为不变。
  */
-export function humanizeAuthError(message?: string | null, fallback = '操作失败，请稍后重试'): string {
+export function humanizeAuthError(message?: string | null, fallback?: string, lang: 'zh' | 'en' = 'zh'): string {
+  const fb = fallback || (lang === 'en' ? 'Something went wrong. Please try again.' : '操作失败，请稍后重试');
   const m = (message || '').trim();
-  if (!m) return fallback;
+  if (!m) return fb;
   if (isSessionNoise(m)) return '';
-  for (const d of DICTIONARY) if (d.test.test(m)) return d.text;
+  for (const d of DICTIONARY) if (d.test.test(m)) return lang === 'en' ? d.en : d.zh;
   // 未识别的消息保持原样：如实反馈比编造原因更可靠
   return m;
 }

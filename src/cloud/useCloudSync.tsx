@@ -9,6 +9,7 @@
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
+import { tl } from '../langStore';
 import { useAuth } from './auth';
 import { useSubscription } from './subscription';
 import {
@@ -60,7 +61,7 @@ function useCloudSyncState(): CloudSync {
   const { isPro, loading: subLoading } = useSubscription();
   const { s, update, mergeCloudProjects, dropProjects, setToast } = useApp();
   const [state, setState] = useState<SyncState>('off');
-  const [message, setMessage] = useState('未登录：项目只保存在本机浏览器');
+  const [message, setMessage] = useState(tl('未登录：项目只保存在本机浏览器', 'Not signed in: projects stay in this browser'));
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [cloudCount, setCloudCount] = useState<number | null>(null);
   const mergedFor = useRef<string | null>(null);
@@ -97,7 +98,7 @@ function useCloudSyncState(): CloudSync {
     writeDeleted(next);
     ids.forEach((id) => tombstones.current.add(id));
     void markDeleted(uid, ids).then((r) => {
-      if (!r.ok) setMessage(`删除记录暂时没同步到云端：${r.message}（下次同步会自动补写）`);
+      if (!r.ok) setMessage(tl(`删除记录暂时没同步到云端：${r.message}（下次同步会自动补写）`, `Deletions have not reached the cloud yet: ${r.message} (the next sync will write them)`));
     });
   }, []);
 
@@ -117,12 +118,12 @@ function useCloudSyncState(): CloudSync {
    *  云同步是会员权益：免费用户只在本机保存，不自动上传；
    *  但「取回云端项目」始终开放，避免会员到期后取不回已有作品。 */
   const syncNow = useCallback(async () => {
-    if (!user) { setState('off'); setMessage('未登录：项目只保存在本机浏览器'); return; }
-    if (!isPro) { setState('off'); setMessage('云同步为会员权益：当前作品只保存在本机浏览器'); return; }
+    if (!user) { setState('off'); setMessage(tl('未登录：项目只保存在本机浏览器', 'Not signed in: projects stay in this browser')); return; }
+    if (!isPro) { setState('off'); setMessage(tl('云同步为会员权益：当前作品只保存在本机浏览器', 'Cloud sync is a member benefit: work stays in this browser for now')); return; }
     if (running.current) return;
     running.current = true;
     setState('syncing');
-    setMessage('正在与云端合并…');
+    setMessage(tl('正在与云端合并…', 'Merging with the cloud…'));
     try {
       /* 先取「删过哪些」再去拉项目：顺序反过来的话，已删除的项目会先在界面上闪一下 */
       const tombs = await refreshTombstones(user.id);
@@ -161,7 +162,7 @@ function useCloudSyncState(): CloudSync {
         const r = await pushMany(user.id, ups);
         if (r.failed.length) {
           setState('error');
-          setMessage(`已上传 ${r.ok} 个，${r.failed.length} 个失败：${r.failed[0].message}`);
+          setMessage(tl(`已上传 ${r.ok} 个，${r.failed.length} 个失败：${r.failed[0].message}`, `Uploaded ${r.ok}, ${r.failed.length} failed: ${r.failed[0].message}`));
           return;
         }
         ups.forEach((p) => { pushedAt.current[p.id] = p.updatedAt; cloudIdsRef.current.add(p.id); });
@@ -172,7 +173,7 @@ function useCloudSyncState(): CloudSync {
       setLastSync(Date.now());
       syncedFor.current = user.id;
       setState('ok');
-      setMessage(`已同步 ${total} 个项目${skipped ? ` · ${skipped} 个属于其他账号，未上传` : ''} · ${timeLabel(new Date().toISOString())}`);
+      setMessage(tl(`已同步 ${total} 个项目${skipped ? ` · ${skipped} 个属于其他账号，未上传` : ''} · ${timeLabel(new Date().toISOString())}`, `${total} projects synced${skipped ? ` · ${skipped} belong to another account and were skipped` : ''} · ${timeLabel(new Date().toISOString())}`));
     } catch (e) {
       setState('error');
       setMessage(e instanceof Error ? e.message : String(e));
@@ -191,7 +192,7 @@ function useCloudSyncState(): CloudSync {
       tombstones.current = new Set();
       setCloudCount(null);
       setState('off');
-      setMessage('未登录：项目只保存在本机浏览器');
+      setMessage(tl('未登录：项目只保存在本机浏览器', 'Not signed in: projects stay in this browser'));
       return;
     }
     // 订阅还没加载完先等，避免把刚开通的会员判成免费用户
@@ -199,7 +200,7 @@ function useCloudSyncState(): CloudSync {
     if (!isPro) {
       mergedFor.current = null;
       setState('off');
-      setMessage('云同步为会员权益：当前作品只保存在本机浏览器');
+      setMessage(tl('云同步为会员权益：当前作品只保存在本机浏览器', 'Cloud sync is a member benefit: work stays in this browser for now'));
       return;
     }
     if (mergedFor.current === user.id) return;
@@ -224,14 +225,14 @@ function useCloudSyncState(): CloudSync {
       dirty.forEach((p) => { pushedAt.current[p.id] = p.updatedAt; });
       if (r.failed.length) {
         setState('error');
-        setMessage(`自动同步失败：${r.failed[0].message}`);
+        setMessage(tl(`自动同步失败：${r.failed[0].message}`, `Auto-sync failed: ${r.failed[0].message}`));
       } else {
         claim(dirty.map((p) => p.id), user.id);
         dirty.forEach((p) => cloudIdsRef.current.add(p.id));
         setCloudCount(cloudIdsRef.current.size);
         setState('ok');
         setLastSync(Date.now());
-        setMessage(`已自动同步 ${r.ok} 个项目 · ${timeLabel(new Date().toISOString())}`);
+        setMessage(tl(`已自动同步 ${r.ok} 个项目 · ${timeLabel(new Date().toISOString())}`, `${r.ok} projects auto-synced · ${timeLabel(new Date().toISOString())}`));
       }
     }, 4000);
     return () => window.clearTimeout(t);
@@ -254,7 +255,7 @@ function useCloudSyncState(): CloudSync {
     syncedFor.current = user.id;
     setState('ok');
     setLastSync(Date.now());
-    setMessage(`已从云端取回 ${alive.length} 个项目`);
+    setMessage(tl(`已从云端取回 ${alive.length} 个项目`, `Restored ${alive.length} projects from the cloud`));
     setToast(`已取回 ${r.data.length} 个云端项目`);
   }, [user, mergeCloudProjects, setToast, claim]);
 
@@ -277,7 +278,7 @@ function useCloudSyncState(): CloudSync {
     setCloudCount(cloudIdsRef.current.size);
     setState('ok');
     setLastSync(Date.now());
-    setMessage(`已同步「${p.name}」· ${timeLabel(new Date().toISOString())}`);
+    setMessage(tl(`已同步「${p.name}」· ${timeLabel(new Date().toISOString())}`, `“${p.name}” synced · ${timeLabel(new Date().toISOString())}`));
     update({});
     return true;
   }, [user, isPro, setToast, update, claim]);
@@ -292,8 +293,8 @@ function useCloudSyncState(): CloudSync {
     cloudIdsRef.current.delete(projectIdOf(id));
     setCloudCount(cloudIdsRef.current.size);
     setToast(r.ok
-      ? '已删除，其他设备下次同步也会消失'
-      : `已从各端删除；云端副本稍后自动清理（${r.message}）`);
+      ? tl('已删除，其他设备下次同步也会消失', 'Deleted — it will disappear on your other devices at their next sync')
+      : tl(`已从各端删除；云端副本稍后自动清理（${r.message}）`, `Deleted everywhere; the cloud copy will be cleaned up shortly (${r.message})`));
     return true;
   }, [user, setToast, rememberDeleted]);
 

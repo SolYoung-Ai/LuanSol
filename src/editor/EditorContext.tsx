@@ -3,6 +3,7 @@
  * 渲染组件通过 useEditor() 读取，避免多套状态和 props 层层透传。 */
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
+import { tl } from '../langStore';
 import { useHash } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
@@ -779,23 +780,23 @@ export function EditorProvider({
     };
     const preset: Record<TextPreset, Partial<TextLayer> & { text: string; name: string }> = {
       title: {
-        name: '主标题', text: '主标题文字', role: 'product', fontFamily: '"Songti SC","STSong","Noto Serif CJK SC",serif',
+        name: tl('主标题', 'Headline'), text: '主标题文字', role: 'product', fontFamily: '"Songti SC","STSong","Noto Serif CJK SC",serif',
         fontSize: 30, fontWeight: 700, color: '#1c1a17', align: 'center', letterSpacing: 0.04, lineHeight: 1.3,
       },
       subtitle: {
-        name: '副标题', text: '副标题文字', role: 'tagline', fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+        name: tl('副标题', 'Subheading'), text: '副标题文字', role: 'tagline', fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
         fontSize: 14, fontWeight: 400, color: '#333333', align: 'center', letterSpacing: 0.12, lineHeight: 1.5,
       },
       body: {
-        name: '正文', text: '在这里输入正文内容', role: 'info', fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+        name: tl('正文', 'Body copy'), text: '在这里输入正文内容', role: 'info', fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
         fontSize: 8, fontWeight: 400, color: '#4a4a4a', align: 'left', letterSpacing: 0, lineHeight: 1.7,
       },
       price: {
-        name: '价格标签', text: '¥ 128', role: 'custom', fontFamily: '"Helvetica Neue",Arial,sans-serif',
+        name: tl('价格标签', 'Price tag'), text: '¥ 128', role: 'custom', fontFamily: '"Helvetica Neue",Arial,sans-serif',
         fontSize: 24, fontWeight: 700, color: accent, align: 'left', letterSpacing: 0.02, lineHeight: 1.2,
       },
       label: {
-        name: '英文标签', text: 'PREMIUM QUALITY', role: 'legal', fontFamily: '"Helvetica Neue",Arial,sans-serif',
+        name: tl('英文标签', 'Small label'), text: 'PREMIUM QUALITY', role: 'legal', fontFamily: '"Helvetica Neue",Arial,sans-serif',
         fontSize: 9, fontWeight: 500, color: '#666666', align: 'center', letterSpacing: 0.3, lineHeight: 1.4,
       },
     };
@@ -1014,7 +1015,7 @@ export function EditorProvider({
   /** 印刷级导出（PDF / SVG / ZIP）是会员权益；PNG 预览图免费。
    *  统一在这里拦截，避免只藏按钮、AI 工具链却仍能导出的「假门槛」。 */
   const blockedByPlan = (label: string) => {
-    setToast(`${label} 导出为会员权益，开通后即可下载`);
+    setToast(tl(`${label} 导出为会员权益，开通后即可下载`, `${label} export is a member benefit — subscribe to download`));
     window.location.hash = '#/subscribe';
   };
   const exportPNG = async () => {

@@ -11,6 +11,7 @@ import { CloudSyncProvider } from './cloud/useCloudSync';
 import { cloudConfigured } from './cloud/config';
 import { LunaLoader } from './components/LunaLoader';
 import SideNav from './components/SideNav';
+import { useLang } from './i18n';
 
 // 路由级代码分割：除首页外壳外，所有页面按需加载。
 // 这样首屏不会拉起 three.js（3D 预览）、jsPDF / JSZip（导出）等重库，
@@ -34,24 +35,28 @@ const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
 
 function Footer() {
+  const { t } = useLang();
   return <footer className="footer-min"><div className="footer-min-inner">
     <div className="footer-min-brand"><Logo compact /><span>AI PACKAGING DESIGN STUDIO</span></div>
     <div className="footer-min-links">
-      <a href="#/studio">开始设计</a>
-      <a href="#/workspace">工作台</a>
-      <a href="#/market">审美市场</a>
-      <a href="#/subscribe">会员说明</a>
+      <a href="#/studio">{t('开始设计', 'Start designing')}</a>
+      <a href="#/workspace">{t('工作台', 'Workspace')}</a>
+      <a href="#/market">{t('审美市场', 'Aesthetic Index')}</a>
+      <a href="#/subscribe">{t('会员说明', 'Plans')}</a>
     </div>
     {/* 法务与价格必须是真实可抓取的静态地址：支付通道审核会直接请求 /terms 这类路径，
         而 #/terms 这种 hash 路由在他们眼里等于不存在。 */}
+    {/* 法务页目前只有中文版本，英文界面下直接链过去，不做半截翻译 */}
     <div className="footer-min-legal">
-      <a href="./pricing/">价格</a>
-      <a href="./terms/">服务条款</a>
-      <a href="./privacy/">隐私说明</a>
-      <a href="./aup/">使用规范</a>
-      <a href="./contact/">联系</a>
+      <a href="./pricing/">{t('价格', 'Pricing')}</a>
+      <a href="./terms/">{t('服务条款', 'Terms')}</a>
+      <a href="./privacy/">{t('隐私说明', 'Privacy')}</a>
+      <a href="./aup/">{t('使用规范', 'Acceptable use')}</a>
+      <a href="./contact/">{t('联系', 'Contact')}</a>
     </div>
-    <span className="footer-min-copy">© 2026 LunaSol · 从想法，到一件作品</span>
+    <span className="footer-min-copy">
+      © 2026 LunaSol · {t('从想法，到一件作品', 'From an idea to a finished piece')}
+    </span>
   </div></footer>;
 }
 
@@ -61,6 +66,7 @@ function PageFallback() {
 }
 
 export default function App() {
+  const { t } = useLang();
   const hash = useHash();
   const { toast, setToast } = useApp();
   const auth = useAuth();
@@ -95,10 +101,16 @@ export default function App() {
   const needLogin = (isOldFlow || path === '/studio' || path === '/new') && auth.ready && !auth.user;
   if (needLogin) {
     page = <div className="page page-narrow">
-      <PageHead kicker="SIGN IN" title="先登录，再开始设计"
-        desc="包装设计会按账号保存项目、同步云端并记录 AI 额度。请先登录或注册账号。" />
-      <Notice tone="info">登录免费，新用户自动获得免费体验积分。</Notice>
-      <div style={{ marginTop: 20 }}><Button size="lg" onClick={requestLogin}>登录 / 注册</Button></div>
+      <PageHead kicker="SIGN IN"
+        title={t('先登录，再开始设计', 'Sign in to start designing')}
+        desc={t('包装设计会按账号保存项目、同步云端并记录 AI 额度。请先登录或注册账号。',
+          'Projects are saved to your account, synced to the cloud and counted against your AI quota. Sign in or create an account first.')} />
+      <Notice tone="info">
+        {t('登录免费，新用户自动获得免费体验积分。', 'Signing up is free, and new accounts get trial credits.')}
+      </Notice>
+      <div style={{ marginTop: 20 }}>
+        <Button size="lg" onClick={requestLogin}>{t('登录 / 注册', 'Sign in')}</Button>
+      </div>
     </div>;
   } else if (isOldFlow) {
     // 旧路由直接重定向到新工作台
@@ -126,7 +138,10 @@ export default function App() {
   else if (path === '/luna') page = <Luna />;
   else if (path === '/studio') page = <Studio />;
   else if (path === '/admin') page = <Admin />;
-  else page = <div className="page page-narrow"><h1>页面不存在</h1><Button onClick={() => go('/')}>回到首页</Button></div>;
+  else page = <div className="page page-narrow">
+    <h1>{t('页面不存在', 'Page not found')}</h1>
+    <Button onClick={() => go('/')}>{t('回到首页', 'Back to home')}</Button>
+  </div>;
 
   return <SubscriptionProvider requestLogin={requestLogin}>
     <CloudSyncProvider>
@@ -141,13 +156,13 @@ export default function App() {
               {/* 全局返回：非首页且非 Luna 对话页显示 */}
               {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
                 if (window.history.length > 1) window.history.back(); else go('/');
-              }} aria-label="返回">← 返回</button>}
+              }} aria-label={t('返回', 'Back')}>← {t('返回', 'Back')}</button>}
               <Suspense fallback={<PageFallback />}>{page}</Suspense>
             </main>
             <Footer />
             {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
             <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
-            {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>本地模式</span>}
+            {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>{t('本地模式', 'Local mode')}</span>}
           </div>
         </ChatStoreProvider>
       </ProfileProvider>
@@ -161,6 +176,6 @@ function OldRouteRedirect() {
     window.location.hash = '#/studio';
   }, []);
   return <div className="page" style={{ padding: 40, textAlign: 'center', color: '#888' }}>
-    正在跳转到工作台…
+    Redirecting to the workspace…
   </div>;
 }

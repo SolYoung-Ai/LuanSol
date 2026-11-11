@@ -15,8 +15,9 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { authApi, type Err, type RawSession, type RawUser, type OtpCallback, type ReauthUpdate, type LinkVerifyCallback } from './sdk';
 import { cloudConfigured, cloudOriginSupported } from './config';
 import { humanizeAuthError, isSessionNoise } from './authErrors';
+import { currentLang, tl } from '../langStore';
 import { accountKey, emailTarget } from './keys';
-import { NO_SMS_HINT } from './loginConfig';
+import { NO_SMS_HINT, NO_SMS_HINT_EN } from './loginConfig';
 
 export { accountKey, emailTarget, isEmail, otpTarget } from './keys';
 
@@ -25,12 +26,15 @@ export interface AuthUser { id: string; label: string; account: string; avatarUr
 /** 登录不可用时的真实原因。
  *  SDK 未就绪有两种完全不同的情况，不能都报「未配置环境」——那会把
  *  「域名不在白名单」说成「没配环境」，属于错误信息误导。 */
-function unavailable(action: string): string {
-  if (!cloudConfigured) return `尚未配置 CloudBase 环境，无法${action}`;
+function unavailable(action: string, actionEn: string): string {
+  if (!cloudConfigured) return tl(`尚未配置 CloudBase 环境，无法${action}`, `CloudBase is not configured, so ${actionEn} is unavailable`);
   if (!cloudOriginSupported()) {
-    return `当前域名不在 CloudBase 安全域名白名单内，${action}请求会被浏览器拦截；请到正式站点${action}`;
+    return tl(
+      `当前域名不在 CloudBase 安全域名白名单内，${action}请求会被浏览器拦截；请到正式站点${action}`,
+      `This domain is not in the CloudBase allowed-origin list, so ${actionEn} requests will be blocked by the browser. Please use the official site instead`,
+    );
   }
-  return `登录服务未就绪，无法${action}，请刷新页面重试`;
+  return tl(`登录服务未就绪，无法${action}，请刷新页面重试`, `The sign-in service is not ready, so ${actionEn} is unavailable. Please refresh the page and try again`);
 }
 export type CodeKind = 'signup' | 'login';
 export type ActionResult = { ok: boolean; message: string };
@@ -163,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!alive) return;
           setError(null);
         } else {
-          if (raw) setError(humanizeAuthError(raw));
+          if (raw) setError(humanizeAuthError(raw, undefined, currentLang()));
           apply(r.data?.session || null);
         }
         try {
@@ -174,7 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           unsubscribe = sub?.data?.subscription?.unsubscribe;
         } catch { /* 订阅失败不影响已取得的会话 */ }
       } catch (e) {
-        if (alive) setError(errorMessage(e, '无法连接 CloudBase 登录服务'));
+        if (alive) setError(errorMessage(e, tl('无法连接 CloudBase 登录服务', 'Could not reach the CloudBase sign-in service')));
       } finally { if (alive) setReady(true); }
     })();
     return () => { alive = false; unsubscribe?.(); };
@@ -182,37 +186,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithPassword = useCallback(async (account: string, password: string): Promise<ActionResult> => {
     // 先做本地校验并立即进入加载态，避免等待 SDK 动态下载期间按钮无反馈
-    if (!account.trim() || !password) return { ok: false, message: '请填写账号与密码' };
+    if (!account.trim() || !password) return { ok: false, message: tl('请填写账号与密码', 'Enter your account and password') };
     setBusy(true); setError(null);
     try {
       const auth = await authApi();
-      if (!auth) { const m = unavailable('登录'); setError(m); return { ok: false, message: m }; }
+      if (!auth) { const m = unavailable('登录', 'sign in'); setError(m); return { ok: false, message: m }; }
       const r = await auth.signInWithPassword({ ...accountKey(account), password });
-      if (r.error) { const m = r.error.message || '登录失败'; setError(m); return { ok: false, message: m }; }
-      if (!r.data?.session) { const m = '登录服务未返回会话，请重试'; setError(m); return { ok: false, message: m }; }
+      if (r.error) { const m = r.error.message || tl('登录失败', 'Sign-in failed'); setError(m); return { ok: false, message: m }; }
+      if (!r.data?.session) { const m = tl('登录服务未返回会话，请重试', 'The sign-in service did not return a session — please try again'); setError(m); return { ok: false, message: m }; }
       apply(r.data.session);
-      return { ok: true, message: '登录成功' };
+      return { ok: true, message: tl('登录成功', 'Signed in') };
     } catch (e) {
-      const m = errorMessage(e, '登录请求失败，请检查网络'); setError(m); return { ok: false, message: m };
+      const m = errorMessage(e, tl('登录请求失败，请检查网络', 'Sign-in request failed — please check your network')); setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
   }, [apply]);
 
   const startSignup = useCallback(async (target: string, password: string): Promise<ActionResult> => {
     const t = emailTarget(target);
-    if (!t) return { ok: false, message: `请输入正确的邮箱地址。${NO_SMS_HINT}` };
-    if (password.length < 8) return { ok: false, message: '密码至少 8 位' };
+    if (!t) return { ok: false, message: tl(`请输入正确的邮箱地址。${NO_SMS_HINT}`, `Enter a valid email address. ${NO_SMS_HINT_EN}`) };
+    if (password.length < 8) return { ok: false, message: tl('密码至少 8 位', 'Passwords must be at least 8 characters') };
     const auth = await authApi();
-    if (!auth) return { ok: false, message: unavailable('注册') };
+    if (!auth) return { ok: false, message: unavailable('注册', 'sign up') };
     setBusy(true); setError(null);
     try {
       const r = await auth.signUp({ ...t.key, password });
-      if (r.error) { const m = r.error.message || '注册失败'; setError(m); return { ok: false, message: m }; }
-      if (!r.data?.verifyOtp) { const m = '注册服务未返回验证码校验入口'; setError(m); return { ok: false, message: m }; }
+      if (r.error) { const m = r.error.message || tl('注册失败', 'Sign-up failed'); setError(m); return { ok: false, message: m }; }
+      if (!r.data?.verifyOtp) { const m = tl('注册服务未返回验证码校验入口', 'The sign-up service did not open code verification'); setError(m); return { ok: false, message: m }; }
       verifyRef.current = r.data.verifyOtp;
       setPending({ kind: 'signup', target: t.key.email });
-      return { ok: true, message: `验证码已发送到${t.key.email}，填写后完成注册并自动登录` };
+      return { ok: true, message: tl(`验证码已发送到${t.key.email}，填写后完成注册并自动登录`, `We sent a code to ${t.key.email} — enter it to finish signing up; you will be signed in automatically`) };
     } catch (e) {
-      const m = errorMessage(e, '注册请求失败，请检查网络'); setError(m); return { ok: false, message: m };
+      const m = errorMessage(e, tl('注册请求失败，请检查网络', 'Sign-up request failed — please check your network')); setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
   }, []);
 
@@ -220,37 +224,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    *  若云端返回「用户不存在」，LoginDialog 会降级展示邮箱注册表单。 */
   const startCodeLogin = useCallback(async (target: string): Promise<ActionResult> => {
     const t = emailTarget(target);
-    if (!t) return { ok: false, message: `请输入正确的邮箱地址。${NO_SMS_HINT}` };
+    if (!t) return { ok: false, message: tl(`请输入正确的邮箱地址。${NO_SMS_HINT}`, `Enter a valid email address. ${NO_SMS_HINT_EN}`) };
     const auth = await authApi();
-    if (!auth) return { ok: false, message: unavailable('使用验证码') };
+    if (!auth) return { ok: false, message: unavailable('使用验证码', 'sign in with a code') };
     setBusy(true); setError(null);
     try {
       const r = await auth.signInWithOtp(t.key);
-      if (r.error) { const m = r.error.message || '验证码发送失败'; setError(m); return { ok: false, message: m }; }
-      if (!r.data?.verifyOtp) { const m = '登录服务未返回验证码校验入口'; setError(m); return { ok: false, message: m }; }
+      if (r.error) { const m = r.error.message || tl('验证码发送失败', 'Could not send the code'); setError(m); return { ok: false, message: m }; }
+      if (!r.data?.verifyOtp) { const m = tl('登录服务未返回验证码校验入口', 'The sign-in service did not open code verification'); setError(m); return { ok: false, message: m }; }
       verifyRef.current = r.data.verifyOtp;
       setPending({ kind: 'login', target: t.key.email });
-      return { ok: true, message: `验证码已发送到${t.key.email}` };
+      return { ok: true, message: tl(`验证码已发送到${t.key.email}`, `We sent a code to ${t.key.email}`) };
     } catch (e) {
-      const m = errorMessage(e, '验证码请求失败，请检查网络'); setError(m); return { ok: false, message: m };
+      const m = errorMessage(e, tl('验证码请求失败，请检查网络', 'Code request failed — please check your network')); setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
   }, []);
 
   const verifyCode = useCallback(async (token: string): Promise<ActionResult> => {
-    if (!pending) return { ok: false, message: '请先获取验证码' };
-    if (!/^\d{4,8}$/.test(token.trim())) return { ok: false, message: '验证码格式不正确' };
+    if (!pending) return { ok: false, message: tl('请先获取验证码', 'Request a code first') };
+    if (!/^\d{4,8}$/.test(token.trim())) return { ok: false, message: tl('验证码格式不正确', 'That code is not in a valid format') };
     setBusy(true); setError(null);
     try {
       const r = await verifyRef.current?.({ token: token.trim() });
-      if (!r) { const m = '验证码已失效，请重新发送'; setError(m); return { ok: false, message: m }; }
-      if (r.error) { const m = r.error.message || '校验失败'; setError(m); return { ok: false, message: m }; }
-      if (!r.data?.session) { const m = '校验通过但未获得会话，请重新登录'; setError(m); return { ok: false, message: m }; }
+      if (!r) { const m = tl('验证码已失效，请重新发送', 'That code has expired — request a new one'); setError(m); return { ok: false, message: m }; }
+      if (r.error) { const m = r.error.message || tl('校验失败', 'Verification failed'); setError(m); return { ok: false, message: m }; }
+      if (!r.data?.session) { const m = tl('校验通过但未获得会话，请重新登录', 'Verified, but no session was created — please sign in again'); setError(m); return { ok: false, message: m }; }
       apply(r.data.session);
       const done = pending.kind;
       setPending(null); verifyRef.current = null;
-      return { ok: true, message: done === 'signup' ? '注册完成，已自动登录' : '登录成功' };
+      return { ok: true, message: done === 'signup' ? tl('注册完成，已自动登录', 'Account created — you are signed in') : tl('登录成功', 'Signed in') };
     } catch (e) {
-      const m = errorMessage(e, '验证码校验失败'); setError(m); return { ok: false, message: m };
+      const m = errorMessage(e, tl('验证码校验失败', 'Code verification failed')); setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
   }, [pending, apply]);
 
@@ -258,7 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithWechat = useCallback(async (): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth) return { ok: false, message: unavailable('微信登录') };
+    if (!auth) return { ok: false, message: unavailable('微信登录', 'sign in with WeChat') };
     setBusy(true); setError(null);
     try {
       // 重定向到微信授权页；成功后会跳回本站，CloudBase 自动用 URL 里的 code 建立会话。
@@ -267,74 +271,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const r = await (auth as unknown as {
         signInWithOAuth(p: { provider: string; redirectTo?: string }): Promise<{ data?: unknown; error?: { message?: string } | null }>;
       }).signInWithOAuth({ provider: 'wechat', redirectTo });
-      if (r?.error) { const m = (r.error as { message?: string })?.message || '微信登录发起失败'; setError(m); return { ok: false, message: m }; }
+      if (r?.error) { const m = (r.error as { message?: string })?.message || tl('微信登录发起失败', 'Could not start WeChat sign-in'); setError(m); return { ok: false, message: m }; }
       // 正常情况下这里不会执行——页面已经被重定向到微信；返回这条仅作兜底提示。
-      return { ok: true, message: '正在跳转到微信授权…' };
+      return { ok: true, message: tl('正在跳转到微信授权…', 'Redirecting to WeChat authorisation…') };
     } catch (e) {
-      const m = errorMessage(e, '微信登录发起失败，请确认已在 CloudBase 控制台启用微信登录'); setError(m); return { ok: false, message: m };
+      const m = errorMessage(e, tl('微信登录发起失败，请确认已在 CloudBase 控制台启用微信登录', 'Could not start WeChat sign-in — make sure it is enabled in the CloudBase console')); setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
   }, []);
 
   const signOut = useCallback(async (): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth) return { ok: false, message: unavailable('退出登录') };
+    if (!auth) return { ok: false, message: unavailable('退出登录', 'sign out') };
     setBusy(true);
     try {
       const r = await auth.signOut();
-      if (r.error) { const m = r.error.message || '退出失败'; setError(m); return { ok: false, message: m }; }
+      if (r.error) { const m = r.error.message || tl('退出失败', 'Sign-out failed'); setError(m); return { ok: false, message: m }; }
       apply(null);
-      return { ok: true, message: '已退出登录' };
+      return { ok: true, message: tl('已退出登录', 'Signed out') };
     } catch (e) {
-      const m = errorMessage(e, '退出请求失败'); setError(m); return { ok: false, message: m };
+      const m = errorMessage(e, tl('退出请求失败', 'Sign-out request failed')); setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
   }, [apply]);
 
   const updateProfile = useCallback(async (p: { nickName?: string; avatarUrl?: string }): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth?.updateUserBasicInfo) return { ok: false, message: unavailable('更新资料') };
+    if (!auth?.updateUserBasicInfo) return { ok: false, message: unavailable('更新资料', 'update your profile') };
     setBusy(true); setError(null);
     try {
       const r = await auth.updateUserBasicInfo(p);
-      if (!r) return { ok: true, message: '资料已保存' }; // 某些 SDK 版本不返回结果
-      if (r.error) return { ok: false, message: r.error.message || '更新失败' };
+      if (!r) return { ok: true, message: tl('资料已保存', 'Profile saved') }; // 某些 SDK 版本不返回结果
+      if (r.error) return { ok: false, message: r.error.message || tl('更新失败', 'Update failed') };
       // 立即拉一次最新会话，让昵称/头像在导航与账户页可见
       const g = await auth.getUser?.();
       if (g?.data?.user) { const cur = session; apply({ ...(cur || null), user: g.data.user } as RawSession); }
-      return { ok: true, message: '资料已保存' };
-    } catch (e) { return { ok: false, message: errorMessage(e, '更新失败') }; } finally { setBusy(false); }
+      return { ok: true, message: tl('资料已保存', 'Profile saved') };
+    } catch (e) { return { ok: false, message: errorMessage(e, tl('更新失败', 'Update failed')) }; } finally { setBusy(false); }
   }, [apply, session]);
 
   // 改密第一步：向注册邮箱发送身份验证码（reauthenticate）
   const startPasswordChange = useCallback(async (): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth?.reauthenticate) return { ok: false, message: unavailable('修改密码') };
+    if (!auth?.reauthenticate) return { ok: false, message: unavailable('修改密码', 'change your password') };
     setBusy(true); setError(null);
     try {
       const r = await auth.reauthenticate();
-      if (r.error) return { ok: false, message: r.error.message || '验证码发送失败' };
-      if (!r.data?.updateUser) return { ok: false, message: '改密服务未返回验证入口' };
+      if (r.error) return { ok: false, message: r.error.message || tl('验证码发送失败', 'Could not send the code') };
+      if (!r.data?.updateUser) return { ok: false, message: tl('改密服务未返回验证入口', 'The password service did not open verification') };
       reauthUpdateRef.current = r.data.updateUser;
       setReauthPending(true);
-      return { ok: true, message: '身份验证码已发送到注册邮箱' };
+      return { ok: true, message: tl('身份验证码已发送到注册邮箱', 'We sent a verification code to your registered email') };
     } catch (e) {
-      return { ok: false, message: errorMessage(e, '验证码发送失败') };
+      return { ok: false, message: errorMessage(e, tl('验证码发送失败', 'Could not send the code')) };
     } finally { setBusy(false); }
   }, []);
 
   // 改密第二步：校验验证码并设置新密码
   const confirmPasswordChange = useCallback(async (nonce: string, newPassword: string): Promise<ActionResult> => {
-    if (!reauthUpdateRef.current) return { ok: false, message: '请先获取身份验证码' };
-    if (!/^\d{4,8}$/.test(nonce.trim())) return { ok: false, message: '验证码格式不正确' };
-    if (newPassword.length < 8) return { ok: false, message: '新密码至少 8 位' };
+    if (!reauthUpdateRef.current) return { ok: false, message: tl('请先获取身份验证码', 'Request a verification code first') };
+    if (!/^\d{4,8}$/.test(nonce.trim())) return { ok: false, message: tl('验证码格式不正确', 'That code is not in a valid format') };
+    if (newPassword.length < 8) return { ok: false, message: tl('新密码至少 8 位', 'New passwords must be at least 8 characters') };
     setBusy(true); setError(null);
     try {
       const r = await reauthUpdateRef.current({ nonce: nonce.trim(), password: newPassword });
-      if (r.error) return { ok: false, message: r.error.message || '设置失败' };
+      if (r.error) return { ok: false, message: r.error.message || tl('设置失败', 'Could not set the password') };
       if (r.data?.session) apply(r.data.session as RawSession);
       setReauthPending(false); reauthUpdateRef.current = null;
-      return { ok: true, message: '密码已更新，下次可用邮箱 + 密码登录' };
+      return { ok: true, message: tl('密码已更新，下次可用邮箱 + 密码登录', 'Password updated — you can now sign in with email and password') };
     } catch (e) {
-      return { ok: false, message: errorMessage(e, '设置失败') };
+      return { ok: false, message: errorMessage(e, tl('设置失败', 'Could not set the password')) };
     } finally { setBusy(false); }
   }, [apply]);
 
@@ -344,39 +348,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startLink = useCallback(async (kind: 'email' | 'phone', target: string): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth?.updateUser) return { ok: false, message: unavailable('绑定') };
+    if (!auth?.updateUser) return { ok: false, message: unavailable('绑定', 'link an account') };
     const v = target.trim();
-    if (kind === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return { ok: false, message: '请输入正确的邮箱地址' };
+    if (kind === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return { ok: false, message: tl('请输入正确的邮箱地址', 'Enter a valid email address') };
     // 控制台已关闭短信验证码：在 auth 层直接拒绝，保证任何 UI 路径都不会产生短信费用
-    if (kind === 'phone') return { ok: false, message: NO_SMS_HINT };
+    if (kind === 'phone') return { ok: false, message: tl(NO_SMS_HINT, NO_SMS_HINT_EN) };
     setBusy(true); setError(null);
     try {
       const r = await auth.updateUser(kind === 'email' ? { email: v } : { phone: v });
-      if (r.error) return { ok: false, message: r.error.message || '验证码发送失败' };
-      if (!r.data?.verifyOtp) return { ok: false, message: '绑定服务未返回验证码入口' };
+      if (r.error) return { ok: false, message: r.error.message || tl('验证码发送失败', 'Could not send the code') };
+      if (!r.data?.verifyOtp) return { ok: false, message: tl('绑定服务未返回验证码入口', 'The linking service did not return a verification step') };
       linkVerifyRef.current = r.data.verifyOtp;
       setLinkPending({ kind, target: v });
-      return { ok: true, message: `验证码已发送到${kind === 'email' ? '邮箱' : '手机'}，填写后完成绑定` };
-    } catch (e) { return { ok: false, message: errorMessage(e, '验证码发送失败') }; } finally { setBusy(false); }
+      return { ok: true, message: tl(`验证码已发送到${kind === 'email' ? '邮箱' : '手机'}，填写后完成绑定`, `We sent a code to your ${kind === 'email' ? 'email' : 'phone'} — enter it to finish linking`) };
+    } catch (e) { return { ok: false, message: errorMessage(e, tl('验证码发送失败', 'Could not send the code')) }; } finally { setBusy(false); }
   }, []);
 
   const verifyLink = useCallback(async (token: string): Promise<ActionResult> => {
-    if (!linkPending) return { ok: false, message: '请先发送验证码' };
+    if (!linkPending) return { ok: false, message: tl('请先发送验证码', 'Send a code first') };
     setBusy(true); setError(null);
     try {
       const arg = linkPending.kind === 'email'
         ? { token: token.trim(), email: linkPending.target }
         : { token: token.trim(), phone: linkPending.target };
       const r = await linkVerifyRef.current?.(arg);
-      if (!r) return { ok: false, message: '验证码已失效，请重新发送' };
-      if (r.error) return { ok: false, message: r.error.message || '绑定失败' };
+      if (!r) return { ok: false, message: tl('验证码已失效，请重新发送', 'That code has expired — request a new one') };
+      if (r.error) return { ok: false, message: r.error.message || tl('绑定失败', 'Linking failed') };
       // 绑定成功后拉取最新会话，刷新顶部绑定状态
       const g = await authApi();
       const latest = await g?.getSession?.();
       if (latest?.data?.session) apply(latest.data.session as RawSession);
       setLinkPending(null); linkVerifyRef.current = null;
-      return { ok: true, message: '绑定成功' };
-    } catch (e) { return { ok: false, message: errorMessage(e, '绑定失败') }; } finally { setBusy(false); }
+      return { ok: true, message: tl('绑定成功', 'Linked') };
+    } catch (e) { return { ok: false, message: errorMessage(e, tl('绑定失败', 'Linking failed')) }; } finally { setBusy(false); }
   }, [linkPending, apply]);
 
   const cancelLink = useCallback(() => {
@@ -393,7 +397,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 会话噪音一律变成 null（等于没有错误），其余翻成中文，未识别的保持原文。
   const visibleError = useMemo(() => {
     if (!error) return null;
-    return humanizeAuthError(error, error) || null;
+    return humanizeAuthError(error, error, currentLang()) || null;
   }, [error]);
 
   const value = useMemo<AuthCtx>(() => ({

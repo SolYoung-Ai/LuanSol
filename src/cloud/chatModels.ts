@@ -32,9 +32,13 @@ export interface ChatModel {
   label: string;
   /** 胶囊上的短名（「对话」旁边显示当前生效的模型） */
   short: string;
+  /** 英文界面的短名；缺省时退回 short */
+  shortEn?: string;
   /** free = 人人可用；pro = 会员专属（计入每日额度） */
   tier: ChatModelTier;
   note: string;
+  /** note 的英文版（界面文案，随语言切换） */
+  noteEn: string;
   price: ChatPrice;
   /** 分时定价的高峰价（仅 DeepSeek 系列有） */
   peak?: ChatPrice;
@@ -61,15 +65,18 @@ export const CHAT_MODELS: readonly ChatModel[] = [
     label: 'DeepSeek-V4.1-Flash',
     tier: 'free',
     note: '默认常用，日常对话首选',
+    noteEn: 'Default model — best for everyday chat',
     price: { input: 1.0, cache: 0.02, output: 4.0 },
     peak: { input: 2.0, cache: 0.04, output: 8.0 },
   },
   {
     id: 'ds-v41-flash-eco',
     short: 'V4.1-Flash 经济',
+    shortEn: 'V4.1-Flash Eco',
     label: 'DeepSeek-V4.1-Flash 经济版',
     tier: 'pro',
     note: '同款能力的经济档，更省额度',
+    noteEn: 'Same capability, lighter on your daily quota',
     price: { input: 0.8, cache: 0.016, output: 3.2 },
     peak: { input: 1.6, cache: 0.032, output: 6.4 },
   },
@@ -79,6 +86,7 @@ export const CHAT_MODELS: readonly ChatModel[] = [
     label: 'DeepSeek-V4-pro',
     tier: 'pro',
     note: '正式版，长链条推理更稳',
+    noteEn: 'Full version — steadier on long reasoning chains',
     price: { input: 9.0, cache: 0.3, output: 27.0 },
     soon: true,
   },
@@ -88,6 +96,7 @@ export const CHAT_MODELS: readonly ChatModel[] = [
     label: 'Kimi-K3.1-Pro',
     tier: 'pro',
     note: '长文与创意更细腻，单价最高',
+    noteEn: 'Most nuanced on long copy and creative work',
     price: { input: 13.0, cache: 1.3, output: 68.0 },
   },
   {
@@ -96,6 +105,7 @@ export const CHAT_MODELS: readonly ChatModel[] = [
     label: 'Doubao-Seed-2.1-lite',
     tier: 'pro',
     note: '轻快，日常问答性价比高',
+    noteEn: 'Fast and cheap for everyday Q&A',
     price: { input: 0.8, cache: 0.16, output: 2.7 },
   },
   {
@@ -104,6 +114,7 @@ export const CHAT_MODELS: readonly ChatModel[] = [
     label: 'Doubao-Seed-2.1-turbo',
     tier: 'pro',
     note: '响应快，多模态理解更强',
+    noteEn: 'Quick responses, stronger multimodal reading',
     price: { input: 3.0, cache: 0.6, output: 15.0 },
   },
   {
@@ -112,6 +123,7 @@ export const CHAT_MODELS: readonly ChatModel[] = [
     label: 'GLM-5.3-Flash',
     tier: 'pro',
     note: '中文表达自然，排版建议细',
+    noteEn: 'Natural Chinese phrasing, detailed layout advice',
     price: { input: 0.8, cache: 0.23, output: 2.8 },
   },
 ];

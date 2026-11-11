@@ -30,6 +30,8 @@ export interface ImageModel {
   needsRef?: boolean;
   /** 一句话说明，写在下拉选项下面 */
   note: string;
+  /** 英文说明：界面按语言取，别只留中文 */
+  noteEn: string;
   /** false = 已定价但暂未开放（灰显，不可选） */
   open: boolean;
   /** true = 会员专属：免费版看不到也选不了（点它走订阅引导） */
@@ -53,6 +55,7 @@ export const IMAGE_MODELS: readonly ImageModel[] = [
     cost: payCost(PRICING.costs.imageFlash),
     provider: 'ark',
     note: '快速出图，方案页批量首选',
+    noteEn: 'Fast renders — the batch default on the options page',
     open: true,
   },
   {
@@ -63,6 +66,7 @@ export const IMAGE_MODELS: readonly ImageModel[] = [
     cost: payCost(PRICING.costs.imagePro),
     provider: 'ark',
     note: '细节更足',
+    noteEn: 'More detail',
     open: true,
   },
   {
@@ -74,6 +78,7 @@ export const IMAGE_MODELS: readonly ImageModel[] = [
     cost: payCost(PRICING.costs.imageGpt2Text, PRICING.gptImagePromoRate),
     provider: 'bai',
     note: '出图质量最高，只用文字描述',
+    noteEn: 'Highest quality — text prompt only',
     open: true,
     pro: true,
   },
@@ -87,6 +92,7 @@ export const IMAGE_MODELS: readonly ImageModel[] = [
     provider: 'bai',
     needsRef: true,
     note: '带参考图改图，按图生图计费',
+    noteEn: 'Edits from a reference image — billed as image-to-image',
     open: true,
     pro: true,
   },
@@ -152,3 +158,6 @@ export function resolveTier(id: ImageTier | undefined | null, isPro: boolean): I
 
 /** 3D 生成（Hyper3D-Gen2）目前只定价、未接入界面，价格单独放这里方便后面接 */
 export const HYPER3D_COST = PRICING.costs.hyper3d;
+
+/** 按语言取说明文字 */
+export const imageModelNote = (m: ImageModel, lang: string) => (lang === 'en' ? m.noteEn : m.note);

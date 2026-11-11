@@ -10,6 +10,7 @@
 import React, { useRef, useState } from 'react';
 import type { ProductInfo } from '../types';
 import { useApp } from '../store';
+import { useLang } from '../i18n';
 import ReferenceUploader from './components/ReferenceUploader';
 import { Icon } from '../components/icons';
 import { imageCost } from '../cloud/models';
@@ -23,6 +24,7 @@ const PRESET_COLORS = [
 
 export default function RequirementsStage() {
   const { s, patchWorkflow, setToast } = useApp();
+  const { t } = useLang();
   const project = s.projects.find((p) => p.id === s.activeId);
   const wf = project?.workflow;
 
@@ -58,11 +60,11 @@ export default function RequirementsStage() {
 
   const onLogoFile = (file?: File) => {
     if (!file) return;
-    if (!/^image\//.test(file.type)) { setToast('请上传图片格式的 LOGO'); return; }
-    if (file.size > 4 * 1024 * 1024) { setToast('LOGO 图片请小于 4MB'); return; }
+    if (!/^image\//.test(file.type)) { setToast(t('请上传图片格式的 LOGO', 'Please upload an image file for the logo.')); return; }
+    if (file.size > 4 * 1024 * 1024) { setToast(t('LOGO 图片请小于 4MB', 'The logo image must be smaller than 4 MB.')); return; }
     const reader = new FileReader();
     reader.onload = () => set({ logoImage: String(reader.result || ''), logoMode: 'upload' });
-    reader.onerror = () => setToast('LOGO 读取失败，请重试');
+    reader.onerror = () => setToast(t('LOGO 读取失败，请重试', 'Could not read the logo file. Please try again.'));
     reader.readAsDataURL(file);
   };
 
@@ -70,7 +72,8 @@ export default function RequirementsStage() {
 
   const submit = () => {
     if (!canSubmit) {
-      setToast('至少填写产品名称或一句产品描述，AI 才知道要设计什么');
+      setToast(t('至少填写产品名称或一句产品描述，AI 才知道要设计什么',
+        'Fill in at least a product name or a one-line description so AI knows what to design.'));
       return;
     }
     setSubmitting(true);
@@ -87,26 +90,30 @@ export default function RequirementsStage() {
   return (
     <div className="wf-page">
       <div className="wf-head">
-        <div className="wf-kicker">STEP 02 · 确认需求</div>
-        <h1 className="wf-title">{wf.mode === 'fromScratch' ? '告诉我你的产品' : '确认你的设计需求'}</h1>
+        <div className="wf-kicker">{t('STEP 02 · 确认需求', 'STEP 02 · Requirements')}</div>
+        <h1 className="wf-title">{wf.mode === 'fromScratch'
+          ? t('告诉我你的产品', 'Tell me about your product')
+          : t('确认你的设计需求', 'Confirm your design brief')}</h1>
         <p className="wf-sub">
           {wf.mode === 'fromScratch'
-            ? '填得越具体，AI 的第一次方向就越准；不确定的项可以先留空。'
-            : '上传参考图，并把配色、插画元素与卖点说清楚。'}
+            ? t('填得越具体，AI 的第一次方向就越准；不确定的项可以先留空。',
+              'The more specific you are, the closer AI gets on the first try. Leave anything you are unsure about blank.')
+            : t('上传参考图，并把配色、插画元素与卖点说清楚。',
+              'Upload references, and spell out the colors, illustration elements and selling points.')}
         </p>
       </div>
 
       {/* A 参考图 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">A</span><h2>参考图</h2>
-          <span className="wf-hint">可选，多张；图片会真实保存到项目</span></div>
+        <div className="wf-card-head"><span className="wf-idx">A</span><h2>{t('参考图', 'References')}</h2>
+          <span className="wf-hint">{t('可选，多张；图片会真实保存到项目', 'Optional, multiple. Images are saved with the project.')}</span></div>
         <ReferenceUploader images={refs} onChange={setRefsPersist} onError={setToast} />
       </section>
 
       {/* B 主题色 + C 插画元素 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">B</span><h2>包装主题色</h2>
-          <span className="wf-hint">点选主色，可多选</span></div>
+        <div className="wf-card-head"><span className="wf-idx">B</span><h2>{t('包装主题色', 'Theme colors')}</h2>
+          <span className="wf-hint">{t('点选主色，可多选', 'Tap the primary colors, multiple allowed')}</span></div>
         <div className="wf-swatches">
           {PRESET_COLORS.map((hex) => {
             const on = colors.includes(hex);
@@ -117,97 +124,100 @@ export default function RequirementsStage() {
               </button>
             );
           })}
-          <label className="wf-swatch wf-swatch-add" title="自定义颜色">
+          <label className="wf-swatch wf-swatch-add" title={t('自定义颜色', 'Custom color')}>
             <input type="color" value={customColor} onChange={(e) => setCustomColor(e.target.value)} />
             <Icon name="plus" size={15} />
-            <span>自定义</span>
+            <span>{t('自定义', 'Custom')}</span>
           </label>
           <button className="wf-mini-btn" onClick={() => { if (!colors.includes(customColor)) toggleColor(customColor); }}>
-            加入 {customColor}
+            {t(`加入 ${customColor}`, `Add ${customColor}`)}
           </button>
         </div>
         {colors.length > 0 &&
           <div className="wf-chosen-colors">
             {colors.map((c) => <span key={c} className="wf-chosen-color" style={{ background: c }} title={c} />)}
-            <button className="wf-clear" onClick={() => set({ themeColors: [] })}>清空</button>
+            <button className="wf-clear" onClick={() => set({ themeColors: [] })}>{t('清空', 'Clear')}</button>
           </div>}
 
         <div className="wf-field" style={{ marginTop: 16 }}>
-          <span className="wf-label">插画元素</span>
+          <span className="wf-label">{t('插画元素', 'Illustration elements')}</span>
           <input className="wf-input" value={info.illustrationElements}
             onChange={(e) => set({ illustrationElements: e.target.value })}
-            placeholder="如：桂花、茶叶、山峦线描；或「不要插画，纯文字排版」" />
+            placeholder={t('如：桂花、茶叶、山峦线描；或「不要插画，纯文字排版」',
+              'e.g. osmanthus, tea leaves, line-drawn mountains — or “no illustration, type only”')} />
         </div>
       </section>
 
       {/* D 产品与品牌 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">C</span><h2>产品与品牌</h2></div>
+        <div className="wf-card-head"><span className="wf-idx">C</span><h2>{t('产品与品牌', 'Product & brand')}</h2></div>
         <div className="wf-grid2">
-          <label className="wf-field"><span className="wf-label">产品名称</span>
+          <label className="wf-field"><span className="wf-label">{t('产品名称', 'Product name')}</span>
             <input className="wf-input" value={info.productName} onChange={(e) => set({ productName: e.target.value })}
-              placeholder="如：九蒸九晒黄精" /></label>
-          <label className="wf-field"><span className="wf-label">品牌名称</span>
+              placeholder={t('如：九蒸九晒黄精', 'e.g. Nine-steamed polygonatum')} /></label>
+          <label className="wf-field"><span className="wf-label">{t('品牌名称', 'Brand name')}</span>
             <input className="wf-input" value={info.brandName} onChange={(e) => set({ brandName: e.target.value })}
-              placeholder="如：山野集" /></label>
+              placeholder={t('如：山野集', 'e.g. Shanye')} /></label>
         </div>
       </section>
 
       {/* E 卖点与净含量 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">D</span><h2>卖点与净含量</h2>
-          <span className="wf-hint">会作为包装上的真实文字</span></div>
-        <label className="wf-field"><span className="wf-label">一级卖点</span>
+        <div className="wf-card-head"><span className="wf-idx">D</span><h2>{t('卖点与净含量', 'Selling points & net content')}</h2>
+          <span className="wf-hint">{t('会作为包装上的真实文字', 'Printed as real text on the packaging')}</span></div>
+        <label className="wf-field"><span className="wf-label">{t('一级卖点', 'Primary selling point')}</span>
           <input className="wf-input" value={info.sellingPointPrimary} onChange={(e) => set({ sellingPointPrimary: e.target.value })}
-            placeholder="如：古法九蒸九晒，0 添加" /></label>
-        <label className="wf-field"><span className="wf-label">二级卖点</span>
+            placeholder={t('如：古法九蒸九晒，0 添加', 'e.g. Traditional nine-steam process, zero additives')} /></label>
+        <label className="wf-field"><span className="wf-label">{t('二级卖点', 'Secondary selling point')}</span>
           <input className="wf-input" value={info.sellingPointSecondary} onChange={(e) => set({ sellingPointSecondary: e.target.value })}
-            placeholder="如：独立小包装，随身滋补" /></label>
-        <label className="wf-field"><span className="wf-label">净含量</span>
+            placeholder={t('如：独立小包装，随身滋补', 'e.g. Individually wrapped, easy to carry')} /></label>
+        <label className="wf-field"><span className="wf-label">{t('净含量', 'Net content')}</span>
           <input className="wf-input" value={info.netContent} onChange={(e) => set({ netContent: e.target.value })}
-            placeholder="如：10g×9 袋 / 250g" /></label>
+            placeholder={t('如：10g×9 袋 / 250g', 'e.g. 10 g × 9 sachets / 250 g')} /></label>
       </section>
 
       {/* E 产品描述：给 AI 看的创意信息 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">E</span><h2>产品描述</h2>
-          <span className="wf-hint">给 AI 看的设计依据，一句话也行</span></div>
+        <div className="wf-card-head"><span className="wf-idx">E</span><h2>{t('产品描述', 'Product description')}</h2>
+          <span className="wf-hint">{t('给 AI 看的设计依据，一句话也行', 'Context for AI — one sentence is enough')}</span></div>
         <textarea className="wf-textarea" rows={4} value={info.description}
           onChange={(e) => set({ description: e.target.value })}
-          placeholder="例如：黄精礼盒，主色是砖红色，产品名称是九蒸九晒黄精，10×10×10cm，想走高端东方养生风。" />
+          placeholder={t('例如：黄精礼盒，主色是砖红色，产品名称是九蒸九晒黄精，10×10×10cm，想走高端东方养生风。',
+            'e.g. A gift box for polygonatum, brick red, named “Nine-steamed Polygonatum”, 10×10×10 cm, premium oriental wellness style.')} />
       </section>
 
       {/* F 生产信息：包装背面法定文字，和设计描述分开 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">F</span><h2>生产信息</h2>
-          <span className="wf-hint">印在包装背面的法定信息，可留空后补</span></div>
+        <div className="wf-card-head"><span className="wf-idx">F</span><h2>{t('生产信息', 'Production details')}</h2>
+          <span className="wf-hint">{t('印在包装背面的法定信息，可留空后补', 'Legal copy for the back panel. Can be added later.')}</span></div>
         <p className="wf-card-note">
-          这部分是委托商、生产商、地址、许可证等真实生产信息，AI 不会替你编造；留空就不生成，避免印出错误的法定文字。
+          {t('这部分是委托商、生产商、地址、许可证等真实生产信息，AI 不会替你编造；留空就不生成，避免印出错误的法定文字。',
+            'These are real company details — commissioner, manufacturer, address, license. AI never makes them up: leave a field empty and it stays off the artwork, so nothing wrong gets printed.')}
         </p>
         <div className="wf-grid2">
-          <label className="wf-field"><span className="wf-label">委托商 / 品牌方</span>
+          <label className="wf-field"><span className="wf-label">{t('委托商 / 品牌方', 'Commissioner / brand')}</span>
             <input className="wf-input" value={info.manufacturer} onChange={(e) => set({ manufacturer: e.target.value })}
-              placeholder="如：山野集健康食品有限公司" /></label>
-          <label className="wf-field"><span className="wf-label">生产商</span>
+              placeholder={t('如：山野集健康食品有限公司', 'e.g. Shanye Health Foods Co., Ltd.')} /></label>
+          <label className="wf-field"><span className="wf-label">{t('生产商', 'Manufacturer')}</span>
             <input className="wf-input" value={info.producer} onChange={(e) => set({ producer: e.target.value })}
-              placeholder="如：×××食品厂" /></label>
+              placeholder={t('如：×××食品厂', 'e.g. XXX Food Factory')} /></label>
         </div>
-        <label className="wf-field"><span className="wf-label">生产地址</span>
+        <label className="wf-field"><span className="wf-label">{t('生产地址', 'Production address')}</span>
           <input className="wf-input" value={info.productionAddress} onChange={(e) => set({ productionAddress: e.target.value })}
-            placeholder="如：安徽省亳州市××区××路 88 号" /></label>
+            placeholder={t('如：安徽省亳州市××区××路 88 号', 'e.g. 88 XX Road, XX District, Bozhou, Anhui')} /></label>
         <div className="wf-grid2">
-          <label className="wf-field"><span className="wf-label">生产许可证编号</span>
+          <label className="wf-field"><span className="wf-label">{t('生产许可证编号', 'Production license no.')}</span>
             <input className="wf-input" value={info.productionLicense} onChange={(e) => set({ productionLicense: e.target.value })}
-              placeholder="如：SC10123456789012" /></label>
-          <label className="wf-field"><span className="wf-label">执行标准</span>
+              placeholder="SC10123456789012" /></label>
+          <label className="wf-field"><span className="wf-label">{t('执行标准', 'Standard code')}</span>
             <input className="wf-input" value={info.standardCode} onChange={(e) => set({ standardCode: e.target.value })}
-              placeholder="如：GB/T 20977" /></label>
-          <label className="wf-field"><span className="wf-label">保质期 / 贮存</span>
+              placeholder="GB/T 20977" /></label>
+          <label className="wf-field"><span className="wf-label">{t('保质期 / 贮存', 'Shelf life / storage')}</span>
             <input className="wf-input" value={info.shelfLife} onChange={(e) => set({ shelfLife: e.target.value })}
-              placeholder="如：18 个月，阴凉干燥处" /></label>
-          <label className="wf-field"><span className="wf-label">服务电话</span>
+              placeholder={t('如：18 个月，阴凉干燥处', 'e.g. 18 months, keep cool and dry')} /></label>
+          <label className="wf-field"><span className="wf-label">{t('服务电话', 'Service phone')}</span>
             <input className="wf-input" value={info.servicePhone} onChange={(e) => set({ servicePhone: e.target.value })}
-              placeholder="如：400-000-0000" /></label>
+              placeholder="400-000-0000" /></label>
         </div>
       </section>
 
@@ -215,7 +225,11 @@ export default function RequirementsStage() {
       <section className="wf-card">
         <div className="wf-card-head"><span className="wf-idx">G</span><h2>LOGO</h2></div>
         <div className="wf-seg">
-          {([['upload', '已有 LOGO，上传'], ['generate', '没有 LOGO，按名称生成'], ['none', '暂时不放']] as const).map(([mode, label]) => (
+          {([
+            ['upload', t('已有 LOGO，上传', 'I have a logo — upload')],
+            ['generate', t('没有 LOGO，按名称生成', 'No logo — generate from name')],
+            ['none', t('暂时不放', 'Skip for now')],
+          ] as const).map(([mode, label]) => (
             <button key={mode} className={`wf-seg-btn ${info.logoMode === mode ? 'on' : ''}`}
               onClick={() => set({ logoMode: mode })}>{label}</button>
           ))}
@@ -225,36 +239,41 @@ export default function RequirementsStage() {
           <input ref={logoRef} type="file" accept="image/*" style={{ display: 'none' }}
             onChange={(e) => { onLogoFile(e.target.files?.[0]); e.target.value = ''; }} />
           <button className="wf-logo-box" onClick={() => logoRef.current?.click()}>
-            {info.logoImage ? <img src={info.logoImage} alt="LOGO" /> : <><Icon name="upload" size={20} /><span>上传 LOGO</span></>}
+            {info.logoImage
+              ? <img src={info.logoImage} alt="LOGO" />
+              : <><Icon name="upload" size={20} /><span>{t('上传 LOGO', 'Upload logo')}</span></>}
           </button>
-          {info.logoImage && <button className="wf-clear" onClick={() => set({ logoImage: '' })}>移除</button>}
+          {info.logoImage && <button className="wf-clear" onClick={() => set({ logoImage: '' })}>{t('移除', 'Remove')}</button>}
         </div>}
 
         {info.logoMode === 'generate' && <label className="wf-field">
-          <span className="wf-label">LOGO 名称（AI 据此生成字形标识）</span>
+          <span className="wf-label">{t('LOGO 名称（AI 据此生成字形标识）', 'Logo name (AI builds the wordmark from it)')}</span>
           <input className="wf-input" value={info.logoName} onChange={(e) => set({ logoName: e.target.value })}
-            placeholder="如：山野集 SHANYE" />
+            placeholder={t('如：山野集 SHANYE', 'e.g. SHANYE')} />
         </label>}
       </section>
 
       {/* H 条形码 */}
       <section className="wf-card">
-        <div className="wf-card-head"><span className="wf-idx">H</span><h2>条形码</h2>
-          <span className="wf-hint">有就填，没有留空；不伪造条码</span></div>
+        <div className="wf-card-head"><span className="wf-idx">H</span><h2>{t('条形码', 'Barcode')}</h2>
+          <span className="wf-hint">{t('有就填，没有留空；不伪造条码', 'Fill in if you have one — barcodes are never invented')}</span></div>
         <input className="wf-input" value={info.barcode} onChange={(e) => set({ barcode: e.target.value.replace(/[^\d]/g, '').slice(0, 14) })}
-          inputMode="numeric" placeholder="如：6901234567892" />
+          inputMode="numeric" placeholder="6901234567892" />
       </section>
 
       <div className="wf-actions">
         <button className="wf-btn-ghost" onClick={() => {
           if (window.history.length > 1) window.history.back(); else window.location.hash = '#/workspace';
-        }}>取消</button>
+        }}>{t('取消', 'Cancel')}</button>
         <button className="wf-btn-primary" onClick={submit} disabled={submitting || !canSubmit}
           style={{ opacity: canSubmit ? 1 : 0.5 }}>
-          <Icon name="spark" size={16} /> {submitting ? '正在进入…' : '开始 AI 设计'}
+          <Icon name="spark" size={16} /> {submitting ? t('正在进入…', 'Starting…') : t('开始 AI 设计', 'Start AI design')}
         </button>
       </div>
-      <p className="wf-foot-note">下一步会按 {imageCost('flash')} 积分的档位生成 3 张完整包装效果图，可单张重新生成。</p>
+      <p className="wf-foot-note">
+        {t(`下一步会按 ${imageCost('flash')} 积分的档位生成 3 张完整包装效果图，可单张重新生成。`,
+          `Next step renders 3 complete packaging concepts at ${imageCost('flash')} credits each — any of them can be regenerated.`)}
+      </p>
     </div>
   );
 }

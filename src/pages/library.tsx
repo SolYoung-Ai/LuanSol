@@ -4,7 +4,8 @@ import { Button, Card, Empty, Modal, Notice, PageHead, SectionLabel, Tag, Toggle
 import { CATEGORIES, INSPIRATIONS, STRUCTURE_GROUPS, type InspirationItem } from '../data';
 import { ProductMockup, DesignView, DielineView } from '../components/visuals';
 import { createEmptyBrief } from '../engine/brief';
-import { buildDieline, dielineStats, STRUCTURES, structureById } from '../engine/structure';
+import { buildDieline, dielineStats, groupName, structDesc, structName, structUse, STRUCTURES, structureById } from '../engine/structure';
+import { useLang } from '../i18n';
 import { mockupSvg } from '../engine/export';
 import type { StructureId } from '../types';
 import { downloadBlob, formatDate, svgToDataUrl } from '../engine/utils';
@@ -59,6 +60,7 @@ export function Inspiration() {
 /* ============================ 8. 包装结构库 ============================ */
 export function Structures() {
   const { s, update, setToast } = useApp();
+  const { lang, t } = useLang();
   const [group, setGroup] = useState<(typeof STRUCTURE_GROUPS)[number]>('盒类');
   const [advanced, setAdvanced] = useState(s.settings.advancedMode);
   const [detail, setDetail] = useState<StructureId | null>(null);
@@ -67,37 +69,37 @@ export function Structures() {
   const useStructure = (id: StructureId) => {
     const packType = id === 'pouch' ? 'pouch' : /label/.test(id) ? 'label' : 'box';
     update({ brief: { ...createEmptyBrief(), packType, structure: id, size: SAMPLE[id] }, chat: [], schemes: [], design: null, report: null, activeId: null });
-    setToast(`已选择「${structureById(id).name}」，接下来只需描述需求`); go('/create');
+    setToast(t(`已选择「${structName(structureById(id), lang)}」，接下来只需描述需求`, `Selected “${structName(structureById(id), lang)}” — next just describe what you need`)); go('/create');
   };
   return <div className="page">
-    <PageHead kicker="STRUCTURE LIBRARY / 08" title="包装结构库" desc="普通用户看实物效果与适用场景；有经验的用户可以查看结构参数与刀模。"
-      right={<Toggle checked={advanced} onChange={setAdvanced} label="显示结构参数" />} />
-    <div className="chips">{STRUCTURE_GROUPS.map((g) => <button key={g} className={`chip ${group === g ? 'active' : ''}`} onClick={() => setGroup(g)}>{g}</button>)}</div>
+    <PageHead kicker="STRUCTURE LIBRARY / 08" title={t('包装结构库', 'Structure library')} desc={t('普通用户看实物效果与适用场景；有经验的用户可以查看结构参数与刀模。', 'Most people just need the look and the use case; experienced users can inspect parameters and dielines.')}
+      right={<Toggle checked={advanced} onChange={setAdvanced} label={t('显示结构参数', 'Show parameters')} />} />
+    <div className="chips">{STRUCTURE_GROUPS.map((g) => <button key={g} className={`chip ${group === g ? 'active' : ''}`} onClick={() => setGroup(g)}>{groupName(g, lang)}</button>)}</div>
     <div className="structure-grid">{list.map((st) => {
       const d = buildDieline(st.id, SAMPLE[st.id]);
       const stats = dielineStats(d);
       return <Card key={st.id} className="structure-card">
         <div className="structure-visual"><DielineView sheet={d.sheets[0]} dieline={d} showArtwork={false} /></div>
-        <div className="structure-info"><span className="structure-group">{st.group}</span><h3>{st.name}</h3><p>{st.desc}</p>
-          <div className="structure-use">适用：{st.use}</div>
+        <div className="structure-info"><span className="structure-group">{groupName(st.group, lang)}</span><h3>{structName(st, lang)}</h3><p>{structDesc(st, lang)}</p>
+          <div className="structure-use">{t('适用：', 'Best for: ')}{structUse(st, lang)}</div>
           {advanced && <div className="structure-tech">
-            <div><span>展开图</span><strong>{d.sheets.length} 张</strong></div>
-            <div><span>展开尺寸</span><strong>{d.sheets[0].width} × {d.sheets[0].height} mm</strong></div>
-            <div><span>裁切线</span><strong>{stats.cut} 段</strong></div>
-            <div><span>压痕线</span><strong>{stats.crease} 段</strong></div>
-            <div><span>出血 / 安全区</span><strong>{d.bleed} / {d.safe} mm</strong></div>
-            <div><span>生产难度</span><strong>{'●'.repeat(st.difficulty)}{'○'.repeat(3 - st.difficulty)}</strong></div>
+            <div><span>{t('展开图', 'Sheets')}</span><strong>{t(`${d.sheets.length} 张`, `${d.sheets.length}`)}</strong></div>
+            <div><span>{t('展开尺寸', 'Flat size')}</span><strong>{d.sheets[0].width} × {d.sheets[0].height} mm</strong></div>
+            <div><span>{t('裁切线', 'Cut lines')}</span><strong>{t(`${stats.cut} 段`, `${stats.cut}`)}</strong></div>
+            <div><span>{t('压痕线', 'Crease lines')}</span><strong>{t(`${stats.crease} 段`, `${stats.crease}`)}</strong></div>
+            <div><span>{t('出血 / 安全区', 'Bleed / safe area')}</span><strong>{d.bleed} / {d.safe} mm</strong></div>
+            <div><span>{t('生产难度', 'Production difficulty')}</span><strong>{'●'.repeat(st.difficulty)}{'○'.repeat(3 - st.difficulty)}</strong></div>
           </div>}
-          <div className="structure-actions"><Button size="sm" onClick={() => useStructure(st.id)}>用这个结构创作</Button>
-            <Button size="sm" variant="ghost" onClick={() => setDetail(st.id)}>查看刀模 ↗</Button></div>
+          <div className="structure-actions"><Button size="sm" onClick={() => useStructure(st.id)}>{t('用这个结构创作', 'Design with this structure')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setDetail(st.id)}>{t('查看刀模 ↗', 'View dieline ↗')}</Button></div>
         </div>
       </Card>;
     })}</div>
-    <Notice tone="info">第一版已实现插舌盒、天地盖、抽屉盒、自立袋、矩形与圆形标签的真实几何展开；其余品类会按同一结构引擎逐步扩充，不会只放一个视觉模板。</Notice>
-    <Modal open={!!detail} title={detail ? `${structureById(detail).name} · 真实展开刀模` : ''} onClose={() => setDetail(null)} wide>
+    <Notice tone="info">{t('第一版已实现插舌盒、天地盖、抽屉盒、自立袋、矩形与圆形标签的真实几何展开；其余品类会按同一结构引擎逐步扩充，不会只放一个视觉模板。', 'This first release covers real geometric dielines for tuck-end cartons, two-piece lid and base boxes, drawer boxes, stand-up pouches and rectangular or round labels. More categories will extend the same structure engine — never a visual-only template.')}</Notice>
+    <Modal open={!!detail} title={detail ? t(`${structName(structureById(detail), lang)} · 真实展开刀模`, `${structName(structureById(detail), lang)} · Real dieline`) : ''} onClose={() => setDetail(null)} wide>
       {detailDieline && <><div className="dieline-modal-grid">{detailDieline.sheets.map((sh) => <div key={sh.id}><div className="dieline-cap">{sh.name} · {sh.width} × {sh.height} mm</div><DielineView sheet={sh} dieline={detailDieline} showArtwork={false} /></div>)}</div>
-        <div className="legend"><span><i className="lg-cut" />裁切线</span><span><i className="lg-crease" />压痕线</span><span><i className="lg-bleed" />出血线</span><span><i className="lg-safe" />安全区</span></div>
-        <p className="modal-p">裁切线 = 面片并集的外露边，压痕线 = 相邻面片公共边，全部由几何计算得出。</p></>}
+        <div className="legend"><span><i className="lg-cut" />{t('裁切线', 'Cut lines')}</span><span><i className="lg-crease" />{t('压痕线', 'Crease lines')}</span><span><i className="lg-bleed" />{t('出血线', 'Bleed')}</span><span><i className="lg-safe" />{t('安全区', 'Safe area')}</span></div>
+        <p className="modal-p">{t('裁切线 = 面片并集的外露边，压痕线 = 相邻面片公共边，全部由几何计算得出。', 'Cut lines are the exposed edges of the panel union, crease lines the shared edges of adjacent panels — all derived geometrically.')}</p></>}
     </Modal>
   </div>;
 }
@@ -151,49 +153,58 @@ export function Projects() {
 /* ============================ 10. 项目详情 ============================ */
 export function ProjectDetail() {
   const hash = useHash();
+  const { lang, t } = useLang();
   const id = hash.split('/')[2];
   const { s, loadProject, restoreVersion, duplicateProject, deleteProject, setToast } = useApp();
   const { isPro } = useSubscription();
   const p = s.projects.find((x) => x.id === id);
   const [confirm, setConfirm] = useState(false);
-  if (!p) return <div className="page page-narrow"><Empty title="找不到这个项目" desc="它可能已被删除，或保存在另一台设备的浏览器里。" action={<Button onClick={() => go('/projects')}>返回我的工作台</Button>} /></div>;
+  if (!p) return <div className="page page-narrow"><Empty title={t('找不到这个项目', 'Project not found')} desc={t('它可能已被删除，或保存在另一台设备的浏览器里。', 'It may have been deleted, or it lives in another device\'s browser.')} action={<Button onClick={() => go('/projects')}>{t('返回我的工作台', 'Back to workspace')}</Button>} /></div>;
 
   const downloadJson = () => downloadBlob(new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' }), `${p.name}.json`);
   const shareHtml = () => {
     const svg = p.design ? mockupSvg(p.design) : '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="680"><rect width="900" height="680" fill="#f7f6f2"/></svg>';
-    const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${p.name} · LunaSol 预览</title><style>body{margin:0;background:#f7f6f2;font-family:-apple-system,"PingFang SC",sans-serif;color:#1d1d1b;display:flex;align-items:center;justify-content:center;min-height:100vh}main{text-align:center;padding:40px}img{max-width:min(86vw,760px);box-shadow:0 24px 60px #00000014}h1{font-weight:400;font-size:26px;letter-spacing:2px}p{color:#7d7a72;font-size:13px}</style></head><body><main><img src="${p.design ? svgToDataUrl(svg) : ''}" alt="包装效果图"><h1>${p.name}</h1><p>${p.brief.size.l} × ${p.brief.size.w} × ${p.brief.size.h} mm · ${structureById(p.structure).name} · LunaSol AI Packaging Studio</p></main></body></html>`;
-    downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${p.name}-分享预览.html`);
-    setToast('已生成可离线打开的分享预览页');
+    const html = `<!doctype html><html lang="${lang === 'en' ? 'en' : 'zh-CN'}"><head><meta charset="utf-8"><title>${p.name} · LunaSol ${t('预览', 'preview')}</title><style>body{margin:0;background:#f7f6f2;font-family:-apple-system,"PingFang SC",sans-serif;color:#1d1d1b;display:flex;align-items:center;justify-content:center;min-height:100vh}main{text-align:center;padding:40px}img{max-width:min(86vw,760px);box-shadow:0 24px 60px #00000014}h1{font-weight:400;font-size:26px;letter-spacing:2px}p{color:#7d7a72;font-size:13px}</style></head><body><main><img src="${p.design ? svgToDataUrl(svg) : ''}" alt="${t('包装效果图', 'Package mockup')}"><h1>${p.name}</h1><p>${p.brief.size.l} × ${p.brief.size.w} × ${p.brief.size.h} mm · ${structName(structureById(p.structure), lang)} · LunaSol AI Packaging Studio</p></main></body></html>`;
+    downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${p.name}${t('-分享预览', '-preview')}.html`);
+    setToast(t('已生成可离线打开的分享预览页', 'Shareable preview page generated — it opens offline'));
   };
   return <div className="page page-narrow">
-    <PageHead kicker="PROJECT / 10" title={p.name} desc={`创建于 ${formatDate(p.createdAt)} · 最后修改 ${formatDate(p.updatedAt)}`}
-      right={<div className="head-actions"><Button variant="outline" onClick={() => { loadProject(p.id); go(p.design ? '/editor' : '/create'); }}>继续编辑</Button>
-        <Button onClick={() => { loadProject(p.id); go('/export'); }}>导出文件 <span aria-hidden>→</span></Button></div>} />
+    <PageHead kicker="PROJECT / 10" title={p.name} desc={t(`创建于 ${formatDate(p.createdAt)} · 最后修改 ${formatDate(p.updatedAt)}`, `Created ${formatDate(p.createdAt)} · last modified ${formatDate(p.updatedAt)}`)}
+      right={<div className="head-actions"><Button variant="outline" onClick={() => { loadProject(p.id); go(p.design ? '/editor' : '/create'); }}>{t('继续编辑', 'Keep editing')}</Button>
+        <Button onClick={() => { loadProject(p.id); go('/export'); }}>{t('导出文件', 'Export files')} <span aria-hidden>→</span></Button></div>} />
     <div className="detail-grid">
       <Card className="pad-card"><div className="project-hero">{p.design?.faces.front ? <DesignView face={p.design.faces.front} /> : <div className="project-blank">LunaSol</div>}</div></Card>
-      <Card className="pad-card"><SectionLabel en="PROJECT DATA">项目信息</SectionLabel>
-        {([['包装类型', structureById(p.structure).name], ['成品尺寸', `${p.brief.size.l} × ${p.brief.size.w} × ${p.brief.size.h} mm`],
-        ['产品 / 品牌', `${p.brief.product || '—'} / ${p.brief.brand || '—'}`], ['设计风格', p.brief.style || '—'],
-        ['配色', p.brief.colors.join(' / ') || '—'], ['当前方案', p.design ? ({ minimal: '高级极简', illustration: '创意插画', commercial: '品牌商业' } as const)[p.design.scheme] : '—'],
-        ['历史版本', `${p.versions.length} 个`], ['检查状态', p.status === 'checked' || p.status === 'exported' ? '已进行印前检查' : '尚未检查']] as [string, string][]).map(([k, v]) => <div className="kv" key={k}><span>{k}</span><strong>{v}</strong></div>)}
-        <div className="detail-actions"><Button size="sm" variant="outline" onClick={shareHtml}>分享预览页</Button>
-          <Button size="sm" variant="outline" onClick={downloadJson}>下载项目 JSON</Button>
-          <Button size="sm" variant="ghost" onClick={() => { duplicateProject(p.id); setToast('已复制项目'); }}>复制项目</Button>
-          <Button size="sm" variant="ghost" onClick={() => setConfirm(true)}>删除</Button></div>
+      <Card className="pad-card"><SectionLabel en="PROJECT DATA">{t('项目信息', 'Project data')}</SectionLabel>
+        {([
+          [t('包装类型', 'Structure'), structName(structureById(p.structure), lang)],
+          [t('成品尺寸', 'Finished size'), `${p.brief.size.l} × ${p.brief.size.w} × ${p.brief.size.h} mm`],
+          [t('产品 / 品牌', 'Product / brand'), `${p.brief.product || '—'} / ${p.brief.brand || '—'}`],
+          [t('设计风格', 'Style'), p.brief.style || '—'],
+          [t('配色', 'Colours'), p.brief.colors.join(' / ') || '—'],
+          [t('当前方案', 'Current option'), p.design
+            ? ({ minimal: t('高级极简', 'Refined minimal'), illustration: t('创意插画', 'Creative illustration'), commercial: t('品牌商业', 'Brand commercial') } as const)[p.design.scheme]
+            : '—'],
+          [t('历史版本', 'Versions'), t(`${p.versions.length} 个`, `${p.versions.length}`)],
+          [t('检查状态', 'Prepress'), p.status === 'checked' || p.status === 'exported' ? t('已进行印前检查', 'Prepress checked') : t('尚未检查', 'Not checked')],
+        ] as [string, string][]).map(([k, v]) => <div className="kv" key={k}><span>{k}</span><strong>{v}</strong></div>)}
+        <div className="detail-actions"><Button size="sm" variant="outline" onClick={shareHtml}>{t('分享预览页', 'Share preview page')}</Button>
+          <Button size="sm" variant="outline" onClick={downloadJson}>{t('下载项目 JSON', 'Download project JSON')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => { duplicateProject(p.id); setToast(t('已复制项目', 'Project duplicated')); }}>{t('复制项目', 'Duplicate project')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirm(true)}>{t('删除', 'Delete')}</Button></div>
       </Card>
     </div>
-    <Card className="pad-card versions-card"><SectionLabel en="VERSION HISTORY">历史版本</SectionLabel>
-      {p.versions.length === 0 ? <p className="muted">编辑设计后会自动生成版本。</p> :
+    <Card className="pad-card versions-card"><SectionLabel en="VERSION HISTORY">{t('历史版本', 'Version history')}</SectionLabel>
+      {p.versions.length === 0 ? <p className="muted">{t('编辑设计后会自动生成版本。', 'Versions are created automatically as you edit.')}</p> :
         <>
           <div className="version-table">{[...p.versions].slice(isPro ? -p.versions.length : -3).reverse().map((v) => <div key={v.id}><span>{v.label}</span><em>{formatDate(v.at)}</em>
-            <Button size="sm" variant="ghost" onClick={() => { loadProject(p.id); restoreVersion(v.id); setToast('已恢复该版本'); }}>恢复</Button></div>)}</div>
+            <Button size="sm" variant="ghost" onClick={() => { loadProject(p.id); restoreVersion(v.id); setToast(t('已恢复该版本', 'Version restored')); }}>{t('恢复', 'Restore')}</Button></div>)}</div>
           {!isPro && p.versions.length > 3 && <p className="muted">
-            免费版可恢复最近 3 个版本；开通会员后可恢复全部 {p.versions.length} 个（旧版本不会被删除，续期后即可看到）。<Button size="sm" variant="ghost" onClick={() => go('/subscribe')}>开通会员 →</Button>
+            {t(`免费版可恢复最近 3 个版本；开通会员后可恢复全部 ${p.versions.length} 个（旧版本不会被删除，续期后即可看到）。`, `The free plan restores the 3 most recent versions; with a membership you can restore all ${p.versions.length} (older versions are kept, so they appear once you subscribe).`)}<Button size="sm" variant="ghost" onClick={() => go('/subscribe')}>{t('开通会员 →', 'Become a member →')}</Button>
           </p>}
         </>}
     </Card>
-    <Modal open={confirm} title="删除项目" onClose={() => setConfirm(false)}><p className="modal-p">该操作不可撤销。</p>
-      <div className="modal-buttons"><Button variant="outline" onClick={() => setConfirm(false)}>取消</Button>
-        <Button onClick={() => { deleteProject(p.id); setConfirm(false); go('/projects'); setToast('项目已删除'); }}>确认删除</Button></div></Modal>
+    <Modal open={confirm} title={t('删除项目', 'Delete project')} onClose={() => setConfirm(false)}><p className="modal-p">{t('该操作不可撤销。', 'This cannot be undone.')}</p>
+      <div className="modal-buttons"><Button variant="outline" onClick={() => setConfirm(false)}>{t('取消', 'Cancel')}</Button>
+        <Button onClick={() => { deleteProject(p.id); setConfirm(false); go('/projects'); setToast(t('项目已删除', 'Project deleted')); }}>{t('确认删除', 'Delete')}</Button></div></Modal>
   </div>;
 }

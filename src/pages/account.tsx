@@ -17,6 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
 import { Notice, go } from '../ui';
+import { useLang } from '../i18n';
 import { useAuth } from '../cloud/auth';
 import { useProfile } from '../cloud/profile';
 import { useSubscription } from '../cloud/subscription';
@@ -41,6 +42,7 @@ export default function Account() {
   const profile = useProfile();
   const sub = useSubscription();
   const { setToast } = useApp();
+  const { lang, t } = useLang();
   const [loginOpen, setLoginOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const toggle = (p: Exclude<Panel, null>) => setPanel((cur) => (cur === p ? null : p));
@@ -98,9 +100,9 @@ export default function Account() {
       await profile.updateBirthday(birthday);
       const r = await a.updateProfile({ nickName: nick.trim() || undefined });
       if (!r.ok) { setToast(r.message); return; }
-      setToast('个人资料已保存（云端同步）');
+      setToast(t('个人资料已保存（云端同步）', 'Profile saved and synced to the cloud.'));
     } catch (e) {
-      setToast('保存失败：' + ((e as Error).message || '未知错误'));
+      setToast(t('保存失败：', 'Save failed: ') + ((e as Error).message || t('未知错误', 'unknown error')));
     } finally {
       setSaving(false);
     }
@@ -111,7 +113,7 @@ export default function Account() {
     setToast(r.message);
   };
   const submitPwd = async () => {
-    if (pwdNew !== pwdConfirm) { setToast('两次输入的新密码不一致'); return; }
+    if (pwdNew !== pwdConfirm) { setToast(t('两次输入的新密码不一致', 'The two new passwords do not match.')); return; }
     const r = await a.confirmPasswordChange(pwdNonce, pwdNew);
     setToast(r.message);
     if (r.ok) { setPwdNonce(''); setPwdNew(''); setPwdConfirm(''); }
@@ -133,7 +135,8 @@ export default function Account() {
   const isPro = sub.isPro;
   const periodEndRaw = sub.sub?.period_end || '';
   const periodEnd = periodEndRaw
-    ? new Date(periodEndRaw).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    ? new Date(periodEndRaw).toLocaleDateString(lang === 'en' ? 'en-US' : 'zh-CN',
+      { year: 'numeric', month: '2-digit', day: '2-digit' })
     : '';
 
   return <div className="page page-narrow ag-page">
@@ -141,22 +144,28 @@ export default function Account() {
 
     <header className="ag-head">
       <span className="ag-kicker">ACCOUNT</span>
-      <h1>账户信息</h1>
-      <p>资料、密码与邮箱，都在这里。</p>
+      <h1>{t('账户信息', 'Account')}</h1>
+      <p>{t('资料、密码与邮箱，都在这里。', 'Profile, password and email — all in one place.')}</p>
     </header>
 
-    {!cloudConfigured && <Notice tone="warn">未配置 CloudBase 环境变量，登录与云同步不可用。</Notice>}
+    {!cloudConfigured && <Notice tone="warn">
+      {t('未配置 CloudBase 环境变量，登录与云同步不可用。', 'CloudBase environment variables are missing, so sign-in and cloud sync are unavailable.')}
+    </Notice>}
     {cloudConfigured && !cloudOriginSupported() && <Notice tone="warn">
-      当前是 GitHub Pages 镜像域名，CloudBase 认证接口只对白名单来源放行。
-      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">去正式站点操作 →</a>
+      {t('当前是 GitHub Pages 镜像域名，CloudBase 认证接口只对白名单来源放行。',
+        'This is the GitHub Pages mirror domain; the CloudBase auth API only allows whitelisted origins.')}
+      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">
+        {t('去正式站点操作 →', 'Use the main site →')}
+      </a>
     </Notice>}
 
     {!a.user ? (
       <section className="ag-card ag-guest">
         <span className="ag-guest-ico"><Icon name="user" size={26} /></span>
-        <h2>登录后管理账户信息</h2>
-        <p>登录后可修改头像与称呼、设置密码、换绑邮箱。项目管理在工作台。</p>
-        <button className="ag-btn" onClick={() => setLoginOpen(true)}>登录 / 注册</button>
+        <h2>{t('登录后管理账户信息', 'Sign in to manage your account')}</h2>
+        <p>{t('登录后可修改头像与称呼、设置密码、换绑邮箱。项目管理在工作台。',
+          'Once signed in you can change your avatar and name, set a password and swap your email. Projects live in the workspace.')}</p>
+        <button className="ag-btn" onClick={() => setLoginOpen(true)}>{t('登录 / 注册', 'Sign in')}</button>
       </section>
     ) : <>
       {/* ---------- 身份卡 ---------- */}
@@ -165,53 +174,65 @@ export default function Account() {
             所以不给点击、也不挂笔形角标，避免「改了没保存上」的错觉 */}
         <div className="ag-avatar">
           {avatarUrl
-            ? <img src={avatarUrl} alt="头像" />
+            ? <img src={avatarUrl} alt={t('头像', 'Avatar')} />
             : <span>{initial}</span>}
         </div>
         <div className="ag-identity-text">
           <strong>{a.user.label}</strong>
-          <span>{a.user.account || '本地账号'}</span>
+          <span>{a.user.account || t('本地账号', 'Local account')}</span>
         </div>
-        <span className="ag-pill">已登录</span>
+        <span className="ag-pill">{t('已登录', 'Signed in')}</span>
       </section>
 
       {/* ---------- 个人资料 ---------- */}
-      <div className="ag-group-label">个人资料</div>
+      <div className="ag-group-label">{t('个人资料', 'Profile')}</div>
       <section className="ag-card ag-group">
         <button className={`ag-row ${panel === 'profile' ? 'open' : ''}`} onClick={() => toggle('profile')}>
           <Ico name="user" />
-          <span className="ag-row-main"><strong>头像与称呼</strong><small>更换照片、修改昵称与生日</small></span>
+          <span className="ag-row-main">
+            <strong>{t('头像与称呼', 'Avatar & name')}</strong>
+            <small>{t('更换照片、修改昵称与生日', 'Change your photo, display name and birthday')}</small>
+          </span>
           <Icon name="chevronRight" size={16} className="ag-chev" />
         </button>
         {panel === 'profile' && <div className="ag-panel">
           <div className="ag-avatar-row">
-            <button className="ag-avatar ag-avatar-sm" onClick={() => avatarFileRef.current?.click()} title="点击更换头像">
-              {avatarUrl ? <img src={avatarUrl} alt="头像" /> : <span>{initial}</span>}
+            <button className="ag-avatar ag-avatar-sm" onClick={() => avatarFileRef.current?.click()}
+              title={t('点击更换头像', 'Click to change your avatar')}>
+              {avatarUrl ? <img src={avatarUrl} alt={t('头像', 'Avatar')} /> : <span>{initial}</span>}
             </button>
-            <span className="ag-row-main"><strong>个人头像</strong><small>点击更换，自动压缩为 128 × 128</small></span>
+            <span className="ag-row-main">
+              <strong>{t('个人头像', 'Avatar')}</strong>
+              <small>{t('点击更换，自动压缩为 128 × 128', 'Click to change — resized to 128 × 128 automatically')}</small>
+            </span>
           </div>
           <div className="ag-fields">
-            <label className="ag-field"><span>称呼</span>
-              <input value={nick} onChange={(e) => setNick(e.target.value)} placeholder="例如：Sol Young" /></label>
-            <label className="ag-field"><span>生日</span>
+            <label className="ag-field"><span>{t('称呼', 'Display name')}</span>
+              <input value={nick} onChange={(e) => setNick(e.target.value)} placeholder={t('例如：Sol Young', 'e.g. Sol Young')} /></label>
+            <label className="ag-field"><span>{t('生日', 'Birthday')}</span>
               <input type="date" value={birthday} onChange={(e) => setBirthdayLocal(e.target.value)} /></label>
           </div>
           <div className="ag-actions">
-            <button className="ag-btn" onClick={() => void saveProfile()} disabled={saving}>{saving ? '保存中…' : '保存资料'}</button>
+            <button className="ag-btn" onClick={() => void saveProfile()} disabled={saving}>
+              {saving ? t('保存中…', 'Saving…') : t('保存资料', 'Save profile')}
+            </button>
           </div>
         </div>}
       </section>
 
       {/* ---------- 订阅与账单 ---------- */}
-      <div className="ag-group-label">订阅与账单</div>
+      <div className="ag-group-label">{t('订阅与账单', 'Subscription & billing')}</div>
       <section className="ag-card ag-group">
         <div className="ag-row ag-row-static">
           <Ico name="badge" />
           <span className="ag-row-main">
-            <strong>{isPro ? '会员已开通' : '当前为免费版'}</strong>
+            <strong>{isPro ? t('会员已开通', 'Membership active') : t('当前为免费版', 'On the free plan')}</strong>
             <small>{isPro
-              ? (periodEnd ? `有效期至 ${periodEnd}，到期自动续费` : '有效期见订阅页')
-              : '会员解锁全部对话模型、云端同步与印刷级导出'}</small>
+              ? (periodEnd
+                ? t(`有效期至 ${periodEnd}，到期自动续费`, `Valid until ${periodEnd}, renews automatically`)
+                : t('有效期见订阅页', 'See the plans page for the expiry date'))
+              : t('会员解锁全部对话模型、云端同步与印刷级导出',
+                'Membership unlocks all chat models, cloud sync and print-ready export')}</small>
           </span>
           <span className="ag-value">{periodEnd && isPro ? periodEnd : '—'}</span>
         </div>
@@ -219,8 +240,9 @@ export default function Account() {
         <button className="ag-row" onClick={() => go('/subscribe')}>
           <Ico name="spark" />
           <span className="ag-row-main">
-            <strong>{isPro ? '续费 / 购买积分包' : '订阅会员'}</strong>
-            <small>在线支付，开通后立即生效；没有海外卡可用兑换码或微信</small>
+            <strong>{isPro ? t('续费 / 购买积分包', 'Renew / buy credits') : t('订阅会员', 'Subscribe')}</strong>
+            <small>{t('在线支付，开通后立即生效；没有海外卡可用兑换码或微信',
+              'Pay online — active immediately. No overseas card? Use a redeem code or WeChat.')}</small>
           </span>
           <Icon name="chevronRight" size={16} className="ag-chev" />
         </button>
@@ -230,92 +252,117 @@ export default function Account() {
         <button className="ag-row" onClick={() => window.open(CREEM_PORTAL, '_blank', 'noopener,noreferrer')}>
           <Ico name="cloud" />
           <span className="ag-row-main">
-            <strong>订单、发票与取消续费</strong>
-            <small>用付款时的邮箱登录 Creem 自助门户；取消后权益保留到当期结束</small>
+            <strong>{t('订单、发票与取消续费', 'Orders, invoices & cancellation')}</strong>
+            <small>{t('用付款时的邮箱登录 Creem 自助门户；取消后权益保留到当期结束',
+              'Sign in to the Creem portal with your payment email; after cancelling, access runs to the end of the period')}</small>
           </span>
           <Icon name="chevronRight" size={16} className="ag-chev" />
         </button>
       </section>
 
       {/* ---------- 登录与安全 ---------- */}
-      <div className="ag-group-label">登录与安全</div>
+      <div className="ag-group-label">{t('登录与安全', 'Sign-in & security')}</div>
       <section className="ag-card ag-group">
         <div className="ag-row ag-row-static">
           <Ico name="shield" />
-          <span className="ag-row-main"><strong>登录账号</strong><small>{a.user.account || '—'}</small></span>
-          <span className="ag-value">{a.user.email ? '邮箱已验证' : '邮箱未绑定'}</span>
+          <span className="ag-row-main">
+            <strong>{t('登录账号', 'Sign-in account')}</strong><small>{a.user.account || '—'}</small>
+          </span>
+          <span className="ag-value">{a.user.email ? t('邮箱已验证', 'Email verified') : t('邮箱未绑定', 'No email')}</span>
         </div>
         {a.user.phone && <div className="ag-row ag-row-static">
           <Ico name="message" />
-          <span className="ag-row-main"><strong>手机号</strong><small>历史绑定，仅作只读展示</small></span>
+          <span className="ag-row-main">
+            <strong>{t('手机号', 'Phone')}</strong>
+            <small>{t('历史绑定，仅作只读展示', 'Legacy binding — shown read-only')}</small>
+          </span>
           <span className="ag-value">{a.user.phone}</span>
         </div>}
 
         <button className={`ag-row ${panel === 'password' ? 'open' : ''}`} onClick={() => toggle('password')}>
           <Ico name="key" />
-          <span className="ag-row-main"><strong>登录密码</strong><small>修改前先验证注册邮箱</small></span>
+          <span className="ag-row-main">
+            <strong>{t('登录密码', 'Password')}</strong>
+            <small>{t('修改前先验证注册邮箱', 'Verify your registered email first')}</small>
+          </span>
           <Icon name="chevronRight" size={16} className="ag-chev" />
         </button>
         {panel === 'password' && <div className="ag-panel">
           {!a.reauthPending ? <>
-            <p className="ag-hint">设置或修改密码前，需要先验证注册邮箱。点下方按钮后，验证码会发送到已绑定的邮箱。</p>
+            <p className="ag-hint">
+              {t('设置或修改密码前，需要先验证注册邮箱。点下方按钮后，验证码会发送到已绑定的邮箱。',
+                'Before setting or changing a password you must verify your registered email. The code is sent to the address on file.')}
+            </p>
             <div className="ag-actions">
               <button className="ag-btn" onClick={() => void startPwd()} disabled={a.busy}>
-                {a.busy ? '发送中…' : '验证身份并设置密码'}
+                {a.busy ? t('发送中…', 'Sending…') : t('验证身份并设置密码', 'Verify and set password')}
               </button>
             </div>
           </> : <>
-            <p className="ag-hint">身份验证码已发送到注册邮箱，请填写验证码并设置新密码。</p>
+            <p className="ag-hint">
+              {t('身份验证码已发送到注册邮箱，请填写验证码并设置新密码。',
+                'A verification code was sent to your registered email. Enter it and choose a new password.')}
+            </p>
             <div className="ag-fields ag-fields-single">
-              <label className="ag-field"><span>身份验证码</span>
+              <label className="ag-field"><span>{t('身份验证码', 'Verification code')}</span>
                 <input inputMode="numeric" autoComplete="one-time-code" value={pwdNonce}
-                  onChange={(e) => setPwdNonce(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="6 位数字" /></label>
-              <label className="ag-field"><span>新密码</span>
+                  onChange={(e) => setPwdNonce(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  placeholder={t('6 位数字', '6 digits')} /></label>
+              <label className="ag-field"><span>{t('新密码', 'New password')}</span>
                 <input type="password" value={pwdNew} onChange={(e) => setPwdNew(e.target.value)}
-                  autoComplete="new-password" placeholder="至少 8 位" /></label>
-              <label className="ag-field"><span>确认新密码</span>
+                  autoComplete="new-password" placeholder={t('至少 8 位', 'At least 8 characters')} /></label>
+              <label className="ag-field"><span>{t('确认新密码', 'Confirm new password')}</span>
                 <input type="password" value={pwdConfirm} onChange={(e) => setPwdConfirm(e.target.value)}
                   autoComplete="new-password" /></label>
             </div>
             <div className="ag-actions">
               <button className="ag-btn" onClick={() => void submitPwd()} disabled={a.busy || !pwdNonce || !pwdNew}>
-                {a.busy ? '提交中…' : '确认修改'}
+                {a.busy ? t('提交中…', 'Submitting…') : t('确认修改', 'Confirm change')}
               </button>
-              <button className="ag-btn-quiet" onClick={a.cancelPasswordChange}>取消</button>
+              <button className="ag-btn-quiet" onClick={a.cancelPasswordChange}>{t('取消', 'Cancel')}</button>
             </div>
           </>}
         </div>}
 
         <button className={`ag-row ${panel === 'email' ? 'open' : ''}`} onClick={() => toggle('email')}>
           <Ico name="mail" />
-          <span className="ag-row-main"><strong>绑定 / 换绑邮箱</strong><small>当前：{a.user.email || '未绑定'}</small></span>
+          <span className="ag-row-main">
+            <strong>{t('绑定 / 换绑邮箱', 'Bind / change email')}</strong>
+            <small>{t('当前：', 'Current: ')}{a.user.email || t('未绑定', 'none')}</small>
+          </span>
           <Icon name="chevronRight" size={16} className="ag-chev" />
         </button>
         {panel === 'email' && <div className="ag-panel">
           {!a.linkPending ? <>
             <div className="ag-fields ag-fields-single">
-              <label className="ag-field"><span>新邮箱地址</span>
+              <label className="ag-field"><span>{t('新邮箱地址', 'New email address')}</span>
                 <input value={linkTarget} onChange={(e) => setLinkTarget(e.target.value)}
                   inputMode="email" type="email" autoComplete="email" placeholder="you@example.com" /></label>
             </div>
-            <p className="ag-hint">短信验证码已停用，暂不提供手机号绑定；已绑定的手机号仍可用于密码登录。</p>
+            <p className="ag-hint">
+              {t('短信验证码已停用，暂不提供手机号绑定；已绑定的手机号仍可用于密码登录。',
+                'SMS codes are disabled, so phone binding is unavailable; an existing phone number can still be used to sign in with a password.')}
+            </p>
             <div className="ag-actions">
               <button className="ag-btn" onClick={() => void sendLinkCode()} disabled={a.busy || !linkTarget.trim()}>
-                {a.busy ? '发送中…' : '发送验证码'}
+                {a.busy ? t('发送中…', 'Sending…') : t('发送验证码', 'Send code')}
               </button>
             </div>
           </> : <>
-            <p className="ag-hint">验证码已发送到 <strong>{a.linkPending.target}</strong>。</p>
+            <p className="ag-hint">
+              {t('验证码已发送到', 'Code sent to')} <strong>{a.linkPending.target}</strong>.
+            </p>
             <div className="ag-fields ag-fields-single">
-              <label className="ag-field"><span>验证码</span>
+              <label className="ag-field"><span>{t('验证码', 'Code')}</span>
                 <input inputMode="numeric" value={linkCode}
-                  onChange={(e) => setLinkCode(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="6 位数字" /></label>
+                  onChange={(e) => setLinkCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  placeholder={t('6 位数字', '6 digits')} /></label>
             </div>
             <div className="ag-actions">
               <button className="ag-btn" onClick={() => void submitLink()} disabled={a.busy || linkCode.length < 4}>
-                {a.busy ? '校验中…' : '完成绑定'}
+                {a.busy ? t('校验中…', 'Verifying…') : t('完成绑定', 'Complete binding')}
               </button>
-              <button className="ag-btn-quiet" onClick={a.cancelLink}>取消</button>
+              <button className="ag-btn-quiet" onClick={a.cancelLink}>{t('取消', 'Cancel')}</button>
             </div>
           </>}
         </div>}
@@ -324,7 +371,7 @@ export default function Account() {
       <button className="ag-signout" onClick={async () => {
         const r = await a.signOut();
         setToast(r.message);
-      }}><Icon name="logOut" size={15} /> 退出登录</button>
+      }}><Icon name="logOut" size={15} /> {t('退出登录', 'Sign out')}</button>
     </>}
 
     <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)}

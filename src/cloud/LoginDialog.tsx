@@ -18,14 +18,16 @@ import { Button, Modal, Notice, go } from '../ui';
 import { useAuth, isEmail } from './auth';
 import { humanizeAuthError } from './authErrors';
 import { CLOUD_SITE_URL } from './config';
-import { LOGIN_CONFIG, NO_SMS_HINT } from './loginConfig';
+import { LOGIN_CONFIG, NO_SMS_HINT, NO_SMS_HINT_EN } from './loginConfig';
+import { useLang } from '../i18n';
 
 type Tab = 'password' | 'code';
 
 /** 由配置常量生成主入口，控制台关掉的方式不会出现在界面上（含已关闭的短信）。 */
-const TABS: { id: Tab; label: string }[] = [
-  ...(LOGIN_CONFIG.methods.password ? [{ id: 'password' as Tab, label: '密码登录' }] : []),
-  ...(LOGIN_CONFIG.methods.emailCode ? [{ id: 'code' as Tab, label: '邮箱验证码' }] : []),
+/** 标签文案存双语：模块加载时拿不到当前语言 */
+const TABS: { id: Tab; zh: string; en: string }[] = [
+  ...(LOGIN_CONFIG.methods.password ? [{ id: 'password' as Tab, zh: '密码登录', en: 'Password' }] : []),
+  ...(LOGIN_CONFIG.methods.emailCode ? [{ id: 'code' as Tab, zh: '邮箱验证码', en: 'Email code' }] : []),
 ];
 
 /** 云端返回「邮箱还没账号」时的兜底：自动把注册表单展开，避免新用户被堵死。 */
@@ -37,6 +39,7 @@ export function LoginDialog({ open, onClose, onDone }: {
   onDone?: (message: string) => void;
 }) {
   const a = useAuth();
+  const { lang, t } = useLang();
   const [tab, setTab] = useState<Tab>(TABS[0]?.id ?? 'code');
   const [showSignup, setShowSignup] = useState(false);
   const [account, setAccount] = useState('');
@@ -58,8 +61,8 @@ export function LoginDialog({ open, onClose, onDone }: {
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** 统一整理返回文案：成功原样，失败翻成中文，内部噪音兜底成一句人话 */
-  const report = (r: { ok: boolean; message: string }, fallback = '操作失败，请稍后重试') => {
-    const text = r.ok ? r.message : (humanizeAuthError(r.message, fallback) || fallback);
+  const report = (r: { ok: boolean; message: string }, fallback = t('操作失败，请稍后重试', 'Something went wrong. Please try again.')) => {
+    const text = r.ok ? r.message : (humanizeAuthError(r.message, fallback, lang) || fallback);
     setMsg({ ok: r.ok, text });
     return text;
   };
@@ -76,112 +79,112 @@ export function LoginDialog({ open, onClose, onDone }: {
 
   const submitPassword = async () => {
     const r = await a.signInWithPassword(account, password);
-    const text = report(r, '登录失败，请检查网络后重试');
+    const text = report(r, t('登录失败，请检查网络后重试', 'Sign-in failed — check your network and try again'));
     if (r.ok) done(text);
   };
 
   const sendSignup = async () => {
-    if (!isEmail(account)) { setMsg({ ok: false, text: `请输入正确的邮箱地址。${NO_SMS_HINT}` }); return; }
+    if (!isEmail(account)) { setMsg({ ok: false, text: t(`请输入正确的邮箱地址。${NO_SMS_HINT}`, `Enter a valid email address. ${NO_SMS_HINT_EN}`) }); return; }
     if (password !== confirmPassword) {
-      setMsg({ ok: false, text: '两次输入的密码不一致，请重新确认' });
+      setMsg({ ok: false, text: t('两次输入的密码不一致，请重新确认', 'The two passwords do not match — please re-enter') });
       return;
     }
     const r = await a.startSignup(account, password);
-    report(r, '注册失败，请稍后重试');
+    report(r, t('注册失败，请稍后重试', 'Sign-up failed — please try again'));
   };
 
   const sendCode = async () => {
-    if (!isEmail(account)) { setMsg({ ok: false, text: `请输入正确的邮箱地址。${NO_SMS_HINT}` }); return; }
+    if (!isEmail(account)) { setMsg({ ok: false, text: t(`请输入正确的邮箱地址。${NO_SMS_HINT}`, `Enter a valid email address. ${NO_SMS_HINT_EN}`) }); return; }
     const r = await a.startCodeLogin(account);
     if (!r.ok && NEED_SIGNUP.test(r.message)) {
       setShowSignup(true);
-      setMsg({ ok: false, text: '这个邮箱还没有账号，请在下方设置密码完成注册。' });
+      setMsg({ ok: false, text: t('这个邮箱还没有账号，请在下方设置密码完成注册。', 'This email has no account yet — set a password below to sign up.') });
       return;
     }
-    report(r, '验证码发送失败，请稍后重试');
+    report(r, t('验证码发送失败，请稍后重试', 'Could not send the code — please try again'));
   };
 
   const verify = async () => {
     const r = await a.verifyCode(code);
-    const text = report(r, '验证码校验失败，请重新发送');
+    const text = report(r, t('验证码校验失败，请重新发送', 'Code verification failed — request a new code'));
     if (r.ok) done(text);
   };
 
   const brand = LOGIN_CONFIG.brand;
   const emailField = showSignup || tab === 'code';
 
-  return <Modal open={open} title={a.user ? '账号' : '登录'} onClose={onClose}>
+  return <Modal open={open} title={a.user ? t('账号', 'Account') : t('登录', 'Sign in')} onClose={onClose}>
     {!a.user && <div className="login-brand">
       <img src={brand.logo} alt="" />
       <div>
         <div className="login-brand-name">{brand.name}</div>
-        <span className="login-brand-tag">{brand.tagline}</span>
+        <span className="login-brand-tag">{t(brand.tagline, 'Everyone can be a designer')}</span>
       </div>
     </div>}
 
-    {!a.configured && <Notice tone="warn">当前构建没有配置 CloudBase 环境变量，登录不可用。项目会继续保存在本机浏览器，全站功能照常使用。</Notice>}
+    {!a.configured && <Notice tone="warn">{t('当前构建没有配置 CloudBase 环境变量，登录不可用。项目会继续保存在本机浏览器，全站功能照常使用。', 'This build has no CloudBase environment configured, so signing in is unavailable. Projects keep saving in this browser and the rest of the site works as usual.')}</Notice>}
     {a.configured && !a.originOk && <Notice tone="warn">
-      当前域名不在 CloudBase 安全域名白名单内，登录请求会被浏览器拦截。
-      设计、AI 与本机保存都能正常使用；要登录并同步云端，请到正式站点
-      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">打开正式站点 →</a>
+      {t('当前域名不在 CloudBase 安全域名白名单内，登录请求会被浏览器拦截。设计、AI 与本机保存都能正常使用；要登录并同步云端，请到正式站点',
+        'This domain is not in the CloudBase allowed-origin list, so sign-in requests will be blocked. Design, AI and local saving all still work; to sign in and sync to the cloud, use the official site')}
+      <a className="inline-link" href={CLOUD_SITE_URL} target="_blank" rel="noreferrer">{t('打开正式站点 →', 'Open the official site →')}</a>
     </Notice>}
 
     {a.user ? <div className="acct-box">
-      <p className="modal-p">已登录为 <strong>{a.user.label}</strong>{a.user.account ? `（${a.user.account}）` : ''}</p>
+      <p className="modal-p">{t('已登录为', 'Signed in as')} <strong>{a.user.label}</strong>{a.user.account ? ` (${a.user.account})` : ''}</p>
       <div className="acct-actions">
-        <Button variant="outline" onClick={() => { onClose(); go('/account'); }}>查看我的账户</Button>
-        <Button onClick={async () => { const r = await a.signOut(); setMsg({ ok: r.ok, text: r.message }); }}>退出登录</Button>
+        <Button variant="outline" onClick={() => { onClose(); go('/account'); }}>{t('查看我的账户', 'View my account')}</Button>
+        <Button onClick={async () => { const r = await a.signOut(); setMsg({ ok: r.ok, text: r.message }); }}>{t('退出登录', 'Sign out')}</Button>
       </div>
     </div> : <>
       {a.pending ? <>
-        <p className="modal-p">验证码已发送到 <strong>{a.pending.target}</strong>。{a.pending.kind === 'signup' ? '填写后完成注册并自动登录。' : '填写后免密登录。'}</p>
-        <label className="field"><span className="field-label">邮箱验证码</span>
+        <p className="modal-p">{t('验证码已发送到', 'We sent a code to')} <strong>{a.pending.target}</strong>。{a.pending.kind === 'signup' ? t('填写后完成注册并自动登录。', 'Enter it to finish signing up — you will be signed in automatically.') : t('填写后免密登录。', 'Enter it to sign in without a password.')}</p>
+        <label className="field"><span className="field-label">{t('邮箱验证码', 'Email code')}</span>
           <input className="input" inputMode="numeric" autoComplete="one-time-code" value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="6 位数字" /></label>
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder={t('6 位数字', '6 digits')} /></label>
         <div className="modal-buttons">
-          <Button variant="ghost" onClick={() => { a.cancelCode(); setMsg(null); setCode(''); }}>返回</Button>
-          <Button disabled={a.busy || code.length < 4} onClick={verify}>{a.busy ? '校验中…' : '验证并登录'}</Button>
+          <Button variant="ghost" onClick={() => { a.cancelCode(); setMsg(null); setCode(''); }}>{t('返回', 'Back')}</Button>
+          <Button disabled={a.busy || code.length < 4} onClick={verify}>{a.busy ? t('校验中…', 'Verifying…') : t('验证并登录', 'Verify and sign in')}</Button>
         </div>
       </> : <>
         {/* 微信登录：当前环境未配置微信 provider，按钮会必然失败，故先不展示。
             等控制台开通微信登录并配好回调域名后再放回来（代码见 auth.signInWithWechat）。 */}
-        <p className="modal-hint">用邮箱验证码登录，首次使用会自动创建账号；已设置密码也可直接登录。</p>
+        <p className="modal-hint">{t('用邮箱验证码登录，首次使用会自动创建账号；已设置密码也可直接登录。', 'Sign in with an email code — first use creates the account automatically. If you have set a password you can use that instead.')}</p>
 
-        {TABS.length > 1 && <div className="seg login-tabs">{TABS.map((t) => <button key={t.id}
-          className={tab === t.id && !showSignup ? 'active' : ''}
-          onClick={() => { setTab(t.id); setShowSignup(false); setMsg(null); }}>{t.label}</button>)}</div>}
+        {TABS.length > 1 && <div className="seg login-tabs">{TABS.map((x) => <button key={x.id}
+          className={tab === x.id && !showSignup ? 'active' : ''}
+          onClick={() => { setTab(x.id); setShowSignup(false); setMsg(null); }}>{lang === 'en' ? x.en : x.zh}</button>)}</div>}
 
-        <label className="field"><span className="field-label">{emailField ? '邮箱地址' : '账号（邮箱 / 用户名 / 已绑定手机号）'}</span>
+        <label className="field"><span className="field-label">{emailField ? t('邮箱地址', 'Email address') : t('账号（邮箱 / 用户名 / 已绑定手机号）', 'Account (email / username / linked phone)')}</span>
           <input className="input" value={account} onChange={(e) => setAccount(e.target.value)}
             type={emailField ? 'email' : 'text'} inputMode={emailField ? 'email' : 'text'}
-            autoComplete="email" placeholder={emailField ? 'you@example.com' : '邮箱或用户名'} /></label>
+            autoComplete="email" placeholder={emailField ? 'you@example.com' : t('邮箱或用户名', 'Email or username')} /></label>
 
-        {(tab === 'password' || showSignup) && <label className="field"><span className="field-label">{showSignup ? '设置密码' : '密码'}</span>
+        {(tab === 'password' || showSignup) && <label className="field"><span className="field-label">{showSignup ? t('设置密码', 'Set a password') : t('密码', 'Password')}</span>
           <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
             autoComplete={showSignup ? 'new-password' : 'current-password'}
-            placeholder={showSignup ? '至少 8 位' : '你的登录密码'}
+            placeholder={showSignup ? t('至少 8 位', 'At least 8 characters') : t('你的登录密码', 'Your password')}
             onKeyDown={(e) => { if (e.key === 'Enter' && tab === 'password' && !showSignup) void submitPassword(); }} /></label>}
 
-        {showSignup && <label className="field"><span className="field-label">确认密码</span>
+        {showSignup && <label className="field"><span className="field-label">{t('确认密码', 'Confirm password')}</span>
           <input className="input" type="password" value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            autoComplete="new-password" placeholder="再次输入密码" /></label>}
+            autoComplete="new-password" placeholder={t('再次输入密码', 'Enter the password again')} /></label>}
 
-        {showSignup && <p className="modal-hint">注册验证码只发到邮箱；设置密码后可同时用「邮箱 + 密码」登录。</p>}
-        {!showSignup && tab === 'code' && <p className="modal-hint">验证码会发送到邮箱；未注册的邮箱将自动创建账号，不需要单独注册。</p>}
+        {showSignup && <p className="modal-hint">{t('注册验证码只发到邮箱；设置密码后可同时用「邮箱 + 密码」登录。', 'The sign-up code only goes to your email. Once you set a password you can also sign in with email and password.')}</p>}
+        {!showSignup && tab === 'code' && <p className="modal-hint">{t('验证码会发送到邮箱；未注册的邮箱将自动创建账号，不需要单独注册。', 'The code is sent to your email. An unregistered email gets an account created automatically — no separate sign-up needed.')}</p>}
 
         <div className="modal-buttons">
-          <Button variant="ghost" onClick={onClose}>取消</Button>
+          <Button variant="ghost" onClick={onClose}>{t('取消', 'Cancel')}</Button>
           {showSignup
-            ? <Button disabled={a.busy} onClick={sendSignup}>{a.busy ? '发送中…' : '注册并登录'}</Button>
+            ? <Button disabled={a.busy} onClick={sendSignup}>{a.busy ? t('发送中…', 'Sending…') : t('注册并登录', 'Sign up and sign in')}</Button>
             : tab === 'password'
-              ? <Button disabled={a.busy} onClick={submitPassword}>{a.busy ? '登录中…' : '登录'}</Button>
-              : <Button disabled={a.busy} onClick={sendCode}>{a.busy ? '发送中…' : '发送邮箱验证码'}</Button>}
+              ? <Button disabled={a.busy} onClick={submitPassword}>{a.busy ? t('登录中…', 'Signing in…') : t('登录', 'Sign in')}</Button>
+              : <Button disabled={a.busy} onClick={sendCode}>{a.busy ? t('发送中…', 'Sending…') : t('发送邮箱验证码', 'Send email code')}</Button>}
         </div>
 
         {!showSignup && LOGIN_CONFIG.register.enabled && LOGIN_CONFIG.register.mode === 'auto' &&
-          <p className="login-secondary">想用密码登录？<button onClick={() => { setTab('code'); setShowSignup(true); setMsg(null); }}>设置密码 / 注册账号</button></p>}
-        {showSignup && <p className="login-secondary"><button onClick={() => { setShowSignup(false); setMsg(null); }}>← 返回登录</button></p>}
+          <p className="login-secondary">{t('想用密码登录？', 'Prefer a password?')}<button onClick={() => { setTab('code'); setShowSignup(true); setMsg(null); }}>{t('设置密码 / 注册账号', 'Set a password / sign up')}</button></p>}
+        {showSignup && <p className="login-secondary"><button onClick={() => { setShowSignup(false); setMsg(null); }}>{t('← 返回登录', '← Back to sign in')}</button></p>}
       </>}
 
       {msg && <div className={`login-msg ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</div>}
@@ -190,12 +193,12 @@ export function LoginDialog({ open, onClose, onDone }: {
           这句小字 + 两个可点的说明页，是「告知—同意」里最低限度的那一半。
           不做勾选框：本项目用邮箱验证码/密码直接登录，勾选框反而更容易被无视。 */}
       <p className="login-legal">
-        继续即表示你已阅读并同意
-        <button onClick={() => { onClose(); window.location.href = './terms/'; }}>《服务条款》</button>
-        与
-        <button onClick={() => { onClose(); window.location.href = './privacy/'; }}>《隐私说明》</button>
+        {t('继续即表示你已阅读并同意', 'By continuing you confirm you have read and agree to the')}
+        <button onClick={() => { onClose(); window.location.href = './terms/'; }}>{t('《服务条款》', 'Terms of Service')}</button>
+        {t('与', 'and')}
+        <button onClick={() => { onClose(); window.location.href = './privacy/'; }}>{t('《隐私说明》', 'Privacy Notice')}</button>
       </p>
-      <p className="modal-foot">账号由 CloudBase 云开发身份服务托管；短信验证码已停用，验证码仅通过邮箱发送。登录后项目按账号隔离保存在云端。</p>
+      <p className="modal-foot">{t('账号由 CloudBase 云开发身份服务托管；短信验证码已停用，验证码仅通过邮箱发送。登录后项目按账号隔离保存在云端。', 'Accounts are hosted by CloudBase identity services. SMS codes are disabled, so codes only go out by email. Once signed in, projects are stored in the cloud, isolated per account.')}</p>
     </>}
   </Modal>;
 }

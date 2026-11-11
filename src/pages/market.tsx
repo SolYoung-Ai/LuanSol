@@ -23,6 +23,8 @@ import {
   type MarketAccess, type MarketGroup, type MarketSite,
 } from '../data/market-sites';
 import { MARKET_WORKS, MARKET_VERIFIED_AT, type MarketWork } from '../data/aesthetic-market';
+import { GROUP_EN, REGION_EN, COUNTRY_EN, STYLE_EN, enName } from '../data/market-en';
+import { useLang } from '../i18n';
 
 /* ---------------- 收藏（本机） ---------------- */
 const FAV_KEY = 'lunasol.market.favorites.v1';
@@ -63,6 +65,7 @@ function styleForReference(cat: string, tags: string[]): string {
 }
 
 function useSeedReference() {
+  const { t } = useLang();
   const { s, update } = useApp();
   const [pending, setPending] = useState<null | { title: string; styleId: string }>(null);
 
@@ -96,14 +99,19 @@ function useSeedReference() {
     go('/wizard');
   };
 
-  const modal = <Modal open={!!pending} title="你有一份进行中的草稿" onClose={() => setPending(null)}>
+  const modal = <Modal open={!!pending} title={t('你有一份进行中的草稿', 'You have a draft in progress')} onClose={() => setPending(null)}>
     <p className="modal-p">
-      当前草稿已完成 {stepProgress(s.draft)} / {WIZARD_STEPS.length} 步。
-      用这个参考方向开始设计，会新建一个项目并<b>覆盖当前草稿</b>；原草稿不会自动保存为项目。
+      {t(`当前草稿已完成 ${stepProgress(s.draft)} / ${WIZARD_STEPS.length} 步。`,
+        `Your current draft is ${stepProgress(s.draft)} of ${WIZARD_STEPS.length} steps in.`)}
+      {t('用这个参考方向开始设计，会新建一个项目并', 'Starting from this reference creates a new project and ')}
+      <b>{t('覆盖当前草稿', 'overwrites the current draft')}</b>
+      {t('；原草稿不会自动保存为项目。', '. The old draft is not saved as a project.')}
     </p>
     <div className="modal-buttons">
-      <button className="v4-btn-line" onClick={() => { setPending(null); go('/wizard'); }}>保留草稿，继续编辑</button>
-      <button className="v4-btn-dark" onClick={confirm}>新建项目，用这个方向</button>
+      <button className="v4-btn-line" onClick={() => { setPending(null); go('/wizard'); }}>
+        {t('保留草稿，继续编辑', 'Keep the draft')}
+      </button>
+      <button className="v4-btn-dark" onClick={confirm}>{t('新建项目，用这个方向', 'New project from this')}</button>
     </div>
   </Modal>;
 
@@ -114,6 +122,8 @@ function useSeedReference() {
 const ALL = 'all';
 
 export default function Market() {
+  const { lang, t } = useLang();
+  const N = (map: Record<string, string>, zh: string) => (lang === 'en' ? enName(map, zh) : zh);
   const [group, setGroup] = useState<MarketGroup | typeof ALL>(ALL);
   const [region, setRegion] = useState('all');
   const [country, setCountry] = useState('all');
@@ -154,10 +164,10 @@ export default function Market() {
   return <div className="gl-page gl-page-wide gl-market">
     <div className="v4-market-hero">
       <div className="v4-kicker">THE AESTHETIC INDEX</div>
-      <h1 className="v4-market-title">审美市场</h1>
+      <h1 className="v4-market-title">{t('审美市场', 'Aesthetic Index')}</h1>
       <p className="v4-sub">
-        107 个能改变审美判断的站点索引——不是模板库，也不是图库瀑布流。
-        按分组、地区、国家、风格检索，再进详情页看「值得看什么」，然后决定要不要打开它。
+        {t('107 个能改变审美判断的站点索引——不是模板库，也不是图库瀑布流。按分组、地区、国家、风格检索，再进详情页看「值得看什么」，然后决定要不要打开它。',
+          'An index of 107 sites that sharpen aesthetic judgement — not a template library, not an image feed. Filter by group, region, country and style, open a site to see what is worth looking at, then decide whether to visit it.')}
       </p>
       <div className="v4-market-en">
         {MARKET_SITE_COUNT} SITES · {MARKET_COUNTRIES.length} COUNTRIES · {MARKET_STYLES.length} STYLES · VERIFIED {MARKET_VERIFIED_AT}
@@ -167,61 +177,66 @@ export default function Market() {
     {/* ---- 索引面板 ---- */}
     <div className="v4-index">
       <div className="v4-index-row">
-        <div className="v4-index-label">分组</div>
+        <div className="v4-index-label">{t('分组', 'Group')}</div>
         <div className="v4-chips">
-          <button className={`v4-chip ${group === ALL ? 'active' : ''}`} onClick={() => setGroup(ALL)}>全部 <i>{MARKET_SITE_COUNT}</i></button>
+          <button className={`v4-chip ${group === ALL ? 'active' : ''}`} onClick={() => setGroup(ALL)}>
+            {t('全部', 'All')} <i>{MARKET_SITE_COUNT}</i>
+          </button>
           {MARKET_GROUPS.map((g) => <button key={g.id} className={`v4-chip ${group === g.id ? 'active' : ''}`} onClick={() => setGroup(group === g.id ? ALL : g.id)}>
-            {g.id} <i>{groupCount(g.id)}</i>
+            {N(GROUP_EN, g.id)} <i>{groupCount(g.id)}</i>
           </button>)}
         </div>
       </div>
 
       <div className="v4-index-row v4-index-search">
-        <div className="v4-index-label">检索</div>
+        <div className="v4-index-label">{t('检索', 'Search')}</div>
         <div className="v4-index-tools">
-          <input className="v4-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="站点名、域名、风格、国家" />
+          <input className="v4-search" value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={t('站点名、域名、风格、国家', 'Site, domain, style or country')} />
           <button className="v4-chip" onClick={() => setMore((v) => !v)} aria-expanded={more}>
-            {more ? '收起筛选' : '更多筛选'} {activeCount > 0 && <i>{activeCount}</i>}
+            {more ? t('收起筛选', 'Less filters') : t('更多筛选', 'More filters')} {activeCount > 0 && <i>{activeCount}</i>}
           </button>
-          {activeCount > 0 && <button className="v4-chip" onClick={clearAll}>清空</button>}
+          {activeCount > 0 && <button className="v4-chip" onClick={clearAll}>{t('清空', 'Clear')}</button>}
         </div>
       </div>
 
       {more && <>
         <div className="v4-index-row">
-          <div className="v4-index-label">地区</div>
+          <div className="v4-index-label">{t('地区', 'Region')}</div>
           <div className="v4-chips">
-            <button className={`v4-chip ${region === ALL ? 'active' : ''}`} onClick={() => { setRegion(ALL); setCountry(ALL); }}>全部</button>
-            {MARKET_REGIONS.map((r) => <button key={r} className={`v4-chip ${region === r ? 'active' : ''}`} onClick={() => { setRegion(r); setCountry(ALL); }}>{r}</button>)}
+            <button className={`v4-chip ${region === ALL ? 'active' : ''}`} onClick={() => { setRegion(ALL); setCountry(ALL); }}>{t('全部', 'All')}</button>
+            {MARKET_REGIONS.map((r) => <button key={r} className={`v4-chip ${region === r ? 'active' : ''}`}
+              onClick={() => { setRegion(r); setCountry(ALL); }}>{N(REGION_EN, r)}</button>)}
           </div>
         </div>
 
         <div className="v4-index-row">
-          <div className="v4-index-label">国家</div>
+          <div className="v4-index-label">{t('国家', 'Country')}</div>
           <div className="v4-chips">
-            <button className={`v4-chip ${country === ALL ? 'active' : ''}`} onClick={() => setCountry(ALL)}>全部</button>
+            <button className={`v4-chip ${country === ALL ? 'active' : ''}`} onClick={() => setCountry(ALL)}>{t('全部', 'All')}</button>
             {countryPool.map((c) => <button key={c.country} className={`v4-chip ${country === c.country ? 'active' : ''}`} onClick={() => setCountry(country === c.country ? ALL : c.country)}>
-              {c.country} <i>{c.count}</i>
+              {N(COUNTRY_EN, c.country)} <i>{c.count}</i>
             </button>)}
           </div>
         </div>
 
         <div className="v4-index-row">
-          <div className="v4-index-label">风格</div>
+          <div className="v4-index-label">{t('风格', 'Style')}</div>
           <div className="v4-chips">
-            <button className={`v4-chip ${style === ALL ? 'active' : ''}`} onClick={() => setStyle(ALL)}>全部</button>
+            <button className={`v4-chip ${style === ALL ? 'active' : ''}`} onClick={() => setStyle(ALL)}>{t('全部', 'All')}</button>
             {MARKET_STYLES.map((s) => <button key={s.style} className={`v4-chip ${style === s.style ? 'active' : ''}`} onClick={() => setStyle(style === s.style ? ALL : s.style)}>
-              {s.style} <i>{s.count}</i>
+              {N(STYLE_EN, s.style)} <i>{s.count}</i>
             </button>)}
           </div>
         </div>
 
         <div className="v4-index-row">
-          <div className="v4-index-label">访问</div>
+          <div className="v4-index-label">{t('访问', 'Access')}</div>
           <div className="v4-chips">
-            <button className={`v4-chip ${access === ALL ? 'active' : ''}`} onClick={() => setAccess(ALL)}>全部</button>
+            <button className={`v4-chip ${access === ALL ? 'active' : ''}`} onClick={() => setAccess(ALL)}>{t('全部', 'All')}</button>
             {(Object.keys(MARKET_ACCESS) as MarketAccess[]).map((a) => <button key={a} className={`v4-chip ${access === a ? 'active' : ''}`} onClick={() => setAccess(access === a ? ALL : a)}>
-              {MARKET_ACCESS[a].label} <i>{MARKET_SITES.filter((s) => s.access === a).length}</i>
+              {lang === 'en' ? MARKET_ACCESS[a].labelEn : MARKET_ACCESS[a].label}{' '}
+              <i>{MARKET_SITES.filter((s) => s.access === a).length}</i>
             </button>)}
           </div>
         </div>
@@ -230,27 +245,39 @@ export default function Market() {
 
     <section className="v4-sec">
       <div className="v4-sec-head">
-        <div className="v4-sec-title">站点索引 · {sites.length}{sites.length !== MARKET_SITE_COUNT ? ` / ${MARKET_SITE_COUNT}` : ''}</div>
-        <div className="v4-sec-note">进入详情页看「值得看什么」，再去官网</div>
+        <div className="v4-sec-title">
+          {t('站点索引', 'Site index')} · {sites.length}{sites.length !== MARKET_SITE_COUNT ? ` / ${MARKET_SITE_COUNT}` : ''}
+        </div>
+        <div className="v4-sec-note">{t('进入详情页看「值得看什么」，再去官网', 'Open a site to see what is worth looking at, then visit it')}</div>
       </div>
       {sites.length === 0
-        ? <div className="v4-empty"><h3>这个组合下没有站点</h3><p>换一个分组或清空筛选。</p><button className="v4-btn-dark" onClick={clearAll}>清空筛选</button></div>
+        ? <div className="v4-empty">
+          <h3>{t('这个组合下没有站点', 'No sites match this combination')}</h3>
+          <p>{t('换一个分组或清空筛选。', 'Try another group, or clear the filters.')}</p>
+          <button className="v4-btn-dark" onClick={clearAll}>{t('清空筛选', 'Clear filters')}</button>
+        </div>
         : <div className="v4-site-grid">
           {sites.map((s) => <div key={s.id} className="v4-site">
             <div className="v4-site-top">
               <button className="v4-site-name" onClick={() => go(`/market/site/${s.id}`)}>{s.title}</button>
-              <span className="v4-site-country">{s.country}</span>
+              <span className="v4-site-country">{N(COUNTRY_EN, s.country)}</span>
             </div>
             <p className="v4-site-desc">{s.description}</p>
             <div className="v4-site-tags">
-              <span className="v4-tag v4-tag-group">{s.group}</span>
-              {s.styles.slice(0, 2).map((t) => <span key={t} className="v4-tag">{t}</span>)}
-              {s.access !== 'global' && <span className="v4-tag v4-tag-access">{MARKET_ACCESS[s.access].label}</span>}
+              <span className="v4-tag v4-tag-group">{N(GROUP_EN, s.group)}</span>
+              {s.styles.slice(0, 2).map((st) => <span key={st} className="v4-tag">{N(STYLE_EN, st)}</span>)}
+              {s.access !== 'global' && <span className="v4-tag v4-tag-access">
+                {lang === 'en' ? MARKET_ACCESS[s.access].labelEn : MARKET_ACCESS[s.access].label}
+              </span>}
             </div>
             <div className="v4-site-why">{s.why}</div>
             <div className="v4-detail-actions">
-              <button className="v4-btn-line" onClick={() => go(`/market/site/${s.id}`)}>看它值得看什么</button>
-              <button className="v4-btn-line" onClick={() => toggle('sites', s.id)}>{favs.sites.includes(s.id) ? '已收藏' : '收藏'}</button>
+              <button className="v4-btn-line" onClick={() => go(`/market/site/${s.id}`)}>
+                {t('看它值得看什么', 'What to look at')}
+              </button>
+              <button className="v4-btn-line" onClick={() => toggle('sites', s.id)}>
+                {favs.sites.includes(s.id) ? t('已收藏', 'Saved') : t('收藏', 'Save')}
+              </button>
             </div>
           </div>)}
         </div>}
@@ -258,14 +285,14 @@ export default function Market() {
 
     {works.length > 0 && <section className="v4-sec">
       <div className="v4-sec-head">
-        <div className="v4-sec-title">收录作品 · {works.length}</div>
-        <div className="v4-sec-note">均来自公开原文，附来源与日期</div>
+        <div className="v4-sec-title">{t('收录作品', 'Indexed works')} · {works.length}</div>
+        <div className="v4-sec-note">{t('均来自公开原文，附来源与日期', 'All from public sources, with credit and date')}</div>
       </div>
       <div className="v4-work-grid">
         {works.map((w) => <div key={w.id} className="v4-case">
           <button className="v4-case-cover" onClick={() => go(`/market/work/${w.id}`)}>
             {w.image ? <img src={w.image} alt={w.title} loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : null}
-            {!w.image && <div className="v4-case-fallback">原图未提供</div>}
+            {!w.image && <div className="v4-case-fallback">{t('原图未提供', 'No image provided')}</div>}
             <span className={`v4-fav ${favs.works.includes(w.id) ? 'on' : ''}`} role="button" tabIndex={0}
               onClick={(e) => { e.stopPropagation(); toggle('works', w.id); }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); toggle('works', w.id); } }}
@@ -280,22 +307,26 @@ export default function Market() {
     </section>}
 
     <p className="v4-source" style={{ marginTop: 48 }}>
-      收藏保存在本机浏览器，未登录也能使用。数据核实日期：{MARKET_VERIFIED_AT}。
-      访问条件是 2026-11-06 从中国大陆（杭州）逐站实测的连通结果，不是经验标注：直连正常的标「国内外可访问」，请求超时或被拒连的标「需海外网络」，
-      域名已失效或栏目改版的在详情页单独写明。实测是当时的网络快照，不构成永久承诺；跨境链路打不开属可达性问题，不等于站点下线。
-      图片与作品版权归原作者与来源站所有，此处仅作索引与评论引用，点开可访问原文。
+      {t(`收藏保存在本机浏览器，未登录也能使用。数据核实日期：${MARKET_VERIFIED_AT}。访问条件是 2026-11-06 从中国大陆（杭州）逐站实测的连通结果，不是经验标注：直连正常的标「国内外可访问」，请求超时或被拒连的标「需海外网络」，域名已失效或栏目改版的在详情页单独写明。实测是当时的网络快照，不构成永久承诺；跨境链路打不开属可达性问题，不等于站点下线。图片与作品版权归原作者与来源站所有，此处仅作索引与评论引用，点开可访问原文。`,
+        `Favourites are stored in this browser, no account needed. Data verified ${MARKET_VERIFIED_AT}. Access labels come from testing every site from mainland China (Hangzhou) on 2026-11-06, not from guesswork: sites that opened directly are marked “Accessible worldwide”, timeouts or refused connections are marked “Needs overseas network”, and dead domains or moved sections are noted on the detail page. That test is a snapshot, not a permanent promise — a failing cross-border link is a reachability issue, not a dead site. Images and works remain the property of their authors and source sites; they are cited here for indexing and commentary only, and every card links to the original.`)}
     </p>
   </div>;
 }
 
 /* ---------------- 站点详情 ---------------- */
 export function MarketSitePage() {
+  const { lang, t } = useLang();
+  const N = (map: Record<string, string>, zh: string) => (lang === 'en' ? enName(map, zh) : zh);
   const id = useHash().replace('/market/site/', '').split('?')[0];
   const site = MARKET_SITES.find((s) => s.id === id);
   const { favs, toggle } = useFavs();
   const { start, modal } = useSeedReference();
 
-  if (!site) return <div className="gl-page gl-page-wide gl-market"><div className="v4-empty"><h3>没有找到这个站点</h3><p>链接可能已更新，返回审美市场重新浏览。</p><button className="v4-btn-dark" onClick={() => go('/market')}>返回审美市场</button></div></div>;
+  if (!site) return <div className="gl-page gl-page-wide gl-market"><div className="v4-empty">
+    <h3>{t('没有找到这个站点', 'Site not found')}</h3>
+    <p>{t('链接可能已更新，返回审美市场重新浏览。', 'The link may have changed — browse the index again.')}</p>
+    <button className="v4-btn-dark" onClick={() => go('/market')}>{t('返回审美市场', 'Back to the index')}</button>
+  </div></div>;
 
   // 优先按风格标签匹配；没有匹配时退回「该站收录的作品」，再退回其他收录作品，
   // 保证左栏不会留一块无意义的空白。
@@ -306,15 +337,15 @@ export function MarketSitePage() {
   const accessInfo = MARKET_ACCESS[site.access];
 
   return <div className="gl-page gl-page-wide gl-market">
-    <button className="v4-filter" onClick={() => go('/market')}>← 审美市场</button>
+    <button className="v4-filter" onClick={() => go('/market')}>← {t('审美市场', 'Aesthetic Index')}</button>
     <div className="v4-detail">
       <div>
-        <div className="v4-kicker">{site.country} · {site.group} · {site.domain}</div>
+        <div className="v4-kicker">{N(COUNTRY_EN, site.country)} · {N(GROUP_EN, site.group)} · {site.domain}</div>
         <h1 className="v4-detail-title" style={{ marginTop: 14 }}>{site.title}</h1>
         <p className="v4-detail-note" style={{ marginTop: 16 }}>{site.description}</p>
 
         <div className="v4-sec" style={{ marginTop: 32 }}>
-          <div className="v4-sec-head"><div className="v4-sec-title">值得看什么</div></div>
+          <div className="v4-sec-head"><div className="v4-sec-title">{t('值得看什么', 'What to look at')}</div></div>
           <ul style={{ marginTop: 14, paddingLeft: 18, fontSize: 13, lineHeight: 2, color: 'var(--v4-ink-2)' }}>
             {site.designNotes.map((n) => <li key={n}>{n}</li>)}
           </ul>
@@ -324,23 +355,33 @@ export function MarketSitePage() {
         <div className={`v4-access ${site.access}`}>
           <div className="v4-access-head">
             <span className="v4-access-dot" />
-            <strong>{accessInfo.label}</strong>
+            <strong>{lang === 'en' ? accessInfo.labelEn : accessInfo.label}</strong>
             <span className="v4-access-en">{site.domain}</span>
           </div>
-          <p className="v4-access-note">{site.accessNote || accessInfo.note}</p>
+          <p className="v4-access-note">
+            {site.accessNote || (lang === 'en' ? accessInfo.noteEn : accessInfo.note)}
+          </p>
           <p className="v4-access-note">
             {site.access === 'global'
-              ? '国内与海外都能直连打开（2026-11-06 实测）。若你这里打不开，多半是本地网络或站点对高频访问的限流，换个时间再试。'
-              : '海外用户可直接访问该站；国内如需查阅，请自备合规的国际网络环境。'}
+              ? t('国内与海外都能直连打开（2026-11-06 实测）。若你这里打不开，多半是本地网络或站点对高频访问的限流，换个时间再试。',
+                'Opens directly from both mainland China and overseas (tested 2026-11-06). If it fails for you, it is usually local network noise or rate limiting — try again later.')
+              : t('海外用户可直接访问该站；国内如需查阅，请自备合规的国际网络环境。',
+                'Accessible directly from overseas. If you are in mainland China, use a compliant international network to view it.')}
           </p>
         </div>
 
         {related.length > 0 && <div className="v4-sec">
-          <div className="v4-sec-head"><div className="v4-sec-title">{byStyle.length ? '风格相近的收录作品' : '同期收录的其他作品'}</div></div>
+          <div className="v4-sec-head"><div className="v4-sec-title">
+            {byStyle.length
+              ? t('风格相近的收录作品', 'Related works in a similar style')
+              : t('同期收录的其他作品', 'Other works indexed at the same time')}
+          </div></div>
           <div className="v4-work-grid">
             {related.map((w) => <div key={w.id} className="v4-case">
               <button className="v4-case-cover" onClick={() => go(`/market/work/${w.id}`)}>
-                {w.image ? <img src={w.image} alt={w.title} loading="lazy" /> : <div className="v4-case-fallback">原图未提供</div>}
+                {w.image
+                  ? <img src={w.image} alt={w.title} loading="lazy" />
+                  : <div className="v4-case-fallback">{t('原图未提供', 'No image provided')}</div>}
               </button>
               <button className="v4-case-title" onClick={() => go(`/market/work/${w.id}`)}>{w.title}</button>
               <div className="v4-case-meta">{w.category}</div>
@@ -351,34 +392,53 @@ export function MarketSitePage() {
       </div>
 
       <aside className="v4-detail-body">
-        <div className="v4-kv"><span>国家 / 地区</span><strong>{site.country}（{regionOf(site.country)}）</strong></div>
-        <div className="v4-kv"><span>域名</span><strong>{site.domain}</strong></div>
-        <div className="v4-kv"><span>索引分组</span><strong>{site.group}</strong></div>
-        <div className="v4-kv"><span>设计风格</span><strong>{site.styles.join(' / ')}</strong></div>
-        <div className="v4-kv"><span>访问条件</span><strong>{accessInfo.label}</strong></div>
-        <div className="v4-kv"><span>核实日期</span><strong>{site.lastVerifiedAt}</strong></div>
-        <div className="v4-kv"><span>来源</span><strong>{site.sourceCredit}</strong></div>
+        <div className="v4-kv">
+          <span>{t('国家 / 地区', 'Country / region')}</span>
+          <strong>{N(COUNTRY_EN, site.country)}（{N(REGION_EN, regionOf(site.country))}）</strong>
+        </div>
+        <div className="v4-kv"><span>{t('域名', 'Domain')}</span><strong>{site.domain}</strong></div>
+        <div className="v4-kv"><span>{t('索引分组', 'Group')}</span><strong>{N(GROUP_EN, site.group)}</strong></div>
+        <div className="v4-kv"><span>{t('设计风格', 'Styles')}</span>
+          <strong>{site.styles.map((x) => N(STYLE_EN, x)).join(' / ')}</strong></div>
+        <div className="v4-kv"><span>{t('访问条件', 'Access')}</span>
+          <strong>{lang === 'en' ? accessInfo.labelEn : accessInfo.label}</strong></div>
+        <div className="v4-kv"><span>{t('核实日期', 'Verified')}</span><strong>{site.lastVerifiedAt}</strong></div>
+        <div className="v4-kv"><span>{t('来源', 'Source')}</span><strong>{site.sourceCredit}</strong></div>
         <p className="v4-detail-note">{site.why}</p>
         <div className="v4-detail-actions">
-          <a className="v4-btn-dark" href={site.officialUrl} target="_blank" rel="noopener noreferrer">访问官方网站 ↗</a>
-          <button className="v4-btn-line" onClick={() => toggle('sites', site.id)}>{favs.sites.includes(site.id) ? '已收藏' : '收藏这个站点'}</button>
+          <a className="v4-btn-dark" href={site.officialUrl} target="_blank" rel="noopener noreferrer">
+            {t('访问官方网站 ↗', 'Visit the site ↗')}
+          </a>
+          <button className="v4-btn-line" onClick={() => toggle('sites', site.id)}>
+            {favs.sites.includes(site.id) ? t('已收藏', 'Saved') : t('收藏这个站点', 'Save this site')}
+          </button>
         </div>
-        {site.access !== 'global' && <p className="v4-access-hint">若按钮打不开，是网络可达性问题——不是链接失效，回到上面的访问说明看原因。</p>}
+        {site.access !== 'global' && <p className="v4-access-hint">
+          {t('若按钮打不开，是网络可达性问题——不是链接失效，回到上面的访问说明看原因。',
+            'If the button does not open, it is a reachability issue, not a dead link — see the access note above.')}
+        </p>}
 
         <div className="v4-sec">
-          <div className="v4-sec-head"><div className="v4-sec-title">用这个方向开始</div></div>
+          <div className="v4-sec-head"><div className="v4-sec-title">{t('用这个方向开始', 'Start from this direction')}</div></div>
           <p className="v4-detail-note" style={{ marginTop: 12 }}>
-            参考它的视觉气质，让 LunaSol 用内置风格库生成一份<b>全新原创</b>包装设计——不会复制对方任何素材。
+            {t('参考它的视觉气质，让 LunaSol 用内置风格库生成一份', 'Borrow the visual mood, and let LunaSol generate a ')}
+            <b>{t('全新原创', 'brand-new original')}</b>
+            {t('包装设计——不会复制对方任何素材。', ' packaging design from its built-in style library — no asset of theirs is copied.')}
           </p>
-          <button className="v4-btn-dark" style={{ marginTop: 14 }} onClick={() => start(site.title, site.group, site.styles)}>用这个方向开始设计</button>
+          <button className="v4-btn-dark" style={{ marginTop: 14 }} onClick={() => start(site.title, site.group, site.styles)}>
+            {t('用这个方向开始设计', 'Start designing from this')}
+          </button>
         </div>
       </aside>
     </div>
 
     {sameGroup.length > 0 && <div className="v4-sec">
       <div className="v4-sec-head">
-        <div className="v4-sec-title">同组的其他站点</div>
-        <div className="v4-sec-note">{site.group} · {MARKET_SITES.filter((x) => x.group === site.group).length} 个</div>
+        <div className="v4-sec-title">{t('同组的其他站点', 'More sites in this group')}</div>
+        <div className="v4-sec-note">
+          {N(GROUP_EN, site.group)} · {MARKET_SITES.filter((x) => x.group === site.group).length}
+          {t(' 个', ' sites')}
+        </div>
       </div>
       <div className="v4-chips" style={{ marginTop: 16 }}>
         {sameGroup.map((s) => <button key={s.id} className="v4-chip" onClick={() => go(`/market/site/${s.id}`)}>{s.title}</button>)}
@@ -390,38 +450,57 @@ export function MarketSitePage() {
 
 /* ---------------- 作品详情 ---------------- */
 export function MarketWorkPage() {
+  const { lang, t } = useLang();
+  const N = (map: Record<string, string>, zh: string) => (lang === 'en' ? enName(map, zh) : zh);
   const id = useHash().replace('/market/work/', '').split('?')[0];
   const work = MARKET_WORKS.find((w) => w.id === id);
   const { favs, toggle } = useFavs();
   const { start, modal } = useSeedReference();
   const site: MarketSite | undefined = work ? MARKET_SITES.find((s) => s.id === work.sourceSiteId) : undefined;
 
-  if (!work) return <div className="gl-page gl-page-wide gl-market"><div className="v4-empty"><h3>没有找到这个作品</h3><p>它可能已从索引里移除。</p><button className="v4-btn-dark" onClick={() => go('/market')}>返回审美市场</button></div></div>;
+  if (!work) return <div className="gl-page gl-page-wide gl-market"><div className="v4-empty">
+    <h3>{t('没有找到这个作品', 'Work not found')}</h3>
+    <p>{t('它可能已从索引里移除。', 'It may have been removed from the index.')}</p>
+    <button className="v4-btn-dark" onClick={() => go('/market')}>{t('返回审美市场', 'Back to the index')}</button>
+  </div></div>;
 
   return <div className="gl-page gl-page-wide gl-market">
-    <button className="v4-filter" onClick={() => go('/market')}>← 审美市场</button>
+    <button className="v4-filter" onClick={() => go('/market')}>← {t('审美市场', 'Aesthetic Index')}</button>
     <div className="v4-detail">
       <div className="v4-detail-figure">
         {work.image
           ? <img src={work.image} alt={work.title} />
-          : <div className="v4-case-fallback">来源站未提供封面图</div>}
+          : <div className="v4-case-fallback">{t('来源站未提供封面图', 'The source site provides no cover image')}</div>}
       </div>
       <aside className="v4-detail-body">
         <div className="v4-kicker">{work.category}</div>
         <h1 className="v4-detail-title">{work.title}</h1>
-        {work.brand && <div className="v4-kv"><span>品牌</span><strong>{work.brand}</strong></div>}
-        <div className="v4-kv"><span>类别</span><strong>{work.category}</strong></div>
-        <div className="v4-kv"><span>标签</span><strong>{work.styleTags.join(' / ')}</strong></div>
-        <div className="v4-kv"><span>发布</span><strong>{work.publishedAt || '未标注'}</strong></div>
-        <div className="v4-kv"><span>来源</span><strong>{work.sourceCredit}</strong></div>
+        {work.brand && <div className="v4-kv"><span>{t('品牌', 'Brand')}</span><strong>{work.brand}</strong></div>}
+        <div className="v4-kv"><span>{t('类别', 'Category')}</span><strong>{work.category}</strong></div>
+        <div className="v4-kv"><span>{t('标签', 'Tags')}</span>
+          <strong>{work.styleTags.map((x) => N(STYLE_EN, x)).join(' / ')}</strong></div>
+        <div className="v4-kv"><span>{t('发布', 'Published')}</span>
+          <strong>{work.publishedAt || t('未标注', 'Not stated')}</strong></div>
+        <div className="v4-kv"><span>{t('来源', 'Source')}</span><strong>{work.sourceCredit}</strong></div>
         <p className="v4-detail-note">{work.description}</p>
         <div className="v4-detail-actions">
-          <a className="v4-btn-dark" href={work.sourceUrl} target="_blank" rel="noopener noreferrer">查看原文 ↗</a>
-          {site && <button className="v4-btn-line" onClick={() => go(`/market/site/${site.id}`)}>看来源站</button>}
-          <button className="v4-btn-line" onClick={() => toggle('works', work.id)}>{favs.works.includes(work.id) ? '已收藏' : '收藏'}</button>
+          <a className="v4-btn-dark" href={work.sourceUrl} target="_blank" rel="noopener noreferrer">
+            {t('查看原文 ↗', 'View the original ↗')}
+          </a>
+          {site && <button className="v4-btn-line" onClick={() => go(`/market/site/${site.id}`)}>
+            {t('看来源站', 'Source site')}
+          </button>}
+          <button className="v4-btn-line" onClick={() => toggle('works', work.id)}>
+            {favs.works.includes(work.id) ? t('已收藏', 'Saved') : t('收藏', 'Save')}
+          </button>
         </div>
-        <button className="v4-btn-dark" style={{ marginTop: 8 }} onClick={() => start(work.title, work.category, work.styleTags)}>用这个方向开始设计</button>
-        <p className="v4-source">不会复制受版权保护的原始素材；LunaSol 只取「方向」，重新生成原创设计。</p>
+        <button className="v4-btn-dark" style={{ marginTop: 8 }} onClick={() => start(work.title, work.category, work.styleTags)}>
+          {t('用这个方向开始设计', 'Start designing from this')}
+        </button>
+        <p className="v4-source">
+          {t('不会复制受版权保护的原始素材；LunaSol 只取「方向」，重新生成原创设计。',
+            'No copyrighted asset is copied — LunaSol takes only the direction and generates an original design.')}
+        </p>
       </aside>
     </div>
 

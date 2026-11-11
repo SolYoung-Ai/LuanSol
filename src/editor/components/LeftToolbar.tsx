@@ -4,18 +4,21 @@ import React from 'react';
 import { useEditor } from '../EditorContext';
 import { Icon, IconName } from '../../components/icons';
 import { toolBtn, ToolId } from '../constants';
+import { useLang } from '../../i18n';
 
-const TOOLS: { id: ToolId; icon: IconName; label: string; shortcut?: string }[] = [
-  { id: 'select', icon: 'select', label: '选择 / Luna 对话', shortcut: 'V' },
-  { id: 'text', icon: 'text', label: '文字', shortcut: 'T' },
-  { id: 'assets', icon: 'shape', label: '素材库（形状 / 图标 / 纹样）' },
-  { id: 'upload', icon: 'upload', label: '上传自己的图片' },
-  { id: 'ruler', icon: 'ruler', label: '视图与网格' },
-  { id: 'dieline', icon: 'scissors', label: '刀模与印前检查' },
+/** 工具名存双语：常量在模块加载时求值，拿不到当前语言 */
+const TOOLS: { id: ToolId; icon: IconName; zh: string; en: string; shortcut?: string }[] = [
+  { id: 'select', icon: 'select', zh: '选择 / Luna 对话', en: 'Select / Luna chat', shortcut: 'V' },
+  { id: 'text', icon: 'text', zh: '文字', en: 'Text', shortcut: 'T' },
+  { id: 'assets', icon: 'shape', zh: '素材库（形状 / 图标 / 纹样）', en: 'Asset library (shapes / icons / motifs)' },
+  { id: 'upload', icon: 'upload', zh: '上传自己的图片', en: 'Upload your own image' },
+  { id: 'ruler', icon: 'ruler', zh: '视图与网格', en: 'View and grid' },
+  { id: 'dieline', icon: 'scissors', zh: '刀模与印前检查', en: 'Dieline and prepress' },
 ];
 
 export default function LeftToolbar() {
   const ed = useEditor();
+  const { lang } = useLang();
 
   const pick = (id: ToolId) => {
     ed.setActiveTool(id);
@@ -27,13 +30,14 @@ export default function LeftToolbar() {
     <div className="editor-left-tools">
       {TOOLS.map((tool) => {
         const active = ed.activeTool === tool.id;
+        const label = lang === 'en' ? tool.en : tool.zh;
         return (
           <button
             key={tool.id}
             className={`editor-tool ${active ? 'on' : ''}`}
             onClick={() => pick(tool.id)}
-            title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
-            aria-label={tool.label}
+            title={`${label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
+            aria-label={label}
             aria-pressed={active}
             style={toolBtn}
           >

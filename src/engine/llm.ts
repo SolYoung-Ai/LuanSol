@@ -112,11 +112,11 @@ export function aiEnabled(s: AISettings): boolean {
 /** 保持原有导出名，让旧调用点自动获得代理模式支持 */
 export const aiConfigured = aiEnabled;
 
-export const aiStatusLabel = (s: AISettings): string => {
-  if (!aiEnabled(s)) return '本地建议 · 未调用 AI';
+export const aiStatusLabel = (s: AISettings, en = false): string => {
+  if (!aiEnabled(s)) return en ? 'Local suggestions · AI not called' : '本地建议 · 未调用 AI';
   const m = aiMode(s);
-  if (m === 'proxy') return 'AI 已接入 · 7 款模型（DeepSeek / Kimi / Doubao-Seed / GLM）';
-  return `AI 已接入 · ${s.textModel.trim() || '自定义模型'}`;
+  if (m === 'proxy') return en ? 'AI connected · 7 models (DeepSeek / Kimi / Doubao-Seed / GLM)' : 'AI 已接入 · 7 款模型（DeepSeek / Kimi / Doubao-Seed / GLM）';
+  return en ? `AI connected · ${s.textModel.trim() || 'custom model'}` : `AI 已接入 · ${s.textModel.trim() || '自定义模型'}`;
 };
 
 /** 构造鉴权头：代理模式不发厂商 Key，可选发一个自有令牌 */
