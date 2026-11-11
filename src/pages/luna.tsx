@@ -751,7 +751,7 @@ export default function Luna() {
                       spent={chat.chatSpendRmb}
                       budget={chat.chatBudgetRmb}
                       onPick={chat.setChatModel}
-                      onNeedPro={() => sub.setPaywall(true, '会员专属模型（Kimi-K3.1-Pro、DeepSeek-V4-pro、Doubao-Seed、GLM、经济版）开通会员后解锁，每天共用 ¥1 额度')}
+                      onNeedPro={() => sub.setPaywall(true, '会员专属模型（Kimi-K3.1-Pro、DeepSeek-V4-pro、Doubao-Seed、GLM、经济版）开通会员后解锁，每天共用一份额度')}
                       onQuotaEmpty={() => setToast('今日语言模型额度已用完，明天 0 点恢复；DeepSeek-V4.1-Flash 不限额度，可以继续聊')}
                       onUnavailable={(label) => setToast(`${label} 还没有在当前火山方舟账号开通，开通后这里会自动可选`)}
                       onRefresh={() => void chat.refreshChatSpend()}

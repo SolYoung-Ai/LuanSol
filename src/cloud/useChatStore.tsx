@@ -418,7 +418,7 @@ function useChatStoreState(): ChatStore {
           setChatSpendRmb(total);
           if (total >= CHAT_DAILY_BUDGET_RMB
             && (spentBefore === null || spentBefore < CHAT_DAILY_BUDGET_RMB)) {
-            setToast(`今日语言模型额度 ¥${CHAT_DAILY_BUDGET_RMB} 已用完：会员模型暂时锁定，明天 0 点恢复。DeepSeek-V4.1-Flash 仍可继续用。`);
+            setToast('今日语言模型额度已用完：会员模型暂时锁定，明天 0 点恢复。DeepSeek-V4.1-Flash 仍可继续用。');
           }
         }).catch(() => { /* 记账失败不影响对话本身 */ });
       }

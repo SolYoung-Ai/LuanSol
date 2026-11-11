@@ -56,7 +56,7 @@ const GROUPS: Group[] = [
     items: [
       {
         q: '积分怎么扣？',
-        a: <><strong>对话不扣积分</strong>（免费版用 DeepSeek-V4.1-Flash；会员可切其余 6 款，共用每天 ¥1 额度）。
+        a: <><strong>对话不扣积分</strong>（免费版用 DeepSeek-V4.1-Flash；会员可切其余 6 款，共用每天一份额度）。
           生图按档位：<strong>Seedream 快速 {PRICING.costs.imageFlash} 积分/张</strong>、
           <strong>Seedream 精细 {PRICING.costs.imagePro} 积分/张</strong>；
           <strong>GPT Image 2 文字输入 {PRICING.costs.imageGpt2Text} 积分/张</strong>，
