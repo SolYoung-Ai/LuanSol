@@ -9,6 +9,7 @@
  * 前端一条也不持有——这里只声明「买会员还是买积分包」。
  * ============================================================ */
 import { CLOUD } from './config';
+import { tl } from '../langStore';
 
 /** 买什么：会员订阅（pro）还是一次性积分包（credits）。 */
 export type PayKind = 'pro' | 'credits';
@@ -35,7 +36,7 @@ export function clearPayKind(): void {
  *  这里传的是「买哪一档」，不是「给我多少积分」，实际发放量由产品 ID 决定。 */
 export async function startCheckout(opts: { uid: string; email?: string; kind?: PayKind; points?: number }): Promise<PayStart> {
   const base = CLOUD.aiBaseUrl;
-  if (!base) return { ok: false, message: '支付服务未配置，请先在账户页联系人工开通' };
+  if (!base) return { ok: false, message: tl('支付服务未配置，请先在账户页联系人工开通', 'Payments are not configured — contact us from the account page to activate manually') };
   const kind = opts.kind || 'pro';
   try {
     const r = await fetch(`${base}/pay/checkout`, {
@@ -53,11 +54,11 @@ export async function startCheckout(opts: { uid: string; email?: string; kind?: 
     });
     const data = await r.json().catch(() => null) as { ok?: boolean; url?: string; error?: { message?: string } } | null;
     if (!r.ok || !data || !data.ok || !data.url) {
-      return { ok: false, message: data?.error?.message || `支付服务返回 ${r.status}，请稍后再试` };
+      return { ok: false, message: data?.error?.message || tl(`支付服务返回 ${r.status}，请稍后再试`, `Payment service returned ${r.status} — please try again later`) };
     }
     return { ok: true, url: String(data.url) };
   } catch {
-    return { ok: false, message: '网络异常，暂时无法创建支付订单' };
+    return { ok: false, message: tl('网络异常，暂时无法创建支付订单', 'Network problem — could not create the payment order') };
   }
 }
 

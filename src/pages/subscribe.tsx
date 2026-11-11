@@ -446,21 +446,25 @@ export default function Subscribe() {
       </div>}
 
       {/* 兑换码价格表：中国内地用户问得最多的就是「多少钱多少积分」，
-          写在兑换入口下面比让他们加微信问一句更省事。数字全部来自 PRICING。 */}
+          写在兑换入口下面比让他们加微信问一句更省事。数字全部来自 PRICING。
+          排版只用一行小标签：四档产品并排放，单价说明跟在同一行右侧，
+          避免一列三行把兑换区撑出一大块留白。 */}
       <div className="gl-code-price">
         <div className="gl-code-price-head">{t('中国内地兑换码价格 · CNY', 'Mainland China redeem-code prices · CNY')}</div>
-        <div className="gl-code-price-row">
-          <span>{t('LunaSol 标准会员', 'LunaSol standard membership')}</span>
-          <strong>¥{PRICING.proMonthlyPriceCodeRMB} {t('/ 月', '/ mo')}</strong>
-        </div>
-        {PRICING.creditsPacks.map((p) => (
-          <div className="gl-code-price-row" key={p.points}>
-            <span>{t(`${p.points} 积分`, `${p.points} credits`)}</span><strong>¥{p.priceRMB}</strong>
-          </div>
-        ))}
-        <div className="gl-code-price-row">
-          <span>{t('自定义积分', 'Custom amount')}</span>
-          <strong>¥1 = {t(`${PRICING.customPointsPerRMB} 积分`, `${PRICING.customPointsPerRMB} credits`)}</strong>
+        <div className="gl-code-tags">
+          <span className="gl-code-tag">
+            <em>{t('会员', 'Membership')}</em>
+            <strong>¥{PRICING.proMonthlyPriceCodeRMB}{t('/月', '/mo')}</strong>
+          </span>
+          {PRICING.creditsPacks.map((p) => (
+            <span className="gl-code-tag" key={p.points}>
+              <em>{t(`${p.points} 积分`, `${p.points} credits`)}</em>
+              <strong>¥{p.priceRMB}</strong>
+            </span>
+          ))}
+          <span className="gl-code-note">
+            {t(`自定义 ¥1 = ${PRICING.customPointsPerRMB} 积分`, `Custom ¥1 = ${PRICING.customPointsPerRMB} credits`)}
+          </span>
         </div>
       </div>
     </section>

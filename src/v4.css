@@ -2509,13 +2509,31 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
   color: var(--v4-ink-3); margin-bottom: 8px;
 }
-.gl-code-price-row {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  padding: 5px 0; font-size: 12.5px; color: var(--v4-ink-2);
+/* 四档价格并排放成一行标签：每档 = 名称 + 价格，靠内部对比区分层级 */
+.gl-code-tags {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
 }
-.gl-code-price-row + .gl-code-price-row { border-top: 1px solid rgba(15, 15, 20, 0.05); }
-[data-theme="dark"] .gl-code-price-row + .gl-code-price-row { border-top-color: rgba(255, 255, 255, 0.07); }
-.gl-code-price-row strong { font-size: 13px; font-weight: 600; color: var(--v4-ink); font-variant-numeric: tabular-nums; }
+.gl-code-tag {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 4px 9px; border-radius: 999px;
+  background: rgba(15, 15, 20, 0.045);
+  box-shadow: inset 0 0 0 1px rgba(15, 15, 20, 0.055);
+  white-space: nowrap;
+}
+.gl-code-tag em {
+  font-style: normal; font-size: 11.5px; color: var(--v4-ink-3);
+}
+.gl-code-tag strong {
+  font-size: 12.5px; font-weight: 600; color: var(--v4-ink);
+  font-variant-numeric: tabular-nums;
+}
+.gl-code-note {
+  margin-left: 2px; font-size: 11.5px; color: var(--v4-ink-3); white-space: nowrap;
+}
+[data-theme="dark"] .gl-code-tag {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+}
 [data-theme="dark"] .gl-wx { background: rgba(217, 96, 44, 0.22); color: #ffb98a; }
 [data-theme="dark"] .gl-wx:hover { background: rgba(217, 96, 44, 0.32); }
 .gl-redeem { display: flex; gap: 8px; align-items: center; }
