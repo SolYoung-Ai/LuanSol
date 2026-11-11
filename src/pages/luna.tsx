@@ -239,7 +239,7 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
             })}
 
             {!pro && <div className="lc-pop-note">免费版可用 DeepSeek-V4.1-Flash；其余 6 款开通会员后解锁</div>}
-            {pro && <div className="lc-pop-note">会员模型共用今日 ¥{budget} 额度，按实际 token 花费计算，每天 0 点重置；默认档不占额度</div>}
+            {pro && <div className="lc-pop-note">会员模型共用今日额度，按实际 token 花费计算，每天 0 点重置；默认档不占额度</div>}
           </div>
         </>
       )}
