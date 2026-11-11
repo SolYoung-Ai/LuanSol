@@ -29,9 +29,6 @@ const Subscribe = lazy(() => import('./pages/subscribe'));
 const Help = lazy(() => import('./pages/help'));
 const Luna = lazy(() => import('./pages/luna'));
 const Start = lazy(() => import('./pages/start'));
-const Terms = lazy(() => import('./pages/legal').then((m) => ({ default: m.Terms })));
-const Privacy = lazy(() => import('./pages/legal').then((m) => ({ default: m.Privacy })));
-const AcceptableUse = lazy(() => import('./pages/legal').then((m) => ({ default: m.AcceptableUse })));
 const Studio = lazy(() => import('./pages/studio'));
 const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
@@ -44,9 +41,15 @@ function Footer() {
       <a href="#/workspace">工作台</a>
       <a href="#/market">审美市场</a>
       <a href="#/subscribe">会员说明</a>
-      <a href="#/terms">服务条款</a>
-      <a href="#/privacy">隐私说明</a>
-      <a href="#/aup">使用规范</a>
+    </div>
+    {/* 法务与价格必须是真实可抓取的静态地址：支付通道审核会直接请求 /terms 这类路径，
+        而 #/terms 这种 hash 路由在他们眼里等于不存在。 */}
+    <div className="footer-min-legal">
+      <a href="./pricing/">价格</a>
+      <a href="./terms/">服务条款</a>
+      <a href="./privacy/">隐私说明</a>
+      <a href="./aup/">使用规范</a>
+      <a href="./contact/">联系</a>
     </div>
     <span className="footer-min-copy">© 2026 LunaSol · 从想法，到一件作品</span>
   </div></footer>;
@@ -74,6 +77,14 @@ export default function App() {
   }, [hash]);
 
   const path = hash.split('?')[0];
+
+  // 法务页已迁到真正的静态地址（/terms/、/privacy/、/aup/），旧书签里的 #/terms 直接跳过去，
+  // 不能让老链接停在「页面不存在」。
+  useEffect(() => {
+    const legacy = ['/terms', '/privacy', '/aup'];
+    if (legacy.includes(path)) window.location.replace(`.${path}/`);
+  }, [path]);
+
   let page: React.ReactNode;
 
   // 旧设计链路路由：全部重定向到新的统一工作台 /studio
@@ -112,9 +123,6 @@ export default function App() {
   else if (path === '/subscribe') page = <Subscribe />;
   else if (path === '/help') page = <Help />;
   else if (path === '/start' || path === '/home') page = <Start />;
-  else if (path === '/terms') page = <Terms />;
-  else if (path === '/privacy') page = <Privacy />;
-  else if (path === '/aup') page = <AcceptableUse />;
   else if (path === '/luna') page = <Luna />;
   else if (path === '/studio') page = <Studio />;
   else if (path === '/admin') page = <Admin />;

@@ -5,7 +5,7 @@
  * Hyper3D-Gen2 21（3D 生成，暂未开放入口）
  *  - 新注册送 PRICING.freeTrialUses 积分
  *  - 每日签到 +10（会员双倍 +20/天，会员月上限 600）；已取消「连续 10 天额外 +100」
- *  - 会员已开放：主通道 Creem（US$4/月，卡 / PayPal），国内可继续用兑换码或微信人工
+ *  - 会员已开放：主通道 Creem（US$4/月，卡 / Apple Pay / Google Pay），国内可继续用兑换码或微信人工
  * 视觉：与账户信息页同一套玻璃材质，靠圆角与间距分组，不画分割线。
  * 所有数字都从 PRICING 读，不在页面里写死。
  * ============================================================ */
@@ -313,7 +313,7 @@ export default function Subscribe() {
     <div className="gl-plans">
       <section className="gl-plan">
         <div className="gl-plan-name">{t('免费版', 'Free')}</div>
-        <div className="gl-plan-price">¥0</div>
+        <div className="gl-plan-price">{t('免费', 'Free')}</div>
         <ul className="gl-plan-feats">
           <li><Icon name="check" size={13} />{PRICING.freeTrialUses} 积分（注册即送）</li>
           <li><Icon name="check" size={13} />四步创作流程与编辑器</li>
@@ -351,7 +351,7 @@ export default function Subscribe() {
         <p className="gl-plan-note">
           {pro
             ? '会员权益已生效，到期自动续费；不想续费可在 Creem 收据里的客户门户取消。'
-            : '支持 Visa / Mastercard / PayPal / Apple Pay。没有海外卡可用兑换码或联系微信开通。'}
+            : '支持 Visa / Mastercard / Apple Pay / Google Pay。没有海外卡可用兑换码或联系微信开通。'}
         </p>
       </section>
     </div>
@@ -378,7 +378,7 @@ export default function Subscribe() {
         <span className={`gl-pill ${payMsg.ok ? '' : 'gl-pill-accent'}`}>{payMsg.text}</span>
       </div>}
       <p className="gl-note">
-        US${PRICING.creditsPack.priceUSD} 那一档支持 Visa / Mastercard / PayPal / Apple Pay 在线支付，付款后积分自动到账；
+        US${PRICING.creditsPack.priceUSD} 那一档支持 Visa / Mastercard / Apple Pay / Google Pay 在线支付，付款后积分自动到账；
         ¥ 价的两档走微信人工或兑换码，没有海外卡也能买。积分永久有效，不随会员到期清零。
       </p>
     </section>

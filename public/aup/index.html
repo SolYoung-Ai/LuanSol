@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用规范 · Acceptable Use Policy — LunaSol</title>
+<meta name="description" content="LunaSol acceptable use policy for the AI packaging image generator: prohibited content, NSFW ban, moderation enforcement and reporting.">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div class="top">
+  <a class="brand" href="../"><b>Luna</b><span class="o">Sol</span></a>
+  <nav class="top-links">
+    <a href="../pricing/">价格 / Pricing</a>
+    <a href="../terms/">条款 / Terms</a>
+    <a href="../privacy/">隐私 / Privacy</a>
+    <a href="../contact/">联系 / Contact</a>
+  </nav>
+</div>
+
+<div class="wrap">
+  <div class="kicker">Acceptable Use Policy</div>
+  <h1>使用规范</h1>
+  <p class="updated">生效日期 2026-11-11 · Effective date: 11 November 2026 · 适用于全部 AI 图像生成功能</p>
+
+  <div class="summary">
+    <h2>Summary (English)</h2>
+    <ul>
+      <li><strong>Sexually explicit and NSFW visual content is strictly prohibited.</strong> No nudity, sexual acts, sexual suggestion, fetish content, or imagery whose purpose is sexual arousal — in any style, including realistic, illustration and anime.</li>
+      <li>No content sexualizing minors, in any form, ever.</li>
+      <li>No face-swapping, deepfakes, impersonation, or likeness of real people without consent.</li>
+      <li>No gore, violence, hate symbols, harassment, self-harm or terrorism content; no infringement of trademarks or copyrighted characters; no forgery or illegal use.</li>
+      <li><strong>Enforcement:</strong> every image prompt is screened by the Creem Moderation API <em>before</em> generation. A <code>deny</code> or <code>flag</code> decision blocks the request, nothing is sent to the model, and no credits are charged. If the moderation service is unavailable we fail closed — no unmoderated generation.</li>
+      <li>Accounts that repeatedly attempt prohibited content can be restricted or terminated. Used credits are not refunded.</li>
+      <li>Report abuse or appeal a false positive: <a href="mailto:solyoungwork@gmail.com">solyoungwork@gmail.com</a>.</li>
+    </ul>
+  </div>
+
+  <p>
+    LunaSol 提供包装与平面设计稿的生成与编辑能力，其中出图能力由第三方 AI 模型提供。
+    为了让你能长期稳定地使用，下面这些规则请务必遵守；违反本规范可能导致账号被限制使用。
+  </p>
+
+  <h2><em>1</em>可以做</h2>
+  <ul>
+    <li>为自己的产品或客户设计包装、海报、贴纸、周边等商业或非商业稿；</li>
+    <li>上传你拥有权利的参考图、Logo 与产品照片；</li>
+    <li>把生成结果用于印刷、电商详情页、提案与作品集。</li>
+  </ul>
+
+  <h2><em>2</em>禁止：色情与成人内容</h2>
+  <ul>
+    <li><strong>严禁生成任何色情、裸露、性行为或性暗示的图像</strong>，包括写实、插画、二次元、抽象等任何画风。</li>
+    <li>严禁生成以性吸引为目的的内容：内衣 / 泳装擦边、恋物、束缚、暴露性器官或臀部特写、性玩具展示等。</li>
+    <li>严禁使用「擦边」「暗示」「艺术照」等措辞规避审核；判定以生成结果的实际内容为准，不以你的描述方式为准。</li>
+    <li>严禁任何涉及未成年人的性化、裸露或暗示性内容，此类请求会被直接拒绝并可能上报。</li>
+  </ul>
+
+  <h2><em>3</em>禁止：身份与肖像</h2>
+  <ul>
+    <li>禁止把他人面部替换到生成图中，或用生成图冒充、欺骗他人（换脸、深度伪造）。</li>
+    <li>禁止未经本人同意使用真实人物的面部或可识别特征，包括公众人物。</li>
+    <li>禁止生成用于伪造身份的证件、工牌、证书或公文。</li>
+  </ul>
+
+  <h2><em>4</em>禁止：暴力、仇恨与违法</h2>
+  <ul>
+    <li>禁止血腥、虐待、自残、恐怖主义相关内容与仇恨、歧视符号。</li>
+    <li>禁止骚扰、侮辱、诽谤特定个人或群体。</li>
+    <li>禁止生成他人注册商标、受版权保护的卡通形象或艺术作品用于商业用途。</li>
+    <li>禁止伪造货币、票据、证件，或其他违反你所在地法律的内容与用途。</li>
+  </ul>
+
+  <h2><em>5</em>我们怎么执行</h2>
+  <ul>
+    <li>每次出图前，提示词都会先送交 <strong>Creem Moderation API</strong> 做内容合规判定；判定为
+      <code>deny</code> 或 <code>flag</code> 的请求直接拒绝，不进入模型，也不消耗积分。</li>
+    <li>审核服务异常（超时或错误）时按「拒绝」处理，<strong>不会在无审核的情况下出图</strong>。</li>
+    <li>对反复尝试违规内容的账号，我们可限制出图权限、暂停或终止账号，已消耗的积分不予退还。</li>
+    <li>我们可能对生成记录做抽样检查，以履行平台与支付通道的合规义务。</li>
+  </ul>
+
+  <h2><em>6</em>你的责任</h2>
+  <p>
+    你对自己输入的提示词与上传的素材负责，也对生成结果的使用方式负责。
+    因违反本规范而产生的纠纷、索赔或处罚，由你自行承担；给我们造成损失的，我们保留追偿权利。
+  </p>
+
+  <h2><em>7</em>举报与申诉</h2>
+  <p>
+    发现有人用本服务生成违规内容，或你认为自己的请求被误判，请发邮件到
+    <a href="mailto:solyoungwork@gmail.com">solyoungwork@gmail.com</a>，
+    附上账号与大致时间，我们会在 7 个工作日内处理。
+  </p>
+
+  <div class="foot">
+    <div class="foot-links">
+      <a href="../">返回 LunaSol</a>
+      <a href="../pricing/">价格</a>
+      <a href="../terms/">服务条款</a>
+      <a href="../privacy/">隐私说明</a>
+      <a href="../contact/">联系我们</a>
+      <a href="../aup/">使用规范</a>
+    </div>
+    <p>© 2026 LunaSol · AI Packaging Design Studio</p>
+  </div>
+</div>
+</body>
+</html>

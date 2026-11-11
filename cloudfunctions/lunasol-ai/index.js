@@ -1114,6 +1114,13 @@ const server = http.createServer(async (req, res) => {
         creditsProductId: payCfg().creditsProductId || '',
         creditsPerPack: payCfg().creditsPerPack,
       },
+      // 出图前的内容审核状态：支付通道审核会核对这一项是否真的在跑
+      moderation: {
+        provider: 'creem',
+        configured: Boolean(payCfg().apiKey),
+        enforced: String(process.env.MODERATION_ENFORCE || '1') !== '0',
+        failClosed: String(process.env.MODERATION_STRICT || '1') !== '0',
+      },
     });
   }
 

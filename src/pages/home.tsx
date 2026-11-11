@@ -38,6 +38,13 @@ export default function Home() {
       <span className="hm-letter">L</span><span className="hm-letter">u</span><span className="hm-letter">n</span><span className="hm-letter">a</span><span className="hm-letter" style={{ color: '#e8783a' }}>S</span><span className="hm-letter" style={{ color: '#e8783a' }}>o</span><span className="hm-letter" style={{ color: '#e8783a' }}>l</span>
     </div>
     <div className="v4-home-sub">人人都能成为设计师</div>
+    {/* 一句话说明「这里是做什么的」：支付通道审核要求从公开页能看懂卖的是什么 */}
+    <p className="v4-home-desc">
+      {t(
+        '输入一句需求，AI 生成可印刷的包装刀模与视觉稿。',
+        'Describe what you need — AI generates print-ready packaging dielines and artwork.'
+      )}
+    </p>
 
     <div className="v4-home-cta">
       <button className="v4-start" onClick={startWizard}>
@@ -45,6 +52,25 @@ export default function Home() {
         <span className="v4-start-arrow" aria-hidden>→</span>
       </button>
     </div>
+
+    {/* 价格必须在登录前就能看到：支付通道审核明确要求公开页展示会员与积分价格。
+        直接指向静态页 /pricing/，不用 hash 路由。 */}
+    <a className="v4-home-price" href="./pricing/">
+      {t(
+        '会员 US$4/月 · 1000 积分 US$13.7 · 注册送 100 积分',
+        'Membership US$4/mo · 1,000 credits US$13.7 · 100 free credits on sign-up'
+      )}
+    </a>
+
+    {/* 首屏必须能走到法务页：整站页脚在首页是隐藏的（避免与侧栏重复），
+        所以这里单独放一行静态链接，审核员不用猜就能点到。 */}
+    <nav className="v4-home-legal">
+      <a href="./pricing/">{t('价格', 'Pricing')}</a>
+      <a href="./terms/">{t('服务条款', 'Terms')}</a>
+      <a href="./privacy/">{t('隐私说明', 'Privacy')}</a>
+      <a href="./aup/">{t('使用规范', 'AUP')}</a>
+      <a href="./contact/">{t('联系', 'Contact')}</a>
+    </nav>
 
     <Modal open={confirmNew} title={t('你有一份未完成的草稿', 'You have a draft in progress')} onClose={() => setConfirmNew(false)}>
       <p className="modal-p">{t(

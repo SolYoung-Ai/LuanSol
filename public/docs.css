@@ -1,0 +1,91 @@
+/* ============================================================
+ * 公开文档页（/terms/ /privacy/ /aup/ /pricing/ /contact/）
+ * ------------------------------------------------------------
+ * 这些页面必须是「不执行 JS 也能读」的静态 HTML：
+ * 支付通道（Creem）审核时会直接抓取 /terms、/privacy 这类地址，
+ * 之前的 hash 路由（#/terms）在他们眼里等于不存在。
+ * 视觉与主站一致：暖白纸面、橙色强调、正文优先。
+ * ============================================================ */
+:root {
+  --ink: #1c1a17;
+  --muted: #6b665e;
+  --line: #e6e2da;
+  --paper: #fbfaf7;
+  --accent: #e8783a;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+a { color: var(--ink); text-decoration: underline; text-decoration-color: #cfc9bf; text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--accent); color: var(--accent); }
+
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 24px 72px; }
+
+.top { max-width: 760px; margin: 0 auto; padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.brand { display: flex; align-items: baseline; gap: 2px; font-size: 19px; font-weight: 600; letter-spacing: -0.02em; text-decoration: none; }
+.brand b { font-weight: 600; }
+.brand .o { color: var(--accent); }
+.top-links { display: flex; gap: 18px; font-size: 13px; }
+.top-links a { text-decoration: none; color: var(--muted); }
+.top-links a:hover { color: var(--ink); }
+
+.kicker { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #a8a29a; margin: 26px 0 10px; }
+h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 10px; font-weight: 600; }
+.updated { color: var(--muted); font-size: 13px; margin: 0 0 26px; }
+
+.summary {
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  background: #fff; border-radius: 4px; padding: 18px 20px; margin: 0 0 34px;
+}
+.summary h2 { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.summary ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.summary li { margin: 4px 0; }
+
+h2 { font-size: 19px; letter-spacing: -0.01em; margin: 38px 0 10px; font-weight: 600; }
+h2 em { display: block; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #a8a29a; font-style: normal; font-weight: 500; margin-bottom: 4px; }
+h3 { font-size: 15px; margin: 22px 0 6px; font-weight: 600; }
+p { margin: 0 0 14px; }
+ul, ol { margin: 0 0 14px; padding-left: 20px; }
+li { margin: 5px 0; }
+strong { font-weight: 600; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 40px 0; }
+
+table { width: 100%; border-collapse: collapse; margin: 6px 0 18px; font-size: 14px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.plans { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 18px 0 26px; }
+.plan { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 18px; }
+.plan.hot { border-color: #f0c6a8; box-shadow: 0 6px 20px rgba(232, 120, 58, 0.08); }
+.plan-name { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.plan-price { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+/* 单位单独一行：写在同一行时「/1000 积分」会被挤断成「积 / 分」 */
+.plan-price span { display: block; margin-top: 3px; font-size: 12px; line-height: 1.4; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.plan-points { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.plan ul { margin: 12px 0 0; padding-left: 16px; font-size: 13px; }
+
+.cta { display: inline-block; margin: 8px 0 0; padding: 11px 20px; border-radius: 999px; background: var(--ink); color: #fff; text-decoration: none; font-size: 14px; }
+.cta:hover { background: var(--accent); color: #fff; }
+
+.foot { border-top: 1px solid var(--line); margin-top: 52px; padding-top: 20px; font-size: 13px; color: var(--muted); }
+.foot-links { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; }
+.foot-links a { color: var(--muted); text-decoration: none; }
+.foot-links a:hover { color: var(--ink); }
+.foot p { margin: 0 0 6px; }
+
+@media (prefers-color-scheme: dark) {
+  :root { --ink: #ece9e3; --muted: #9d988f; --line: #2f2c28; --paper: #141311; }
+  .summary { background: #1b1a17; }
+  .plan { background: #1b1a17; }
+  .plan.hot { border-color: #6b4126; box-shadow: none; }
+  .cta { background: #ece9e3; color: #141311; }
+  .cta:hover { background: var(--accent); color: #141311; }
+  a { text-decoration-color: #4a453e; }
+}

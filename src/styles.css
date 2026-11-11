@@ -663,6 +663,10 @@ img { display: block; max-width: 100%; }
 .footer-min-links a { font-size: 13px; color: var(--muted); }
 .footer-min-links a:hover { color: var(--ink); }
 .footer-min-copy { font-size: 12px; color: #aaa59c; }
+/* 法务与价格：真实静态地址，与导航区分开，字号更小、颜色更淡 */
+.footer-min-legal { display: flex; flex-wrap: wrap; gap: 16px; }
+.footer-min-legal a { font-size: 12px; color: #a8a29a; text-decoration: none; }
+.footer-min-legal a:hover { color: var(--ink); }
 
 @media (max-width: 900px) {
   .flow-min-steps { grid-template-columns: repeat(3, 1fr); }
