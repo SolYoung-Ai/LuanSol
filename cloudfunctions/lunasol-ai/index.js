@@ -889,7 +889,13 @@ function readCreemEvent(evt) {
     amount: Number.isFinite(amount) ? Math.round(amount) : null,
     currency: String((order && order.currency) || (obj.last_transaction && obj.last_transaction.currency) || '').trim() || null,
     orderId: String((order && order.id) || (obj.last_transaction && obj.last_transaction.order) || obj.id || '').trim() || null,
-    subscriptionId: String((sub && sub.id) || (obj.subscription && typeof obj.subscription === 'string' ? obj.subscription : '') || '').trim() || null,
+    // subscription.* 事件的 object 本身就是订阅，此时 id 才是订阅 ID
+    subscriptionId: String(
+      (sub && sub.id)
+      || (typeof obj.subscription === 'string' ? obj.subscription : '')
+      || (type.startsWith('subscription.') ? obj.id : '')
+      || ''
+    ).trim() || null,
     periodEnd: periodEnd || null,
   };
 
@@ -975,6 +981,20 @@ async function handleCreemWebhook(req, res) {
       console.error('[pay] 积分落库失败：', (err && err.message) || err);
       return sendJson(res, 500, { error: { message: 'credits apply failed' } });
     }
+  }
+
+  // 退款事件最容易搞错：Creem 的 refund 对象不一定带 product。若无法判断退的是
+  // 会员还是积分包，绝不能按「会员退款」处理——那会把还在有效期内的会员直接掐掉。
+  // 这类事件只记录日志，留给人工核对。
+  if (e.type === 'refund.created' && !e.productId) {
+    console.error('[pay] 退款事件无法判断产品，需人工处理：order=' + e.orderId, ' sub=' + e.subscriptionId + ' uid=' + (e.uid ? e.uid.slice(0, 8) + '…' : 'none'));
+    return sendJson(res, 200, { ok: true, needsManual: true });
+  }
+
+  // 已知产品 ID 但不属于本站任何产品：不是本函数开的单，不动数据库
+  if (e.productId && c.productId && e.productId !== c.productId) {
+    console.log('[pay] 未知产品，忽略：', e.productId);
+    return sendJson(res, 200, { ok: true, ignored: true });
   }
 
   try {
