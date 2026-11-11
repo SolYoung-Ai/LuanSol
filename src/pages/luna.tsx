@@ -136,7 +136,7 @@ function Pick({
  *  弹层里直接给一条今日额度进度条 + 每个档位「≈还能聊几轮」。
  *  真正的裁决在 useChatStore（额度用完 / 档位未开通都会退回默认模型），
  *  这里只负责把规则讲清楚，不做静默降级。 */
-function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmpty, onRefresh }: {
+function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmpty, onUnavailable, onRefresh }: {
   pro: boolean;
   value: string;
   /** 今日已花费（元）；null = 统计中 / 非计量来源 */
@@ -145,6 +145,8 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
   onPick: (id: string) => void;
   onNeedPro: () => void;
   onQuotaEmpty: () => void;
+  /** 平台账号还没开通这一档：点了要说清原因，不能什么都不发生 */
+  onUnavailable: (label: string) => void;
   onRefresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -222,7 +224,7 @@ function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmp
                   className={`lc-pop-opt model ${m.id === value ? 'sel' : ''} ${locked ? 'locked' : ''}`}
                   title={m.soon ? '这个模型在方舟账号里尚未开通，开通后这里会自动可选' : undefined}
                   onClick={() => {
-                    if (m.soon) return;
+                    if (m.soon) { onUnavailable(m.label); return; }
                     if (planLocked) { onNeedPro(); return; }
                     if (quotaLocked) { onQuotaEmpty(); return; }
                     onPick(m.id); setOpen(false);
@@ -725,6 +727,7 @@ export default function Luna() {
                       onPick={chat.setChatModel}
                       onNeedPro={() => sub.setPaywall(true, '会员专属模型（Kimi-K3.1-Pro、DeepSeek-V4-pro、Doubao-Seed、GLM、经济版）开通会员后解锁，每天共用 ¥1 额度')}
                       onQuotaEmpty={() => setToast('今日语言模型额度已用完，明天 0 点恢复；DeepSeek-V4.1-Flash 不限额度，可以继续聊')}
+                      onUnavailable={(label) => setToast(`${label} 还没有在当前火山方舟账号开通，开通后这里会自动可选`)}
                       onRefresh={() => void chat.refreshChatSpend()}
                     />
                     <button className="lc-tag" onClick={() => setMode('image')} title="切换到图像生成">
