@@ -58,7 +58,7 @@
         #boot-fail button { background: #f4f4f5; color: #171717; }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-Cg6I0XAP.js"></script>
+    <script type="module" crossorigin src="./assets/index-cc09sm0n.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-BYfr3RGi.css">
   </head>
   <body>
@@ -73,10 +73,10 @@
     <div id="boot-fail">
       <div class="box">
         <img src="./logo.png" alt="" />
-        <h1>页面没能加载出来</h1>
-        <p>通常是浏览器缓存了旧版本，而旧版本的脚本已经被新版本替换掉了。</p>
-        <p>点下面按钮重新加载即可，你的草稿和登录状态不会丢。</p>
-        <button type="button" onclick="window.__lunasolReload&&window.__lunasolReload()">重新加载</button>
+        <h1 data-zh="页面没能加载出来" data-en="This page failed to load">页面没能加载出来</h1>
+        <p data-zh="通常是浏览器缓存了旧版本，而旧版本的脚本已经被新版本替换掉了。" data-en="Usually the browser cached an older version while its scripts have already been replaced.">通常是浏览器缓存了旧版本，而旧版本的脚本已经被新版本替换掉了。</p>
+        <p data-zh="点下面按钮重新加载即可，你的草稿和登录状态不会丢。" data-en="Hit the button below to reload — your drafts and sign-in state are safe.">点下面按钮重新加载即可，你的草稿和登录状态不会丢。</p>
+        <button type="button" data-zh="重新加载" data-en="Reload" onclick="window.__lunasolReload&&window.__lunasolReload()">重新加载</button>
         <small id="boot-reason"></small>
       </div>
     </div>
@@ -85,6 +85,18 @@
       (function () {
         var RECOVER_KEY = 'lunasol.boot.recover';
         var booted = false;
+        // 启动失败页也要跟界面语言一致：这里还读不到 React，只能直接读 localStorage
+        var LANG_KEY = 'lunasol.lang';
+        function isEn() { try { return localStorage.getItem(LANG_KEY) === 'en'; } catch (e) { return false; } }
+        function applyBootLang() {
+          var en = isEn();
+          if (en) document.title = 'LunaSol — Everyone can be a designer';
+          var els = document.querySelectorAll('#boot-fail [data-zh]');
+          for (var i = 0; i < els.length; i++) {
+            els[i].textContent = en ? els[i].getAttribute('data-en') : els[i].getAttribute('data-zh');
+          }
+        }
+        applyBootLang();
 
         function $id(id) { return document.getElementById(id); }
 
@@ -115,7 +127,7 @@
           try {
             var last = Number(sessionStorage.getItem(RECOVER_KEY) || 0);
             if (last && Date.now() - last < 20000) {
-              showFail((reason || '新版本已发布') + '（已自动重试过一次）');
+              showFail((reason || (isEn() ? 'A new version was released' : '新版本已发布')) + (isEn() ? ' (already retried once automatically)' : '（已自动重试过一次）'));
               return;
             }
             sessionStorage.setItem(RECOVER_KEY, String(Date.now()));
@@ -127,7 +139,7 @@
         window.addEventListener('error', function (e) {
           var t = e && e.target;
           if (t && t !== window && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) {
-            window.__lunasolRecover('脚本文件加载失败');
+            window.__lunasolRecover(isEn() ? 'A script file failed to load' : '脚本文件加载失败');
             return;
           }
           if (e && e.message && !booted) showFail(e.message);
@@ -137,7 +149,7 @@
         window.addEventListener('unhandledrejection', function (e) {
           if (booted) return;
           var m = e && e.reason && (e.reason.message || String(e.reason));
-          showFail(m || '未知错误');
+          showFail(m || (isEn() ? 'Unknown error' : '未知错误'));
         });
 
         // 3) 看门狗：9 秒还没挂载就给出可点的失败页，而不是留一片白
