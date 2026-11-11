@@ -12,9 +12,12 @@ import { createEmptyDraft, draftToBrief, dimensionComplete, structureReady } fro
 import { generatePalettes } from '../src/v3/colors';
 import { accountKey, otpTarget, emailTarget, isEmail, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
 import { LOGIN_CONFIG } from '../src/cloud/loginConfig';
-import { decideGate } from '../src/cloud/subscription';
+import { decideGate, usageStat, CREDIT_BUCKET_FREE, CREDIT_BUCKET_PRO } from '../src/cloud/subscription';
 import { PRICING } from '../src/cloud/plans';
 import { IMAGE_MODELS, OPEN_IMAGE_MODELS, HYPER3D_COST, imageCost, imageModel } from '../src/cloud/models';
+import {
+  CHAT_MODELS, CHAT_DAILY_BUDGET_RMB, FREE_CHAT_MODEL, chatModel, costOfUsage, isPeakNow, turnsForBudget,
+} from '../src/cloud/chatModels';
 import { toastTone } from '../src/store';
 import { CLOUD, cloudConfigured, deepSeekReady } from '../src/cloud/config';
 import { validateBarcode, encodeBarcode, decodeEan, verifyBarcode } from '../src/v3/barcode';
@@ -746,6 +749,75 @@ export async function runTests(): Promise<Result[]> {
     A(!imageModel('gpt2-text').needsRef, 'gpt2-text 不应要求参考图');
     A(ref.provider === 'bai' && imageModel('flash').provider === 'ark', '厂商路由标记错误');
     return 'gpt2-ref 需参考图，其余不需要';
+  });
+
+  await t('对话模型 · 7 款目录与默认档（会员 6 款 / 默认免费）', () => {
+    A(CHAT_MODELS.length === 7, `应有 7 款对话模型，实际 ${CHAT_MODELS.length}`);
+    const ids = CHAT_MODELS.map((m) => m.id);
+    A(new Set(ids).size === ids.length, '档位 id 有重复');
+    const def = chatModel(FREE_CHAT_MODEL);
+    A(def.id === FREE_CHAT_MODEL, '默认档不在目录里');
+    A(def.tier === 'free', '默认档必须是人人可用的免费档');
+    A(CHAT_MODELS.filter((m) => m.tier === 'pro').length === 6, '会员专属模型应为 6 款');
+    // 旧版本 localStorage 里的档位名必须能映射到新档位，否则老用户会被退回默认档
+    A(chatModel('deepseek-chat').id === FREE_CHAT_MODEL, 'deepseek-chat 未映射到默认档');
+    A(chatModel('kimi-k3.1').id === 'kimi-k3.1-pro', 'kimi-k3.1 未映射到新档位');
+    A(chatModel('不存在的档位').id === FREE_CHAT_MODEL, '未知档位没有回落默认档');
+    return ids.join(' / ');
+  });
+
+  await t('对话模型 · 成本按 usage × 单价折算，分时价格正确', () => {
+    const flash = chatModel('ds-v41-flash');
+    const usage = { prompt_tokens: 1000, completion_tokens: 500, prompt_tokens_details: { cached_tokens: 0 } };
+    // 2026-11-11 是周三：北京时间 20:00 = UTC 12:00（空闲时段）
+    const offpeak = new Date('2026-11-11T12:00:00Z');
+    const peak = new Date('2026-11-11T02:00:00Z'); // 北京时间 10:00（高峰时段）
+    A(!isPeakNow(offpeak), '20:00 应为空闲时段');
+    A(isPeakNow(peak), '10:00 应为高峰时段');
+    const off = costOfUsage(flash, usage, offpeak);
+    const on = costOfUsage(flash, usage, peak);
+    A(Math.abs(off - 0.003) < 1e-9, `空闲时段成本应为 0.003，实际 ${off}`);
+    A(Math.abs(on - 0.006) < 1e-9, `高峰时段成本应为 0.006，实际 ${on}`);
+    // 缓存命中按 cache 价（0.02），不能按输入价（1.0）算，否则成本高估 50 倍
+    const cached = costOfUsage(flash, { prompt_tokens: 1000, completion_tokens: 0, prompt_tokens_details: { cached_tokens: 1000 } }, offpeak);
+    A(Math.abs(cached - 0.00002) < 1e-9, `缓存命中成本应为 0.00002，实际 ${cached}`);
+    // 周末不算高峰
+    A(!isPeakNow(new Date('2026-11-14T02:00:00Z')), '周六白天不该按高峰计价');
+    return `空闲 ${off} / 高峰 ${on}`;
+  });
+
+  await t('对话模型 · ¥1 额度下各档可聊轮数（贵的档必须更少）', () => {
+    const d = new Date('2026-11-11T12:00:00Z'); // 空闲时段，便于固定预期
+    const turns = (id: string) => turnsForBudget(chatModel(id), CHAT_DAILY_BUDGET_RMB, d);
+    A(turns('kimi-k3.1-pro') < turns('ds-v4-pro'), 'Kimi 比 DeepSeek-V4-pro 贵，轮数应更少');
+    A(turns('ds-v4-pro') < turns('doubao-2.1-turbo'), 'Doubao-turbo 比 V4-pro 便宜，轮数应更多');
+    A(turns('doubao-2.1-lite') > 100, 'litte 档应当能聊 100 轮以上');
+    A(turns('kimi-k3.1-pro') >= 1, '¥1 至少应能聊 1 轮 Kimi');
+    A(CHAT_DAILY_BUDGET_RMB === 1, '每人每天预算应为 ¥1');
+    return `Kimi ${turns('kimi-k3.1-pro')} / V4-pro ${turns('ds-v4-pro')} / turbo ${turns('doubao-2.1-turbo')} / lite ${turns('doubao-2.1-lite')} 轮`;
+  });
+
+  await t('用量进度 · 免费 100 / 会员 600 / 充值后按充值量算 100%', () => {
+    A(CREDIT_BUCKET_FREE === 100, `免费桶应为 100，实际 ${CREDIT_BUCKET_FREE}`);
+    A(CREDIT_BUCKET_PRO === 600, `会员桶应为 600，实际 ${CREDIT_BUCKET_PRO}`);
+    // 免费版：分母 100，余额 62 → 用掉 38
+    const free = usageStat(62, { pro: false })!;
+    A(free.bucket === 100 && free.used === 38 && free.pct === 38, `免费桶计算错误: ${JSON.stringify(free)}`);
+    // 会员：分母 600，余额 162 → 用掉 438
+    const pro = usageStat(162, { pro: true })!;
+    A(pro.bucket === 600 && pro.used === 438 && pro.pct === 73, `会员桶计算错误: ${JSON.stringify(pro)}`);
+    // 充过值：分母换成该次充值量
+    const paid = usageStat(1800, { pro: true, recharge: 2100 })!;
+    A(paid.bucket === 2100 && paid.used === 300 && paid.pct === 14, `充值桶计算错误: ${JSON.stringify(paid)}`);
+    // 小额发放不该把分母压到比默认桶还小
+    const small = usageStat(80, { pro: true, recharge: 100 })!;
+    A(small.bucket === 600, `小额发放把分母压小了: ${JSON.stringify(small)}`);
+    // 余额比充值量还多（充值后还没怎么用）→ 0%，不出现负进度
+    const d = usageStat(3500, { pro: true, recharge: 2100 })!;
+    A(d.bucket === 2100 && d.pct === 0 && d.used === 0, `余额超桶时算出了负进度: ${JSON.stringify(d)}`);
+    // 未登录 / 未计量 → null，界面显示占位而不是 0%
+    A(usageStat(null, { pro: true }) === null, '无余额时应返回 null');
+    return '免费 100 / 会员 600 / 充值量 / 小额发放 / 超桶 五种情况均正确';
   });
 
   return R;

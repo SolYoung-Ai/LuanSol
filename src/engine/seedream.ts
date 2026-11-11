@@ -10,6 +10,7 @@
  * ============================================================ */
 import { CLOUD } from '../cloud/config';
 import { imageModel } from '../cloud/models';
+import { CancelledError } from './cancel';
 import type { ImageTier } from '../types';
 
 export async function callImage(prompt: string, opts: {
@@ -18,6 +19,8 @@ export async function callImage(prompt: string, opts: {
   uid?: string;
   /** 出图尺寸（对应界面的「比例」），不传时用 1024x1024 */
   size?: string;
+  /** 用户点「取消」时中止请求：断开连接后云函数会跟着掐掉上游调用 */
+  signal?: AbortSignal;
 }): Promise<string> {
   if (!CLOUD.aiBaseUrl || !CLOUD.aiToken) throw new Error('图像服务未配置');
   const m = imageModel(opts.tier);
@@ -28,16 +31,25 @@ export async function callImage(prompt: string, opts: {
     'X-LunaSol-Token': CLOUD.aiToken,
   };
   if (opts.uid) headers['X-CloudBase-Uid'] = opts.uid;
-  const r = await fetch(`${CLOUD.aiBaseUrl}/images/generations`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      prompt,
-      size: opts.size || '1024x1024',
-      model: m.id,
-      ...(opts.referenceImage ? { image: opts.referenceImage } : {}),
-    }),
-  });
+  let r: Response;
+  try {
+    r = await fetch(`${CLOUD.aiBaseUrl}/images/generations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        prompt,
+        size: opts.size || '1024x1024',
+        model: m.id,
+        ...(opts.referenceImage ? { image: opts.referenceImage } : {}),
+      }),
+      signal: opts.signal,
+    });
+  } catch (e) {
+    // fetch 被 abort 时抛的是 AbortError，统一换成 CancelledError，
+    // 上层才能分清「用户取消」和「真的失败了」
+    if (opts.signal?.aborted) throw new CancelledError();
+    throw e;
+  }
   const j = await r.json();
   if (!r.ok) throw new Error(j?.error?.message || `图像生成失败 ${r.status}`);
   const item = j.data && j.data[0];

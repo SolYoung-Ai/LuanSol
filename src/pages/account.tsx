@@ -147,12 +147,13 @@ export default function Account() {
     ) : <>
       {/* ---------- 身份卡 ---------- */}
       <section className="ag-card ag-identity">
-        <button className="ag-avatar" onClick={() => avatarFileRef.current?.click()} title="点击更换头像">
+        {/* 身份卡上的头像只作展示：这里选完文件不会落库（保存入口在下面「头像与称呼」里），
+            所以不给点击、也不挂笔形角标，避免「改了没保存上」的错觉 */}
+        <div className="ag-avatar">
           {avatarUrl
             ? <img src={avatarUrl} alt="头像" />
             : <span>{initial}</span>}
-          <span className="ag-avatar-edit"><Icon name="edit" size={13} /></span>
-        </button>
+        </div>
         <div className="ag-identity-text">
           <strong>{a.user.label}</strong>
           <span>{a.user.account || '本地账号'}</span>

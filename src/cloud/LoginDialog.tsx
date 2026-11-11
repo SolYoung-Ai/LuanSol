@@ -186,6 +186,15 @@ export function LoginDialog({ open, onClose, onDone }: {
 
       {msg && <div className={`login-msg ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</div>}
       {a.error && a.error !== msg?.text && <div className="login-msg bad">{a.error}</div>}
+      {/* 注册就要收集邮箱、并在云端保存项目，属于个人信息处理：
+          这句小字 + 两个可点的说明页，是「告知—同意」里最低限度的那一半。
+          不做勾选框：本项目用邮箱验证码/密码直接登录，勾选框反而更容易被无视。 */}
+      <p className="login-legal">
+        继续即表示你已阅读并同意
+        <button onClick={() => { onClose(); go('/terms'); }}>《服务条款》</button>
+        与
+        <button onClick={() => { onClose(); go('/privacy'); }}>《隐私说明》</button>
+      </p>
       <p className="modal-foot">账号由 CloudBase 云开发身份服务托管；短信验证码已停用，验证码仅通过邮箱发送。登录后项目按账号隔离保存在云端。</p>
     </>}
   </Modal>;

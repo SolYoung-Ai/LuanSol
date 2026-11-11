@@ -286,6 +286,8 @@ export interface LunaMessage {
   at: number;
   /** 是否出错（用于展示错误态） */
   error?: boolean;
+  /** 用户中途取消：不扣积分，界面上只留一条灰色「已取消」标记 */
+  cancelled?: boolean;
 }
 
 /** 一个完整对话 */

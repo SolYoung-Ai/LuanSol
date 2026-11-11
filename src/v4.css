@@ -85,6 +85,10 @@
   --lc-hair-strong: rgba(15, 15, 20, 0.14);
   --lc-chip: rgba(15, 15, 20, 0.045);
   --lc-chip-on: rgba(15, 15, 20, 0.09);
+  /* 下拉/弹层底：比常规玻璃更实（0.99）。菜单里是数字与单价，
+     底下正文透过来会把「¥0.059 / ¥1.00」糊成一团；浏览器不支持
+     backdrop-filter 时更明显，所以这里优先保可读性，保留 1% 的通透感。 */
+  --lc-pop-bg: rgba(255, 255, 255, 0.99);
 
   /* —— 覆盖 V1/V3 遗留变量，让工具页同步到新体系 —— */
   --ink: #171717;
@@ -641,6 +645,7 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
   --lc-hair-strong: rgba(255, 255, 255, 0.18);
   --lc-chip: rgba(255, 255, 255, 0.07);
   --lc-chip-on: rgba(255, 255, 255, 0.13);
+  --lc-pop-bg: rgba(34, 33, 31, 0.98);
 }
 
 [data-theme="dark"] body { background: var(--v4-paper); color: var(--v4-ink); }
@@ -892,6 +897,8 @@ img, svg, video, canvas { max-width: 100%; }
 }
 /* Luna 页不需要整站页脚，避免输入框与页脚之间出现空档 */
 body.on-luna .footer-min { display: none; }
+body.on-start .footer-min { display: none; }
+body.on-start .global-back { display: none; }
 
 /* 桌面端：整页不再滚动，滚轮只作用于鼠标所在的子区域（对话列表 / 消息区）。
  * 只在 ≥861px 生效，手机端保持原有的整页滚动与抽屉行为。
@@ -904,7 +911,7 @@ body.on-luna .footer-min { display: none; }
 /* ---------------- 左侧栏 ---------------- */
 .lc-side {
   position: relative;
-  width: 268px;
+  width: var(--sd-card-w, 224px);
   flex-shrink: 0;
   border: none;
   border-radius: 0;
@@ -923,7 +930,7 @@ body.on-luna .footer-min { display: none; }
 .lc-side.collapsed { width: 56px; padding: 16px 8px 14px; }
 /* min-height:0 是左侧列表能自己滚的关键：默认 auto 会被内容顶高，
  * 结果 .lc-list 的 overflow-y 永远不生效，列表被 .lc-side 直接裁掉。 */
-.lc-side-inner { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 244px; }
+.lc-side-inner { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: calc(var(--sd-card-w, 224px) - 20px); }
 .lc-side.collapsed .lc-side-inner { display: none; }
 .lc-side-toggle {
   position: relative;
@@ -1131,7 +1138,50 @@ body.on-luna .footer-min { display: none; }
 .lc-img-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 11px; color: var(--v4-ink-3); }
 
 /* busy 指示 */
-.lc-busy { display: flex; gap: 5px; padding: 12px 4px; }
+/* 等待气泡：三个点在跳（请求已发出，此时不给取消） */
+.lc-busy { display: flex; align-items: center; gap: 5px; padding: 12px 4px; }
+
+/* 生图预备期：3 秒倒计时 + 取消。
+   这一行必须让人一眼看出「还没开始」，所以用数字 + 明确文案，不用动画点。 */
+.lc-preflight {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; margin: 2px 0;
+  border-radius: 12px;
+  background: var(--v4-ios-fill);
+}
+.lc-preflight-count {
+  min-width: 20px; text-align: center;
+  font-size: 15px; font-weight: 600; line-height: 1;
+  color: var(--v4-orange);
+  font-variant-numeric: tabular-nums;
+}
+.lc-preflight-text { font-size: 12.5px; color: var(--v4-ink-2); }
+.lc-preflight-cancel {
+  margin-left: 4px;
+  padding: 3px 12px;
+  border: 1px solid var(--lc-hair, var(--v4-line));
+  border-radius: 999px;
+  background: var(--v4-paper);
+  font: inherit; font-size: 12px;
+  color: var(--v4-ink);
+  cursor: pointer;
+  transition: background-color var(--v4-dur-fast) var(--v4-ease), border-color var(--v4-dur-fast) var(--v4-ease);
+}
+.lc-preflight-cancel:hover {
+  border-color: var(--v4-ink-3);
+  background: var(--v4-ios-fill-hover);
+}
+
+/* 已取消：不写成错误（红色会让用户以为出问题），一条灰线 + 小字就够 */
+.lc-msg-cancelled {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 4px;
+  font-size: 12px; color: var(--v4-ink-3);
+}
+.lc-msg-cancelled-bar {
+  width: 14px; height: 1px; border-radius: 1px;
+  background: var(--v4-line-strong);
+}
 .lc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--v4-ink-3); animation: lc-bounce 1.2s infinite ease-in-out; }
 .lc-dot:nth-child(2) { animation-delay: .15s; }
 .lc-dot:nth-child(3) { animation-delay: .3s; }
@@ -1228,7 +1278,7 @@ body.on-luna .footer-min { display: none; }
   padding: 5px;
   border: 1px solid var(--lc-hair);
   border-radius: 14px;
-  background: var(--lc-glass-strong);
+  background: var(--lc-pop-bg);
   -webkit-backdrop-filter: var(--v4-glass-blur-menu);
   backdrop-filter: var(--v4-glass-blur-menu);
   box-shadow: inset 0 1px 0 var(--v4-glass-border-hi), 0 18px 44px -22px rgba(16, 18, 22, 0.34);
@@ -1244,6 +1294,59 @@ body.on-luna .footer-min { display: none; }
 .lc-pop-opt.sel { color: var(--v4-ink); font-weight: 600; }
 .lc-pop-hint { margin-left: auto; font-size: 11px; color: var(--v4-ink-3); font-weight: 400; }
 .lc-pop-check { margin-left: auto; color: var(--v4-ink); }
+/* 对话模型弹层：标题 / 会员锁 / 底部说明 */
+.lc-pop-title {
+  padding: 5px 9px 7px;
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--v4-ink-3);
+}
+.lc-pop-opt.locked { opacity: .5; }
+.lc-pop-opt.locked:hover { background: transparent; color: var(--v4-ink-2); }
+.lc-pop-note {
+  margin: 5px 4px 3px; padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(232, 120, 58, 0.08);
+  font-size: 11px; line-height: 1.55; color: var(--v4-ink-2);
+}
+
+/* 对话模型弹层（2026-11 扩充到 7 款）：今日额度条 + 两行式选项。
+   额度是「钱」不是「次数」，所以用一条细进度条 + ¥ 数字，橙线只在没超额时出现；
+   用完时灰掉，和「已停用」的状态一致，不用红色报警。 */
+.lc-pop.wide { min-width: 298px; max-width: 336px; max-height: min(520px, 78vh); }
+/* 胶囊上补一个当前模型短名：只写「对话」看不出现在用的是哪一档 */
+.lc-tag-sub {
+  padding-left: 6px; margin-left: 1px;
+  border-left: 1px solid var(--lc-hair-strong);
+  font-size: 11.5px; font-weight: 500; color: var(--v4-ink-3);
+}
+.lc-quota {
+  margin: 2px 4px 7px; padding: 9px 10px 10px;
+  border: 1px solid var(--lc-hair); border-radius: 11px;
+  background: var(--lc-chip);
+}
+.lc-quota-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  font-size: 11px; color: var(--v4-ink-3);
+}
+.lc-quota-num { color: var(--v4-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.lc-quota-bar {
+  margin-top: 7px; height: 6px; border-radius: 999px;
+  background: var(--lc-chip-on); overflow: hidden;
+}
+.lc-quota-fill {
+  display: block; height: 100%; border-radius: 999px;
+  background: #e8783a;
+  transition: width var(--v4-dur) var(--v4-ease);
+}
+.lc-quota.full .lc-quota-fill { background: var(--v4-ink-3); }
+.lc-quota-note { margin-top: 7px; font-size: 10.5px; line-height: 1.5; color: var(--v4-ink-3); }
+
+.lc-pop-opt.model { align-items: center; padding: 7px 9px; }
+.lc-pop-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lc-pop-name { font-size: 12.5px; color: inherit; }
+.lc-pop-sub { font-size: 10.5px; color: var(--v4-ink-3); }
+.lc-pop-opt.model .lc-pop-hint { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
+.lc-pop-opt.model .lc-pop-check { margin-left: 5px; flex: none; }
 
 .lc-send {
   width: 34px; height: 34px; flex: none;
@@ -1256,6 +1359,13 @@ body.on-luna .footer-min { display: none; }
 .lc-send:hover { opacity: 0.9; transform: scale(1.04); }
 .lc-send:active { transform: scale(0.94); }
 .lc-send:disabled { opacity: 0.3; cursor: default; transform: none; }
+/* 生成中同一颗按钮变成「停止」：方块图标，一眼能认出是中断而不是发送 */
+.lc-send.is-stop { background: var(--v4-ink); }
+.lc-stop-square {
+  width: 11px; height: 11px; border-radius: 2px;
+  background: var(--v4-paper);
+  display: block;
+}
 
 .lc-dock-hint {
   margin-top: 9px; min-height: 20px;
@@ -1476,19 +1586,15 @@ img, svg, video, canvas { max-width: 100%; }
   /* 关掉整页位移淡入：否则动画期间 transform 会成为 fixed 色晕的包含块，产生一次跳动 */
   animation: none;
 }
-/* 色晕相对视口铺满，玻璃后面才没有矩形硬边 */
+/* 同上：统一由 .app::before 提供环境光 */
 .ag-page::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(680px 520px at 12% 8%, rgba(255, 178, 112, 0.14), transparent 68%),
-    radial-gradient(620px 520px at 88% 16%, rgba(122, 170, 255, 0.13), transparent 66%),
-    radial-gradient(760px 620px at 50% 96%, rgba(178, 150, 255, 0.09), transparent 70%);
+  background: none;
 }
-[data-theme="dark"] .ag-page::before { opacity: 0.55; }
 
 .ag-head { margin: 8px 0 28px; }
 .ag-kicker { display: block; font-size: 11px; letter-spacing: 0.2em; color: var(--v4-ink-3); }
@@ -1628,7 +1734,12 @@ button.ag-row.open { background: var(--v4-ios-fill); }
     position: relative;
     isolation: isolate;
     gap: 14px;
-    padding: 12px 20px 12px 16px;
+    /* 不居中、不限宽：左栏必须和全站左栏落在同一个 x（8px）。
+       以前这里 max-width:1440 + margin:auto，窗口一超过 1440，
+       整个对话区连同侧栏会往右漂 36px，和别的页面就错位了。 */
+    max-width: none;
+    margin: 0;
+    padding: 12px 20px 12px 8px;
     /* 不铺外部色晕：玻璃卡会把身后的颜色模糊洗白，卡片边缘便出现一条彩色硬边，
        看起来就像套了一圈边框。色彩只放在卡片内部。 */
     background: transparent;
@@ -1649,20 +1760,21 @@ button.ag-row.open { background: var(--v4-ios-fill); }
       inset 0 1px 0 var(--v4-glass-border-hi),
       0 1px 3px -1px rgba(16, 18, 22, 0.06),
       0 18px 44px -30px rgba(16, 18, 22, 0.22);
-    padding: 18px 14px 14px;
+    /* 内边距与 .sd-nav 完全一致（14/10/10）：品牌头、导航项的行高才对得上 */
+    padding: 14px 10px 10px;
   }
   .lc-side.collapsed { width: 62px; padding: 16px 8px; border-radius: 22px; }
-  .lc-side-inner { min-width: 236px; }
+  .lc-side-inner { min-width: calc(var(--sd-card-w, 224px) - 20px); }
 
   /* 顶部品牌头（参考 SkillHub：左 logo，右上角 « 收起） */
-  .lc-side-head { display: flex; align-items: center; gap: 10px; padding: 2px 40px 18px 6px; }
+  .lc-side-head { display: flex; align-items: center; gap: 9px; padding: 2px 38px 14px 2px; }
   .lc-side-head img { width: 30px; height: 30px; border-radius: 9px; object-fit: cover; flex: none; }
   .lc-side-head-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
   .lc-side-head-text strong { font-size: 14px; font-weight: 600; color: var(--v4-ink); }
   .lc-side-head-text small { font-size: 10.5px; color: var(--v4-ink-3); white-space: nowrap; }
 
   .lc-side-toggle {
-    position: absolute; top: 16px; right: 14px;
+    position: absolute; top: 14px; right: 10px;
     width: 30px; height: 30px; margin: 0; padding: 0;
     justify-content: center;
     border: 1px solid transparent; border-radius: 50%;
@@ -2002,19 +2114,16 @@ button.ag-row.open { background: var(--v4-ios-fill); }
   animation: none;
 }
 .gl-page-wide { max-width: 1180px; }
-/* 色晕相对视口铺满，玻璃后面才有颜色可折，且不会出现矩形硬边 */
+/* 色晕统一挪到 .app::before（见文件末尾「环境光」一节）：
+   那里能覆盖到左栏身后，玻璃卡才有颜色可折；页面级这几条留空避免叠加。 */
 .gl-page::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(700px 540px at 10% 6%, rgba(255, 178, 112, 0.13), transparent 68%),
-    radial-gradient(640px 540px at 92% 12%, rgba(122, 170, 255, 0.12), transparent 66%),
-    radial-gradient(760px 620px at 50% 98%, rgba(178, 150, 255, 0.08), transparent 70%);
+  background: none;
 }
-[data-theme="dark"] .gl-page::before { opacity: 0.5; }
 
 .gl-head { margin: 6px 0 28px; }
 .gl-kicker {
@@ -2119,8 +2228,8 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   position: relative; display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
   padding: 22px 24px; border-radius: 22px; margin-bottom: 14px;
   background:
-    radial-gradient(320px 200px at 92% 0%, rgba(255, 196, 90, 0.30), transparent 70%),
-    radial-gradient(280px 200px at 4% 100%, rgba(255, 150, 90, 0.16), transparent 72%),
+    radial-gradient(340px 210px at 92% 0%, rgba(232, 120, 58, 0.16), transparent 70%),
+    radial-gradient(300px 210px at 4% 104%, rgba(232, 120, 58, 0.07), transparent 72%),
     var(--v4-glass-bg);
   -webkit-backdrop-filter: var(--v4-glass-blur);
   backdrop-filter: var(--v4-glass-blur);
@@ -2130,7 +2239,7 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 }
 .gl-hero-main { flex: 1; min-width: 220px; }
 .gl-hero-kicker {
-  font-size: 10.5px; letter-spacing: 0.18em; color: #a9781f;
+  font-size: 10.5px; letter-spacing: 0.18em; color: var(--v4-orange);
   text-transform: uppercase; margin-bottom: 8px;
 }
 .gl-hero-title { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 8px; }
@@ -2149,12 +2258,19 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 .gl-balance-unit { font-size: 12.5px; color: var(--v4-ink-2); }
 .gl-bar {
   height: 6px; border-radius: 3px; background: var(--v4-ios-fill);
-  overflow: hidden; margin: 16px 0 14px;
+  overflow: hidden; margin: 16px 0 8px;
 }
 .gl-bar > i {
   display: block; height: 100%; border-radius: 3px;
-  background: var(--v4-solid-bg);
+  /* 与左侧栏账号卡的用量条同色：同一个指标，同一个颜色 */
+  background: var(--v4-orange);
   transition: width 0.5s var(--v4-ease);
+}
+/* 百分比说明：与左侧栏「已使用 x%」同口径同数字 */
+.gl-bar-cap {
+  display: flex; justify-content: space-between; gap: 12px;
+  margin-bottom: 12px; font-size: 11px; color: var(--v4-ink-3);
+  font-variant-numeric: tabular-nums;
 }
 .gl-inline-link {
   background: none; padding: 0; font-size: 12px; color: var(--v4-ink-2);
@@ -2859,3 +2975,456 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 @media (max-width: 640px) {
   .adm-mode { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   0. 全站左侧栏（桌面 ≥861px）
+   ------------------------------------------------------------
+   顶部导航只服务手机；桌面换成常驻左栏，导航 + 账号 + 余额收进一列，
+   正文整体右移，宽屏上不再出现「细长一条内容、两侧全空」的观感。
+   所有布局相关的规则都锁在 @media (min-width: 861px) 里，
+   手机端（≤860px）继续用原来的顶部条 + 抽屉，一行都不受影响。
+   ============================================================ */
+/* 卡片宽度收在一处：全站左栏与 Luna 侧栏都读 --sd-card-w，
+   正文起点 = 左侧呼吸位 + 卡片 + 右侧留白。 */
+:root {
+  --sd-gap: 8px;
+  --sd-card-w: 224px;
+  --sd-w: calc(var(--sd-gap) + var(--sd-card-w) + 12px);
+}
+.sd-nav { display: none; }
+
+/* ---- 左栏内部件（Luna 侧栏也复用，故不放进媒体查询） ---- */
+.sd-brand { display: flex; align-items: center; gap: 8px; padding: 4px 2px 14px; }
+.sd-wordmark {
+  display: flex; align-items: center; gap: 9px; min-width: 0;
+  color: var(--v4-ink); background: none; border: none; padding: 0; cursor: pointer;
+  text-align: left;
+  transition: opacity var(--v4-dur-fast) var(--v4-ease);
+}
+.sd-wordmark:hover { opacity: .72; }
+.sd-wordmark img { width: 30px; height: 30px; border-radius: 9px; object-fit: cover; flex: none; }
+/* 品牌行只有 logo + 一行字标（副标题已按需求去掉）：
+   字标、EN、深浅色三个元素同一中线对齐，别再让文字基线高低不齐 */
+.sd-brand-text { display: flex; align-items: center; line-height: 1; min-width: 0; }
+.sd-brand-text strong { font-size: 15px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+.sd-tools { margin-left: auto; display: flex; gap: 1px; }
+.sd-icon-btn {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 8px; border: none; background: none;
+  font-size: 11px; letter-spacing: .04em; color: var(--v4-ink-2); cursor: pointer;
+  transition: background-color var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease);
+}
+.sd-icon-btn:hover { background: var(--v4-ios-fill); color: var(--v4-ink); }
+
+.sd-links { display: flex; flex-direction: column; gap: 2px; }
+.sd-link {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px 9px; border-radius: 11px; border: none; background: none;
+  font-size: 13px; color: var(--v4-ink-2); text-align: left; cursor: pointer;
+  transition: background-color var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease);
+}
+.sd-link:hover { background: var(--v4-ios-fill); color: var(--v4-ink); }
+.sd-link.active { background: var(--v4-ios-fill); color: var(--v4-ink); font-weight: 500; }
+.sd-link .sd-ic { display: grid; place-items: center; color: var(--v4-ink-3); }
+.sd-link.active .sd-ic { color: var(--v4-orange); }
+.sd-spacer { flex: 1; min-height: 20px; }
+
+/* ---- 分界线 + 场景区（工作台四步流程） ---- */
+.sd-divider { height: 1px; background: var(--lc-hair); margin: 12px 2px 10px; }
+.sd-panel { display: flex; flex-direction: column; gap: 1px; }
+.sd-panel-label {
+  padding: 0 9px 6px; font-size: 10px; letter-spacing: .06em;
+  color: var(--v4-ink-3); text-transform: uppercase;
+}
+.sd-step {
+  display: flex; align-items: flex-start; gap: 9px; width: 100%;
+  padding: 6px 9px; border-radius: 10px; border: none; background: none;
+  text-align: left; cursor: pointer;
+  transition: background-color var(--v4-dur-fast) var(--v4-ease);
+}
+.sd-step:hover { background: var(--v4-ios-fill); }
+.sd-step.on { background: var(--v4-ios-fill); }
+.sd-step-n {
+  width: 21px; height: 21px; flex: none; margin-top: 1px;
+  display: grid; place-items: center; border-radius: 7px;
+  background: var(--v4-ios-fill); color: var(--v4-ink-3);
+  font-size: 9.5px; letter-spacing: .02em; font-variant-numeric: tabular-nums;
+}
+.sd-step.on .sd-step-n { background: var(--v4-solid-bg); color: var(--v4-solid-fg); }
+.sd-step-t { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+.sd-step-t strong {
+  font-size: 12.5px; font-weight: 500; color: var(--v4-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sd-step-t em {
+  font-style: normal; font-size: 10px; color: var(--v4-ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- 底部账号卡：头像 / 昵称 / 余额 / 用量 / 查看计划 ---- */
+.sd-account {
+  position: relative;
+  margin-top: 6px; padding-top: 10px;
+  border-top: 1px solid var(--v4-line);
+}
+.sd-acct {
+  /* 栏宽收到 224 之后，头像+昵称+余额+箭头这一行只剩 ~96px 给昵称，
+     所以把内边距和间距都收紧一档，11 个字以内的昵称不会被截断 */
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 4px; border-radius: 12px; border: none; background: none;
+  text-align: left; cursor: pointer;
+  transition: background-color var(--v4-dur-fast) var(--v4-ease);
+}
+.sd-acct:hover, .sd-acct.open { background: var(--v4-ios-fill); }
+.sd-acct-av {
+  width: 28px; height: 28px; flex: none; border-radius: 999px; overflow: hidden;
+  display: grid; place-items: center;
+  background: var(--v4-solid-bg); color: var(--v4-solid-fg);
+  font-size: 12px; font-weight: 500; letter-spacing: .04em;
+}
+.sd-acct-av img { width: 100%; height: 100%; object-fit: cover; }
+.sd-acct-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.sd-acct-meta strong {
+  font-size: 12px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sd-acct-meta span {
+  font-size: 10.5px; color: var(--v4-ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 余额单位用 LS 硬币（与积分页同一个图标），不再用一个灰色小写字母 */
+.sd-acct-cr { display: flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.sd-acct-cr b { font-size: 12.5px; font-weight: 600; }
+.sd-acct-cr svg { opacity: .95; }
+.sd-acct-chev { color: var(--v4-ink-3); flex: none; }
+
+.sd-usage { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; }
+.sd-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--v4-ios-fill); overflow: hidden; }
+.sd-bar > i { display: block; height: 100%; border-radius: 2px; background: var(--v4-orange); transition: width .5s var(--v4-ease); }
+.sd-usage-text { font-size: 10.5px; color: var(--v4-ink-3); white-space: nowrap; }
+.sd-plan {
+  width: 100%; padding: 9px 12px; border-radius: 10px;
+  border: 1px solid var(--v4-line-strong); background: transparent;
+  font-size: 12.5px; color: var(--v4-ink); cursor: pointer;
+  transition: background-color var(--v4-dur-fast) var(--v4-ease), border-color var(--v4-dur-fast) var(--v4-ease);
+}
+.sd-plan:hover { background: var(--v4-ios-fill); border-color: var(--v4-ink-3); }
+.sd-plan-solid { background: var(--v4-solid-bg); color: var(--v4-solid-fg); border-color: transparent; }
+.sd-plan-solid:hover { background: var(--v4-solid-bg); opacity: .9; }
+
+/* ---- 账户菜单：从账号卡向上展开 ---- */
+.sd-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 6;
+  padding: 6px; border-radius: 14px;
+  background: var(--v4-paper); border: 1px solid var(--v4-line);
+  box-shadow: 0 18px 44px -12px rgba(16, 18, 22, .22);
+  animation: sd-menu-in .16s var(--v4-ease) both;
+}
+@keyframes sd-menu-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.sd-menu-head { display: flex; align-items: center; gap: 9px; padding: 8px 8px 10px; }
+.sd-menu-head .sd-acct-av { width: 28px; height: 28px; font-size: 11px; }
+.sd-menu-sep { height: 1px; background: var(--v4-line); margin: 5px 0; }
+.sd-menu-item {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 10px; border: none; background: none; border-radius: 8px;
+  font-size: 12.5px; color: var(--v4-ink); cursor: pointer;
+  transition: background-color var(--v4-dur-fast) var(--v4-ease);
+}
+.sd-menu-item:hover { background: var(--v4-ios-fill); }
+.sd-menu-danger { color: var(--v4-ink-2); }
+
+@media (min-width: 861px) {
+  /* 桌面不再需要顶部那条细导航，但整屏工作区（编辑器）例外：
+     它没有左栏，必须把顶部条留回来，否则页面上一个导航入口都没有 */
+  .v4-nav { display: none; }
+  .app.no-side .v4-nav { display: block; }
+  .app.has-side { padding-left: var(--sd-w); }
+  /* 与 Luna 页自己的侧栏同一套卡：悬浮圆角玻璃 + 极浅投影，不铺底、
+     不画右边框。左侧只留 8px 呼吸位，文字贴着卡片内边距走，
+     不再像以前那样「离窗口一大截、内容再往里缩一圈」。 */
+  .sd-nav {
+    position: fixed; top: 12px; bottom: 12px; left: var(--sd-gap); z-index: 60;
+    width: var(--sd-card-w);
+    display: flex; flex-direction: column;
+    padding: 14px 10px 10px;
+    border-radius: 26px;
+    background: var(--lc-glass);
+    -webkit-backdrop-filter: var(--v4-glass-blur);
+    backdrop-filter: var(--v4-glass-blur);
+    box-shadow:
+      inset 0 1px 0 var(--v4-glass-border-hi),
+      0 1px 3px -1px rgba(16, 18, 22, 0.06),
+      0 18px 44px -30px rgba(16, 18, 22, 0.22);
+  }
+  /* 首页原本按「视口 - 顶栏」算高度，顶栏去掉后要补回来 */
+  .v4-home { min-height: 100vh; }
+  /* Luna 占满整屏（它自带侧栏，不再让位给全站左栏） */
+  .lc-shell { height: 100vh; min-height: 100vh; }
+}
+
+/* ============================================================
+   0b. Luna 侧栏承接全站左栏的两块内容（仅桌面渲染）
+   ============================================================ */
+.lc-side-navblock { padding: 0 0 12px; margin-bottom: 12px; border-bottom: 1px solid var(--lc-hair); }
+.lc-rail-sep { width: 22px; height: 1px; background: var(--lc-hair); margin: 4px auto; }
+
+/* ============================================================
+   0c. 积分页：卡片材质统一 + 标签不再挤标题
+   ------------------------------------------------------------
+   以前「精细」「输入图」两张卡整块是暖橙底，其余是白底，
+   同一组卡片深浅差太多；标签又和标题在同一条 flex 行里抢宽度，
+   「旗舰」被挤成竖排两行。现在：
+     · 六张卡同一套白底 + 细描边，只有「更贵一档」用橙色描边示意；
+     · 标签 flex:none + nowrap，挪到右上角，标题独占左侧。
+   ============================================================ */
+.gl-credits { max-width: 1040px; }
+.gl-rates { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+@media (min-width: 1000px) { .gl-rates { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.gl-rate {
+  display: flex; flex-direction: column;
+  background: var(--v4-paper);
+  box-shadow: inset 0 0 0 1px var(--v4-line), 0 1px 2px rgba(16, 18, 22, 0.03);
+}
+.gl-rate:hover {
+  transform: none;
+  box-shadow: inset 0 0 0 1px var(--v4-line-strong), 0 3px 10px -4px rgba(16, 18, 22, 0.10);
+}
+.gl-rate.hi {
+  background: var(--v4-paper);
+  box-shadow: inset 0 0 0 1px rgba(217, 96, 44, 0.30), 0 1px 2px rgba(16, 18, 22, 0.03);
+}
+.gl-rate.hi:hover {
+  transform: none;
+  box-shadow: inset 0 0 0 1px rgba(217, 96, 44, 0.48), 0 3px 10px -4px rgba(217, 96, 44, 0.16);
+}
+.gl-rate-top { align-items: flex-start; margin-bottom: 8px; gap: 10px; }
+.gl-rate-top strong { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.5; word-break: keep-all; }
+.gl-rate-top .gl-pill {
+  flex: none; white-space: nowrap; align-self: flex-start;
+  font-size: 10.5px; line-height: 1.6; padding: 2px 9px; margin-top: 1px;
+}
+.gl-rate-num { font-variant-numeric: tabular-nums; }
+.gl-rate-note { margin-top: 6px; }
+
+[data-theme="dark"] .gl-rate,
+[data-theme="dark"] .gl-rate.hi { background: var(--v4-surface); }
+[data-theme="dark"] .gl-rate.hi {
+  box-shadow: inset 0 0 0 1px rgba(224, 118, 63, 0.42), 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================
+   0d. 左栏统一：iOS 液态玻璃 + 贴边收起胶囊 + 折叠态
+   ------------------------------------------------------------
+   · 全站左栏与 Luna 侧栏现在共用同一份玻璃材质：半透明白 + 强背景
+     模糊 + 饱和度提升 + 内高光 + 内外两圈极淡描边（不是实心灰块）。
+   · 收起按钮是贴在卡片右缘的小胶囊（‹ / ›），两处同一颗。
+   · 收起后全站左栏变 64px 图标轨，正文自动左移；状态写 localStorage。
+   ============================================================ */
+:root {
+  --sd-rail-w: 64px;
+  --sd-glass: linear-gradient(158deg, rgba(255, 255, 255, 0.80) 0%, rgba(250, 250, 252, 0.58) 46%, rgba(243, 243, 246, 0.74) 100%);
+  --sd-glass-blur: blur(34px) saturate(190%);
+}
+[data-theme="dark"] {
+  --sd-glass: linear-gradient(158deg, rgba(40, 39, 38, 0.82) 0%, rgba(28, 27, 26, 0.64) 46%, rgba(22, 21, 20, 0.80) 100%);
+}
+
+/* 手机（≤860px）不用这套：胶囊只在桌面渲染 */
+.sd-fold { display: none; }
+
+@media (min-width: 861px) {
+  .sd-nav,
+  .lc-side {
+    background: var(--sd-glass);
+    -webkit-backdrop-filter: var(--sd-glass-blur);
+    backdrop-filter: var(--sd-glass-blur);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.92),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.42),
+      0 1px 2px rgba(16, 18, 22, 0.04),
+      0 26px 60px -34px rgba(16, 18, 22, 0.28);
+  }
+  [data-theme="dark"] .sd-nav,
+  [data-theme="dark"] .lc-side {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.10),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.42),
+      0 26px 60px -34px rgba(0, 0, 0, 0.55);
+  }
+
+  /* ---- 贴边收起胶囊：默认淡一点，悬停整条栏时浮出来 ---- */
+  .sd-fold {
+    position: absolute; top: 50%; right: 5px; transform: translateY(-50%);
+    z-index: 4;
+    width: 18px; height: 42px; padding: 0;
+    display: grid; place-items: center;
+    border: 1px solid rgba(15, 15, 20, 0.10);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.86);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    backdrop-filter: blur(12px) saturate(160%);
+    box-shadow: 0 1px 2px rgba(16, 18, 22, 0.08), 0 4px 12px -6px rgba(16, 18, 22, 0.18);
+    color: var(--v4-ink-2);
+    cursor: pointer;
+    opacity: .9;
+    transition: opacity .16s var(--v4-ease), background-color .16s var(--v4-ease), color .16s var(--v4-ease);
+  }
+  .sd-nav:hover > .sd-fold,
+  .lc-side:hover > .sd-fold,
+  .sd-fold:hover { opacity: 1; }
+  .sd-fold:hover { background: #fff; color: var(--v4-ink); }
+  [data-theme="dark"] .sd-fold {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+  [data-theme="dark"] .sd-fold:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
+  /* ---- 全站左栏折叠态：只剩图标轨 ----
+     每条规则都限定在 .sd-nav 内：.sd-brand / .sd-link / .sd-acct 这几个类
+     Luna 页的侧栏也在用，如果不加前缀，收起状态会连带把 Luna 侧栏也压扁。 */
+  body.sd-folded .app.has-side { padding-left: calc(var(--sd-gap) + var(--sd-rail-w) + 12px); }
+  body.sd-folded .sd-nav { width: var(--sd-rail-w); padding: 12px 8px 10px; align-items: center; }
+  body.sd-folded .sd-nav .sd-brand { padding: 2px 0 10px; justify-content: center; }
+  body.sd-folded .sd-nav .sd-tools,
+  body.sd-folded .sd-nav .sd-brand-text,
+  body.sd-folded .sd-nav .sd-link > span:not(.sd-ic),
+  body.sd-folded .sd-nav .sd-divider,
+  body.sd-folded .sd-nav .sd-panel,
+  body.sd-folded .sd-nav .sd-acct-meta,
+  body.sd-folded .sd-nav .sd-acct-cr,
+  body.sd-folded .sd-nav .sd-acct-chev,
+  body.sd-folded .sd-nav .sd-usage,
+  body.sd-folded .sd-nav .sd-plan { display: none; }
+  body.sd-folded .sd-nav .sd-links { align-items: center; width: 100%; }
+  body.sd-folded .sd-nav .sd-link { justify-content: center; padding: 10px 0; }
+  body.sd-folded .sd-nav .sd-link > .sd-ic { color: var(--v4-ink-2); }
+  body.sd-folded .sd-nav .sd-link.active > .sd-ic { color: var(--v4-orange); }
+  body.sd-folded .sd-nav .sd-account { width: 100%; display: flex; justify-content: center; }
+  body.sd-folded .sd-nav .sd-acct { justify-content: center; padding: 6px 0; }
+  body.sd-folded .sd-nav .sd-spacer { min-height: 8px; }
+  /* 窄轨里的账户菜单向右弹出，不然会被 64px 挤成一条 */
+  body.sd-folded .sd-nav .sd-menu { left: calc(100% + 10px); right: auto; bottom: 0; width: 214px; }
+}
+
+/* ============================================================
+   0e. 环境光：全站唯一的一层暖色底光（单色橙，不掺蓝紫）
+   ------------------------------------------------------------
+   为什么放在 .app 而不是各页面：左栏是 fixed 定位、浮在正文左侧，
+   只有让「最外层」带颜色，玻璃卡后面才有东西可模糊，否则看起来就是
+   一块死白的板子。三个光斑都取同一个橙相，叠在白底上不会发黄发灰。
+   ============================================================ */
+.app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(720px 540px at 4% 2%, rgba(232, 120, 58, 0.10), transparent 64%),
+    radial-gradient(820px 600px at 92% -4%, rgba(232, 120, 58, 0.075), transparent 62%),
+    radial-gradient(760px 560px at 62% 104%, rgba(232, 120, 58, 0.045), transparent 68%);
+}
+[data-theme="dark"] .app::before { opacity: 0.5; }
+
+/* 收起后的窄轨：顶部留一个 logo，点了就展开（替代原来顶部的圆形按钮） */
+@media (min-width: 861px) {
+  .lc-rail { margin-top: 6px; }
+  .lc-rail-logo {
+    width: 38px; height: 38px; display: grid; place-items: center;
+    border: none; background: none; padding: 0; border-radius: 12px; cursor: pointer;
+    transition: background-color var(--v4-dur-fast) var(--v4-ease);
+  }
+  .lc-rail-logo img { width: 28px; height: 28px; border-radius: 9px; object-fit: cover; display: block; }
+  .lc-rail-logo:hover { background: var(--v4-ios-fill); }
+}
+
+/* ============================================================
+   0f. Luna 对话区不再是「白色方块」
+   ------------------------------------------------------------
+   全站加了暖色底光之后，对话区那层纯白 #fff 会在暖底上变成一块
+   明显的白色矩形（用户原话："能明显看出有白色的正方形的底"）。
+   桌面端把它改透明，让页面透上来；手机端保持原来的纯白阅读面。
+   图片消息的外描边一并去掉（桌面），避免又出现一圈「画框」。
+   ============================================================ */
+@media (min-width: 861px) {
+  .lc-main { background: transparent; }
+  .lc-msg-img { border: 0; }
+}
+
+/* ============================================================
+   0g. 首页：只放两条路的选择卡
+   ------------------------------------------------------------
+   按需求撤掉了原来的聚合首页（对话框 + 项目卡 + 灵感图）。
+   这一屏只有两张卡，点下去就在工作台建稿并进入「确认需求」。
+   卡片样式直接复用 /new 的 .wf-choice-*，两处永远不会长得不一样。
+   ============================================================ */
+.hp-start {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 24px 72px;
+}
+.hp-start-inner { width: 100%; max-width: 900px; }
+.hp-start-note {
+  margin: 18px 2px 0;
+  font-size: 12px;
+  color: var(--v4-ink-3);
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .hp-start {
+    min-height: calc(100vh - 56px);
+    align-items: flex-start;
+    padding: 36px 16px 56px;
+  }
+}
+
+
+/* ============================================================
+   0h. 服务条款 / 隐私说明
+   ------------------------------------------------------------
+   纯文字页：一栏 720px，标题层级靠字号与间距，不用卡片包一层，
+   这样长文读起来接近文档，而不是一堆盒子。
+   ============================================================ */
+.legal-page { max-width: 760px; }
+.legal-body { margin-top: 8px; }
+.legal-body h2 {
+  margin: 30px 0 10px;
+  font-size: 15px; font-weight: 600;
+  color: var(--v4-ink);
+  letter-spacing: -0.01em;
+}
+.legal-body p,
+.legal-body li {
+  font-size: 13.5px; line-height: 1.95; color: var(--v4-ink-2);
+}
+.legal-body p { margin: 0 0 12px; }
+.legal-body ul { margin: 0 0 12px; padding-left: 18px; }
+.legal-body li { margin-bottom: 6px; }
+.legal-body b { color: var(--v4-ink); font-weight: 600; }
+.legal-body a { color: var(--v4-orange); text-decoration: none; }
+.legal-foot {
+  margin: 34px 0 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--v4-line);
+  font-size: 12px; line-height: 1.9; color: var(--v4-ink-3);
+}
+.legal-foot a { color: var(--v4-ink-2); }
+
+/* 登录弹窗里那行同意说明：小、但必须可读，链接做下划线提示可点 */
+.login-legal {
+  margin: 14px 0 0;
+  font-size: 11.5px; line-height: 1.9;
+  color: var(--v4-ink-3);
+}
+.login-legal button {
+  border: none; background: none; padding: 0 2px;
+  font: inherit; color: var(--v4-ink-2);
+  text-decoration: underline; text-underline-offset: 2px;
+  cursor: pointer;
+}
+.login-legal button:hover { color: var(--v4-ink); }

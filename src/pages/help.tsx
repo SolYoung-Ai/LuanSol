@@ -56,7 +56,7 @@ const GROUPS: Group[] = [
     items: [
       {
         q: '积分怎么扣？',
-        a: <><strong>对话免费</strong>（免费版固定 DeepSeek-V4，会员可切换）。
+        a: <><strong>对话不扣积分</strong>（免费版用 DeepSeek-V4.1-Flash；会员可切其余 6 款，共用每天 ¥1 额度）。
           生图按档位：<strong>Seedream 快速 {PRICING.costs.imageFlash} 积分/张</strong>、
           <strong>Seedream 精细 {PRICING.costs.imagePro} 积分/张</strong>；
           <strong>GPT Image 2 文字输入 {PRICING.costs.imageGpt2Text} 积分/张</strong>，
@@ -104,7 +104,7 @@ const GROUPS: Group[] = [
       },
       {
         q: 'AI 用的是哪些模型？我的 Key 安全吗？',
-        a: <>文本侧接入 DeepSeek-V4.1、Kimi-K3-1-Pro、Doubao-Seed-2.1、GLM-5.3-Flash；
+        a: <>文本侧接入 DeepSeek-V4.1-Flash（默认 / 经济版）、DeepSeek-V4-pro、Kimi-K3.1-Pro、Doubao-Seed-2.1-lite/turbo、GLM-5.3-Flash；
           生图用 Seedream 5.0 Flash / Pro 与 GPT Image 2（文字输入 / 输入图两档）；
           3D 建模用 Hyper3D-Gen2（{PRICING.costs.hyper3d} 积分/次，暂未开放入口）。
           全部由平台在服务端代调，<strong>前端看不到、也填不了 API Key 或模型地址</strong>，账户里也没有这类入口。</>,

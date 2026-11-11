@@ -19,15 +19,7 @@ import { PRICING } from '../cloud/plans';
 import { IMAGE_MODELS, HYPER3D_COST } from '../cloud/models';
 import { useLang } from '../i18n';
 import { Icon } from '../components/icons';
-
-/** LS 硬币图标（内联 SVG） */
-const Coin = ({ size = 18 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" style={{ flex: 'none' }}>
-    <circle cx="12" cy="12" r="11" fill="#f5c451" stroke="#d4a027" strokeWidth="1.5" />
-    <circle cx="12" cy="12" r="8" fill="none" stroke="#d4a027" strokeWidth="1" strokeDasharray="1.5 1.5" />
-    <text x="12" y="15.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="#7a5a10" fontFamily="Arial">LS</text>
-  </svg>
-);
+import Coin from '../components/Coin';
 
 export default function Subscribe() {
   const a = useAuth();
@@ -102,8 +94,10 @@ export default function Subscribe() {
 
   const left = sub.usedLeft;
   const pro = sub.isPro;
-  const cap = Math.max(1, pro ? PRICING.proMonthlyQuota : PRICING.freeTrialUses);
-  const pct = left == null ? 0 : Math.min(100, (left / cap) * 100);
+  // 已使用百分比与左侧栏账号卡同一个来源（sub.usage），两处永远一致；
+  // 分母默认 1000，用户近期充过积分则换成该次充值量。
+  const usage = sub.usage;
+  const pct = usage?.pct ?? 0;
 
   const redeem = async () => {
     const code = redeemCode.trim().toUpperCase();
@@ -115,7 +109,7 @@ export default function Subscribe() {
     if (r.ok) setRedeemCode('');
   };
 
-  return <div className="gl-page">
+  return <div className="gl-page gl-credits">
     <header className="gl-head">
       <span className="gl-kicker">CREDITS</span>
       <h1 className="gl-title">积分与充值</h1>
@@ -161,6 +155,10 @@ export default function Subscribe() {
           <span className="gl-balance-unit">{t('积分可用', 'credits available')}</span>
         </div>
         <div className="gl-bar"><i style={{ width: `${pct}%` }} /></div>
+        <div className="gl-bar-cap">
+          <span>{t('已使用', 'Used')} {pct}%</span>
+          {usage && <span>{usage.used} / {usage.bucket} {t('积分', 'credits')}</span>}
+        </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className={`gl-pill ${pro ? 'on' : ''}`}>
             {pro ? `会员 · ¥${PRICING.proMonthlyPriceRMB}/月` : t('免费版', 'Free')}
@@ -197,7 +195,7 @@ export default function Subscribe() {
         <div className="gl-rate">
           <div className="gl-rate-top"><strong>{t('对话', 'Chat')}</strong></div>
           <div className="gl-rate-num">免费</div>
-          <div className="gl-rate-note">DeepSeek-V4 驱动，不扣积分</div>
+          <div className="gl-rate-note">DeepSeek-V4.1-Flash 驱动，不扣积分</div>
         </div>
         {IMAGE_MODELS.filter((m) => m.provider === 'ark').map((m) => (
           <div className={`gl-rate ${m.id === 'pro' ? 'hi' : ''}`} key={m.id}>

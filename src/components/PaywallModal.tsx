@@ -21,12 +21,19 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
   // 匿名用户：先引导登录，而不是直接抛登录框打断正在填的表单
   const needLogin = need === 'login';
 
+  /* 会员不含固定积分包：积分只有「每日签到 / 充值 / 兑换码」三个来源。
+     以前这里写「开通得 3000 积分」，用户开通后发现余额不是这么来的，说不清。 */
   const planLine = <>
-    <span>开通得 {PRICING.proMonthlyQuota} 积分</span>
-    <span>DeepSeek / Kimi / Doubao-Seed 等多模型接入</span>
+    <span>签到双倍（每日 +20 积分，月上限 600）</span>
+    <span>全部对话模型 · 云端同步 · 印刷级导出</span>
   </>;
 
-  return <Modal open={open} title={needLogin ? '登录后即可使用 AI 建议' : '会员额度已用完'} onClose={onClose}>
+  // 标题跟着原因走：点「切换对话模型」被拦时还说「额度已用完」会让人以为积分没了
+  const title = needLogin
+    ? '登录后即可使用 AI 建议'
+    : /用完|已过期|不足/.test(reason) ? '会员额度已用完' : '开通会员，解锁全部能力';
+
+  return <Modal open={open} title={title} onClose={onClose}>
     {reason && <Notice tone="warn">{reason}</Notice>}
     {needLogin ? <>
       <p className="modal-p">
@@ -35,7 +42,7 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
       </p>
       <div className="sub-summary">
         <Tag tone="green">免费体验 {PRICING.freeTrialUses} 积分</Tag>
-        <span>会员开通得 {PRICING.proMonthlyQuota} 积分</span>
+        <span>会员：签到双倍 + 全部功能解锁（不含固定积分包）</span>
       </div>
       <div className="modal-buttons">
         <Button variant="dark" onClick={() => { onClose(); onLogin?.(); }}>立即登录</Button>
@@ -49,6 +56,7 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
       </div>
       <p className="modal-p">
         会员目前通过<strong>兑换码</strong>开通（支付通道接入前不产生扣费），兑换后立即生效。
+        会员<strong>不含固定积分包</strong>，积分来自每日签到（会员双倍）、充值或兑换码。
         内置设计引擎、编辑、3D 预览、印前检查与 PNG / JPG 预览图不依赖会员；
         印刷级文件导出（PDF / SVG / DXF / ZIP）、云端跨设备同步与全部历史版本为会员权益。
       </p>

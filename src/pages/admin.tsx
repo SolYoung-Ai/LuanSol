@@ -225,7 +225,8 @@ export default function Admin() {
           />}
         </div>
         {kind === 'pro_monthly' && <p className="adm-summary" style={{ marginTop: 8 }}>
-          体验卡按 100 积分 / 天发放额度（1 天 = 100、3 天 = 300、7 天 = 700 积分）；正式月卡固定 3000 积分。
+          兑换后写入的可用额度：天卡按 100 积分 / 天（1 天 = 100、3 天 = 300、7 天 = 700），月卡 3000。
+          这是这张码给的额度，会员权益本身不含固定积分包。
         </p>}
       </div>
 

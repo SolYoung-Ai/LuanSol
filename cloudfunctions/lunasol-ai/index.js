@@ -1,7 +1,7 @@
 /* LunaSol AI 后台代理（CloudBase HTTP 云函数 / Node.js 18）
  * ------------------------------------------------------------
  * 职责：把前端的 AI 请求转发到对应的上游厂商。
- *   文本对话  → DeepSeek（DEEPSEEK_API_KEY）/ 方舟（SEEDREAM_API_KEY）
+ *   文本对话  → 火山方舟（ARK_API_KEY，7 款模型，见下方 CHAT_MODELS）
  *   图像生成  → 方舟 Seedream（SEEDREAM_API_KEY）/ B.AI GPT Image 2（BAI_API_KEY）
  *   3D 生成   → 方舟 Hyper3D-Gen2（SEEDREAM_API_KEY，异步任务接口，暂未开放）
  * 所有厂商密钥只保存在云函数环境变量，绝不进入前端源码、Git 仓库、日志或响应体。
@@ -98,42 +98,98 @@ function guard(req) {
   return { ok: true };
 }
 
-const ALLOWED_MODELS = new Set([
-  'deepseek-chat',
-  'deepseek-reasoner',
-  'deepseek-flash',
-  // 方舟文本模型（前端选 tier 名，后台映射到真实模型 ID）
-  'kimi-k3.1',
-  'doubao-seed-pro',
-  'doubao-seed-lite',
-  'doubao-seed-turbo',
-  'glm-5.3',
-]);
-
-/** 前端 tier 名 → 方舟真实模型 ID */
-const ARK_MODEL_MAP = {
-  'kimi-k3.1': 'kimi-k3-1-pro-261024',
-  'doubao-seed-pro': 'doubao-seed-2-1-pro-260915',
-  'doubao-seed-lite': 'doubao-seed-2-1-lite-260915',
-  'doubao-seed-turbo': 'doubao-seed-2-1-turbo-260628',
-  'glm-5.3': 'glm-5-3-flash-260828',
-};
-
-/**
- * 方舟部分模型对采样参数有硬性限制。
- * Kimi-K3.1-Pro 只接受 temperature=1，传其他值会 400。
+/* ---------- 对话模型白名单（2026-11 扩到 7 款） ----------
+ * 前端只传「档位名」（如 kimi-k3.1-pro），真实模型 ID 与单价只存在于这张表：
+ *  - 传表外的名字一律回落到默认档，绝不按前端给的厂商模型名直连（防绕过白名单）；
+ *  - price/peak 用于把上游 usage 折算成人民币回传前端，前端拿它累加「今日额度」。
+ *    价格 = 火山方舟「在线推理（常规）」刊例价，单位 元/百万 token，
+ *    分时定价只对 DeepSeek 两档有效：高峰 = 周一至周五 09:00–12:00、14:00–18:00（北京时间）。
+ * 改这里必须同步 src/cloud/chatModels.ts（前端目录与展示口径）。
  */
-const ARK_MODEL_RULES = {
-  'kimi-k3.1': { temperature: 1 },
+const DEFAULT_CHAT_MODEL = 'ds-v41-flash';
+const ARK_CHAT_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/+$/, '');
+
+const CHAT_MODELS = {
+  'ds-v41-flash': {
+    model: 'deepseek-v4-1-flash-261017',
+    price: { input: 1, cache: 0.02, output: 4 },
+    peak: { input: 2, cache: 0.04, output: 8 },
+  },
+  'ds-v41-flash-eco': {
+    model: 'deepseek-v4-1-flash-economy-261017',
+    price: { input: 0.8, cache: 0.016, output: 3.2 },
+    peak: { input: 1.6, cache: 0.032, output: 6.4 },
+  },
+  'ds-v4-pro': {
+    model: 'deepseek-v4-pro-ga-260813',
+    price: { input: 9, cache: 0.3, output: 27 },
+  },
+  'kimi-k3.1-pro': {
+    model: 'kimi-k3-1-pro-261024',
+    price: { input: 13, cache: 1.3, output: 68 },
+    // Kimi-K3.1-Pro 只接受 temperature=1，传其他值直接 400
+    temperature: 1,
+  },
+  'doubao-2.1-lite': {
+    model: 'doubao-seed-2-1-lite-260915',
+    price: { input: 0.8, cache: 0.16, output: 2.7 },
+  },
+  'doubao-2.1-turbo': {
+    model: 'doubao-seed-2-1-turbo-260628',
+    price: { input: 3, cache: 0.6, output: 15 },
+  },
+  'glm-5.3-flash': {
+    model: 'glm-5-3-flash-260828',
+    price: { input: 0.8, cache: 0.23, output: 2.8 },
+  },
 };
 
-/** 按模型约束修正方舟请求参数 */
-function applyArkRules(frontModel, arkPayload) {
-  const rule = ARK_MODEL_RULES[frontModel];
-  if (!rule) return arkPayload;
-  const next = { ...arkPayload };
-  if (typeof rule.temperature === 'number') next.temperature = rule.temperature;
-  return next;
+/** 旧构建 / 老用户本地缓存里的档位名 → 新档位。
+ *  不做这一步，用户带着 'deepseek-chat' 进来会收到「未知模型」而不是默认档。 */
+const LEGACY_CHAT_MODELS = {
+  'deepseek-chat': 'ds-v41-flash',
+  'deepseek-reasoner': 'ds-v41-flash',
+  'deepseek-flash': 'ds-v41-flash',
+  'kimi-k3.1': 'kimi-k3.1-pro',
+  'doubao-seed-pro': 'doubao-2.1-turbo',
+  'doubao-seed-lite': 'doubao-2.1-lite',
+  'doubao-seed-turbo': 'doubao-2.1-turbo',
+  'glm-5.3': 'glm-5.3-flash',
+};
+
+function resolveChatModel(name) {
+  const raw = typeof name === 'string' ? name.trim() : '';
+  const id = LEGACY_CHAT_MODELS[raw] || raw;
+  return CHAT_MODELS[id] ? id : DEFAULT_CHAT_MODEL;
+}
+
+/** 北京时间是否处于高峰时段（周一至周五 09:00–12:00、14:00–18:00） */
+function isPeakHour(now = new Date()) {
+  const bj = new Date(now.getTime() + 8 * 3600 * 1000);
+  const wd = bj.getUTCDay();
+  if (wd === 0 || wd === 6) return false;
+  const h = bj.getUTCHours() + bj.getUTCMinutes() / 60;
+  return (h >= 9 && h < 12) || (h >= 14 && h < 18);
+}
+
+function priceAt(route, now = new Date()) {
+  return route.peak && isPeakHour(now) ? route.peak : route.price;
+}
+
+/** 把上游 usage 折算成人民币（元）。缓存命中部分按 cache 价算：
+ *  DeepSeek/Kimi 的缓存价与输入价差 10 倍以上，全按输入价算会明显高估成本。 */
+function costOfUsage(route, usage, now = new Date()) {
+  const input = Math.max(0, Number(usage && usage.prompt_tokens) || 0);
+  const cached = Math.min(input, Math.max(0, Number(usage && usage.prompt_tokens_details && usage.prompt_tokens_details.cached_tokens) || 0));
+  const output = Math.max(0, Number(usage && usage.completion_tokens) || 0);
+  const p = priceAt(route, now);
+  const rmb = ((input - cached) * p.input + cached * p.cache + output * p.output) / 1e6;
+  return Math.round(rmb * 1e6) / 1e6;
+}
+
+/** 方舟文本密钥：优先 ARK_API_KEY（对话专用），未配置时回落到生图那把同账号密钥 */
+function arkKey() {
+  return process.env.ARK_API_KEY || process.env.SEEDREAM_API_KEY || '';
 }
 
 /* ---------- B.AI 图像模型（2026-11 接入） ----------
@@ -295,7 +351,9 @@ function clampNumber(v, fallback, min, max) {
   return Math.min(max, Math.max(min, n));
 }
 
-/** 只把允许字段透传给 DeepSeek，避免前端注入任意上游参数。 */
+/** 只把允许字段透传给上游，避免前端注入任意参数。
+ *  返回 { payload, frontModel, route }：payload.model 已是真实模型 ID，
+ *  frontModel 是档位名（回传前端用），route 里带单价（算成本用）。 */
 function buildUpstreamPayload(body, withJsonFormat) {
   const messages = Array.isArray(body.messages)
     ? body.messages
@@ -303,66 +361,33 @@ function buildUpstreamPayload(body, withJsonFormat) {
       .map((m) => ({ role: m.role, content: m.content.slice(0, 24000) }))
       .slice(-20)
     : [];
-  const wanted = typeof body.model === 'string' ? body.model.trim() : '';
-  const model = ALLOWED_MODELS.has(wanted)
-    ? wanted
-    : (process.env.DEEPSEEK_MODEL || 'deepseek-chat');
+  const frontModel = resolveChatModel(body.model);
+  const route = CHAT_MODELS[frontModel];
   const payload = {
-    model,
+    model: route.model,
     messages,
-    max_tokens: Math.round(clampNumber(body.max_tokens, 2048, 1, 4096)),
+    // 思考型模型（Kimi / Doubao / DeepSeek V4）会先花 token 推理再写正文，
+    // 上限给 2048 时正文常被截断成空串；默认 4096、上限 8192。
+    max_tokens: Math.round(clampNumber(body.max_tokens, 4096, 1, 8192)),
     stream: false,
   };
-  // deepseek-reasoner 不支持 temperature / response_format 等采样参数，强行传会 400
-  if (model !== 'deepseek-reasoner') {
-    payload.temperature = clampNumber(body.temperature, 0.7, 0, 2);
-    if (withJsonFormat) payload.response_format = { type: 'json_object' };
-  }
-  return payload;
+  payload.temperature = typeof route.temperature === 'number'
+    ? route.temperature
+    : clampNumber(body.temperature, 0.7, 0, 2);
+  if (withJsonFormat) payload.response_format = { type: 'json_object' };
+  return { payload, frontModel, route };
 }
 
-function callDeepSeek(payload) {
-  return new Promise((resolve, reject) => {
-    const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/+$/, '');
-    const target = new URL(base + '/chat/completions');
-    const data = JSON.stringify(payload);
-    const req = https.request(target, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY || ''}`,
-        'Content-Length': Buffer.byteLength(data),
-      },
-    }, (upstream) => {
-      let raw = '';
-      upstream.setEncoding('utf8');
-      upstream.on('data', (c) => { raw += c; });
-      upstream.on('end', () => {
-        let parsed = null;
-        try { parsed = JSON.parse(raw); } catch { /* 交给下面统一处理 */ }
-        resolve({ status: upstream.statusCode || 502, json: parsed, raw: raw.slice(0, 1000) });
-      });
-    });
-    req.setTimeout(55000, () => req.destroy(new Error('模型服务超时')));
-    req.on('error', reject);
-    req.write(data);
-    req.end();
-  });
-}
-
-/** 转发文本对话到火山引擎方舟（Kimi / Doubao / GLM） */
 function callArkChat(payload) {
   return new Promise((resolve, reject) => {
-    const base = 'https://ark.cn-beijing.volces.com/api/v3';
-    const target = new URL(base + '/chat/completions');
+    const target = new URL(ARK_CHAT_BASE + '/chat/completions');
     const data = JSON.stringify(payload);
     const req = https.request(target, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Bearer ${process.env.SEEDREAM_API_KEY || ''}`,
+        'Authorization': `Bearer ${arkKey()}`,
         'Content-Length': Buffer.byteLength(data),
       },
     }, (upstream) => {
@@ -382,11 +407,40 @@ function callArkChat(payload) {
   });
 }
 
+/* 上游报错翻译：厂商返回的是英文技术描述，直接丢给用户等于没说。
+ * 这里按 code / 关键字归类，给出「为什么 + 下一步怎么做」。
+ * 认不出来的仍然原样透传（附状态码），方便我们排查。 */
+const UPSTREAM_HINTS = [
+  {
+    re: /copyright|trademark|infring/i,
+    zh: '画出来的画面可能涉及版权或商标（例如像某个品牌或平台的标志），被厂商的内容审核拦下了。常见触发词：小红书 / 抖音 / 微信这类平台名，或真实品牌名。去掉它们换成中性说法（如「社交平台封面」）再试。',
+  },
+  {
+    re: /sensitive|moderation|safety|policy|risk|prohibit|illegal|violat/i,
+    zh: '描述触发了厂商的内容安全审核。去掉人物特征、医疗功效、仿冒品牌这类说法，写得更中性一些再试。',
+  },
+  {
+    re: /rate.?limit|too many requests|\b429\b/i,
+    zh: '上游限流了，等几秒再试。',
+  },
+  {
+    re: /quota|insufficient|balance|欠费|余额/i,
+    zh: '上游额度不足或账户受限，请联系管理员处理。',
+  },
+  {
+    re: /timeout|timed out|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/i,
+    zh: '上游响应超时或网络不可达，稍后重试。',
+  },
+];
+
 function safeUpstreamError(r) {
-  const msg = r.json && r.json.error && typeof r.json.error.message === 'string'
-    ? r.json.error.message
-    : `模型服务返回 ${r.status}`;
-  return msg.slice(0, 200);
+  const err = (r.json && r.json.error) || {};
+  const code = typeof err.code === 'string' ? err.code : '';
+  const raw = typeof err.message === 'string' ? err.message : '';
+  const hit = UPSTREAM_HINTS.find((m) => m.re.test(`${code} ${raw}`));
+  if (hit) return hit.zh;
+  if (raw) return raw.slice(0, 200);
+  return `模型服务返回 ${r.status}${code ? `（${code}）` : ''}`;
 }
 
 /** 转发图像生成请求到火山引擎方舟 Seedream */
@@ -479,7 +533,7 @@ async function handleImage(req, res, body) {
     return sendJson(res, 400, { error: { message: '该档位需要先上传参考图' } });
   }
   if (tier === 'gpt2-text' && hasRef) {
-    return sendJson(res, 400, { error: { message: '已上传参考图，请切换到「GPT Image 2 · 输入图」档位（93 积分）' } });
+    return sendJson(res, 400, { error: { message: '已上传参考图，请切换到「GPT Image 2（输入图）」档位，否则会按文字档计费' } });
   }
   const size = typeof body.size === 'string' ? body.size : '1024x1024';
   const payload = route.provider === 'bai'
@@ -537,9 +591,6 @@ async function handleImage(req, res, body) {
 }
 
 async function handleChat(req, res, body) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    return sendJson(res, 503, { error: { message: '后台尚未配置 DEEPSEEK_API_KEY，请在云函数环境变量中设置' } });
-  }
   const token = process.env.LUNASOL_PROXY_TOKEN || '';
   if (!token) {
     return sendJson(res, 503, { error: { message: '后台尚未配置 LUNASOL_PROXY_TOKEN，代理已停用' } });
@@ -551,34 +602,23 @@ async function handleChat(req, res, body) {
   const verdict = guard(req);
   if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
 
+  if (!arkKey()) {
+    return sendJson(res, 503, { error: { message: '后台尚未配置 ARK_API_KEY（火山方舟），对话模型暂不可用' } });
+  }
+
   const withJsonFormat = !!(body.response_format && body.response_format.type === 'json_object');
-  let payload = buildUpstreamPayload(body, withJsonFormat);
+  let { payload, frontModel, route } = buildUpstreamPayload(body, withJsonFormat);
   if (!payload.messages.length) {
     return sendJson(res, 400, { error: { message: '缺少 messages' } });
   }
 
-  // 统一的上游调用：方舟模型映射真实 ID 并应用参数约束，其余走 DeepSeek
-  const dispatch = (p) => {
-    const frontModel = p.model;
-    if (ARK_MODEL_MAP[frontModel]) {
-      const arkPayload = applyArkRules(frontModel, { ...p, model: ARK_MODEL_MAP[frontModel] });
-      return callArkChat(arkPayload);
-    }
-    return callDeepSeek(p);
-  };
-
   try {
     dayUsed += 1;
-    let r = await dispatch(payload);
+    let r = await callArkChat(payload);
     // 部分模型不接受 response_format：去掉该字段重试一次，不做结果伪装
     if (r.status === 400 && withJsonFormat && /response_format/i.test(r.raw)) {
-      payload = buildUpstreamPayload(body, false);
-      r = await dispatch(payload);
-    }
-    // 部分模型限定 temperature（如 Kimi 只允许 1）：按模型规则修正后重试一次
-    if (r.status === 400 && /temperature/i.test(r.raw) && ARK_MODEL_RULES[payload.model]) {
-      const fixed = applyArkRules(payload.model, { ...payload, model: ARK_MODEL_MAP[payload.model] });
-      r = await callArkChat(fixed);
+      ({ payload } = buildUpstreamPayload(body, false));
+      r = await callArkChat(payload);
     }
     if (r.status < 200 || r.status >= 300 || !r.json) {
       return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, {
@@ -590,18 +630,22 @@ async function handleChat(req, res, body) {
     if (typeof content !== 'string') {
       return sendJson(res, 502, { error: { message: '模型未返回文本内容' } });
     }
-    // 透传 Reasoner 的思考过程；非思考模型没有该字段，留空后序列化时自动省略
+    // 透传思考过程；非思考模型没有该字段，留空后序列化时自动省略
     const outMessage = { role: 'assistant', content };
     if (message0 && typeof message0.reasoning_content === 'string' && message0.reasoning_content.length) {
       outMessage.reasoning_content = message0.reasoning_content;
     }
-    // 只返回前端需要的最小 OpenAI 兼容结构，不透传上游原始响应头
+    // cost 由服务端按 usage × 单价算好：前端拿它记「今日额度」，不再自己估
+    const usage = r.json.usage || undefined;
     return sendJson(res, 200, {
       id: r.json.id,
       object: 'chat.completion',
-      model: r.json.model || payload.model,
+      model: r.json.model || route.model,
+      chatModel: frontModel,
       choices: [{ index: 0, message: outMessage, finish_reason: r.json.choices[0].finish_reason || 'stop' }],
-      usage: r.json.usage || undefined,
+      usage: usage || undefined,
+      cost: usage ? costOfUsage(route, usage) : 0,
+      priceTier: route.peak && isPeakHour() ? 'peak' : 'normal',
     });
   } catch (e) {
     return sendJson(res, 502, {
@@ -622,9 +666,12 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, {
       ok: true,
       service: 'lunasol-ai',
-      provider: 'deepseek',
-      model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-      keyConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
+      provider: 'ark',
+      model: DEFAULT_CHAT_MODEL,
+      keyConfigured: Boolean(arkKey()),
+      chatModels: Object.keys(CHAT_MODELS),
+      defaultChatModel: DEFAULT_CHAT_MODEL,
+      chatPeakHour: isPeakHour(),
       tokenRequired: Boolean(process.env.LUNASOL_PROXY_TOKEN),
       imageGeneration: Boolean(process.env.SEEDREAM_API_KEY),
       imageProvider: process.env.SEEDREAM_API_KEY ? 'seedream' : 'none',

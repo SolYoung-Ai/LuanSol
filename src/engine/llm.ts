@@ -5,6 +5,7 @@
 import type { AISettings } from '../types';
 import { CLOUD, deepSeekPreset, deepSeekReady } from '../cloud/config';
 import { getAIGate, reportAIUsage } from '../ai/gate';
+import { CancelledError } from './cancel';
 
 const preset = deepSeekReady ? deepSeekPreset() : null;
 
@@ -105,7 +106,7 @@ export const aiConfigured = aiEnabled;
 export const aiStatusLabel = (s: AISettings): string => {
   if (!aiEnabled(s)) return '本地建议 · 未调用 AI';
   const m = aiMode(s);
-  if (m === 'proxy') return 'AI 已接入 · 多模型（DeepSeek / Kimi / Doubao-Seed）';
+  if (m === 'proxy') return 'AI 已接入 · 7 款模型（DeepSeek / Kimi / Doubao-Seed / GLM）';
   return `AI 已接入 · ${s.textModel.trim() || '自定义模型'}`;
 };
 
@@ -125,11 +126,13 @@ function endpoint(base: string, path: string) {
   return b.endsWith('/chat/completions') ? b.replace(/\/chat\/completions$/, path) : b + path;
 }
 
-async function withRetry<T>(fn: () => Promise<T>, retries: number): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries: number, signal?: AbortSignal): Promise<T> {
   let last: unknown;
   for (let i = 0; i <= Math.max(0, retries); i++) {
     try { return await fn(); } catch (e) {
       last = e;
+      // 用户点了取消 / 超时：立刻结束，不要偷偷再发一次请求（那会照样扣钱）
+      if (e instanceof CancelledError || signal?.aborted) throw e;
       if (i < retries) await new Promise((r) => setTimeout(r, 500 * (i + 1)));
     }
   }
@@ -142,17 +145,30 @@ export interface ChatResult {
   content: string;
   /** 思考过程；非思考模型返回空串 */
   reasoning: string;
+  /** 本次调用在上游的真实花费（元），由云函数按 usage × 单价算好后回传。
+   *  浏览器直连模式没有这个字段，「今日额度」只在代理模式下有意义。 */
+  cost?: number;
+  /** 上游返回的 token 用量，用于界面展示与对账 */
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
 /** 底层对话请求：返回正文与思考过程，统一处理重试 / 超时 / 错误文案。 */
-async function requestChatRaw(messages: LLMMessage[], s: AISettings, json: boolean): Promise<ChatResult> {
+async function requestChatRaw(messages: LLMMessage[], s: AISettings, json: boolean, signal?: AbortSignal): Promise<ChatResult> {
   if (!aiEnabled(s)) throw new Error('尚未启用 AI 接入');
   const model = s.textModel.trim();
   // Reasoner 不支持 temperature 等采样参数，前端也不发送
   const isReasoner = model === 'deepseek-reasoner';
   return withRetry(async () => {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 120000);
+    // 超时和用户取消都会让 fetch 抛 AbortError，靠这个标记区分文案：
+    // 超时要说「响应太慢」，取消不能报错（用户自己按的）。
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, 120000);
+    const relay = () => ctrl.abort();
+    if (signal) {
+      if (signal.aborted) ctrl.abort();
+      else signal.addEventListener('abort', relay, { once: true });
+    }
     try {
       const res = await fetch(endpoint(s.baseUrl, '/chat/completions'), {
         method: 'POST',
@@ -180,18 +196,26 @@ async function requestChatRaw(messages: LLMMessage[], s: AISettings, json: boole
       const content = msg?.content;
       if (typeof content !== 'string') throw new Error('AI 没有返回内容，请换个说法试试');
       const reasoning = typeof msg?.reasoning_content === 'string' ? msg.reasoning_content : '';
-      return { content, reasoning };
+      // 云函数会带回 cost（元）与 usage：额度记账以服务端算的数为准，
+      // 前端不再自己拿 token × 单价估一遍，避免两边口径漂移。
+      const cost = typeof data?.cost === 'number' && Number.isFinite(data.cost) ? data.cost : undefined;
+      const usage = data?.usage && typeof data.usage === 'object' ? data.usage : undefined;
+      return { content, reasoning, ...(cost !== undefined ? { cost } : {}), ...(usage ? { usage } : {}) };
     } catch (e) {
       // 网络错误（Failed to fetch）优化提示
       if (e instanceof TypeError && e.message.includes('Failed to fetch')) {
         throw new Error('网络连接失败，请检查网络后重试');
       }
       if (e instanceof DOMException && e.name === 'AbortError') {
+        if (!timedOut) throw new CancelledError();
         throw new Error('请求超时，AI 响应太慢，请稍后再试');
       }
       throw e;
-    } finally { clearTimeout(timer); }
-  }, s.retries);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', relay);
+    }
+  }, s.retries, signal);
 }
 
 export async function llmChat(messages: LLMMessage[], s: AISettings, json = false): Promise<string> {
@@ -199,8 +223,10 @@ export async function llmChat(messages: LLMMessage[], s: AISettings, json = fals
 }
 
 /** 带思考过程的对话：返回正文 + Reasoner 思考内容。 */
-export async function llmChatWithReasoning(messages: LLMMessage[], s: AISettings): Promise<ChatResult> {
-  return requestChatRaw(messages, s, false);
+/** 带思考过程的对话：返回正文 + Reasoner 思考内容。
+ *  opts.signal 用于「用户点取消」——中止后不再扣额度、不再重试。 */
+export async function llmChatWithReasoning(messages: LLMMessage[], s: AISettings, opts?: { signal?: AbortSignal }): Promise<ChatResult> {
+  return requestChatRaw(messages, s, false, opts?.signal);
 }
 
 export async function llmJson<T>(messages: LLMMessage[], s: AISettings): Promise<T> {

@@ -69,7 +69,6 @@ export function decideGate(input: {
   quota?: number;
 }): GateDecision {
   const trial = input.freeTrial ?? FREE_TRIAL;
-  const quota = input.quota ?? PRO_QUOTA;
   if (!input.loggedIn) {
     return { ok: false, reason: `登录后即可使用平台 AI；新注册用户有 ${trial} 积分免费体验`, need: 'login' };
   }
@@ -79,7 +78,8 @@ export function decideGate(input: {
     ok: false,
     reason: input.proActive
       ? '会员额度已用完或已过期，请续费后继续'
-      : `免费体验已用完（${trial} 积分），订阅会员即可每月使用 ${quota} 积分`,
+      // 会员不含固定积分包，别在这里承诺「每月 N 积分」——积分只来自签到与充值
+      : `免费体验已用完（${trial} 积分），开通会员可解锁全部模型、云端同步与印刷级导出，积分可通过每日签到或充值获得`,
     need: 'subscribe',
   };
 }
@@ -213,6 +213,42 @@ export function isProActive(sub: Subscription | null): boolean {
     && !!sub.period_end && new Date(sub.period_end).getTime() > Date.now();
 }
 
+/* ---------------- 用量进度：分母口径全局唯一 ---------------- */
+
+/** 进度条 100% 对应的积分量：免费版 100、会员 600；充过值就用充值量 */
+export const CREDIT_BUCKET_FREE = PRICING.creditBucket;
+export const CREDIT_BUCKET_PRO = PRICING.proCreditBucket;
+/** 兼容旧引用：没有会员信息时的默认桶 */
+export const DEFAULT_CREDIT_BUCKET = CREDIT_BUCKET_FREE;
+
+export interface UsageStat {
+  /** 当前可用积分 */
+  left: number;
+  /** 100% 对应的积分量（免费 100 / 会员 600 / 充过值 = 该次充值量） */
+  bucket: number;
+  /** 已用掉的积分 */
+  used: number;
+  /** 已使用百分比（0–100 整数） */
+  pct: number;
+}
+
+/** 已使用进度：pct = (桶 - 余额) / 桶。
+ *  侧栏账号卡与「积分与充值」页共用此函数，两处百分比不会再各算一套。
+ *  桶取「免费 100 / 会员 600」与「近期充值量」的较大者——充值包最小 1000，
+ *  所以真实充值一定大于默认桶；小额兑换码不会把分母压小到出现 100%。 */
+export function usageStat(
+  left: number | null,
+  opts?: { recharge?: number | null; pro?: boolean },
+): UsageStat | null {
+  if (left === null || left === undefined) return null;
+  const base = opts?.pro ? CREDIT_BUCKET_PRO : CREDIT_BUCKET_FREE;
+  const recharge = Number(opts?.recharge);
+  const b = Math.max(base, Number.isFinite(recharge) ? recharge : 0);
+  const l = Math.max(0, Math.round(left));
+  const used = Math.max(0, b - l);
+  return { left: l, bucket: b, used, pct: Math.min(100, Math.round((used / b) * 100)) };
+}
+
 /* ------------------------------------------------------------------ */
 
 interface SubCtx {
@@ -222,6 +258,10 @@ interface SubCtx {
   metered: boolean;
   /** 剩余次数；非计量来源返回 null */
   usedLeft: number | null;
+  /** 进度条 100% 对应的积分量（默认 1000；近期充过积分则为该次充值量） */
+  creditBucket: number;
+  /** 已使用进度，侧栏与积分页共用；未登录 / 非计量来源为 null */
+  usage: UsageStat | null;
   isPro: boolean;
   refresh: () => Promise<void>;
   activate: (code: string) => Promise<{ ok: boolean; message: string }>;
@@ -573,12 +613,50 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   // 积分余额 = 云端剩余（quota_total - quota_used + bonus_credits）
   // 签到和兑换码的积分都存在 bonus_credits 里，不再用 localStorage 缓存
   const bonus = sub ? (sub as any).bonus_credits || 0 : 0;
-  const usedLeft = usedLeftRaw !== null ? usedLeftRaw + bonus : null;
+  // 订阅行还没到（首屏加载中 / 拉取失败）时不给 0：否则侧栏会先闪一下
+  // 「0 积分 · 已使用 100%」，看起来像余额被清空了。null 由各处显示占位。
+  const usedLeft = usedLeftRaw !== null && sub ? usedLeftRaw + bonus : null;
   const isPro = isProActive(sub);
 
+  // 进度条分母：免费 100 / 会员 600；用户近期（90 天）充值过，则用该次充值的积分量做 100%。
+  // 充值尚未上线，所以现在只会拿到默认桶；支付回调写入 grant 记录后自动生效。
+  const [creditBucket, setCreditBucket] = useState<number>(CREDIT_BUCKET_FREE);
+  useEffect(() => {
+    const u = auth.user;
+    if (!u || !metered || !sdkUsable()) { setCreditBucket(CREDIT_BUCKET_FREE); return; }
+    let cancelled = false;
+    (async () => {
+      const d = await db();
+      if (!d) return;
+      try {
+        const r = await d.from('lunasol_credit_logs')
+          .select('amount,change_type,created_at')
+          .eq('owner_id', u.id)
+          .order('created_at', { ascending: false })
+          .limit(40);
+        if (cancelled || !r || r.error || !Array.isArray(r.data)) return;
+        const since = Date.now() - 90 * 24 * 3600 * 1000;
+        const hit = (r.data as { amount?: number; change_type?: string; created_at?: string }[])
+          .find((row) => {
+            const kind = String(row.change_type || '');
+            const at = Date.parse(String(row.created_at || ''));
+            return (kind === 'grant' || kind === 'recharge' || kind === 'redeem')
+              && (!Number.isFinite(at) || at >= since);
+          });
+        const amount = Number(hit?.amount) || 0;
+        if (!cancelled) setCreditBucket(amount);
+      } catch { /* 读不到记录就保持默认桶 */ }
+    })();
+    return () => { cancelled = true; };
+  }, [auth.user?.id, metered]);
+
+  // 真正的分母 = max(免费 100 / 会员 600, 近期充值量)；state 里只存充值量
+  const usage = usageStat(usedLeft, { recharge: creditBucket, pro: isPro });
+  const bucket = usage?.bucket ?? (isPro ? CREDIT_BUCKET_PRO : CREDIT_BUCKET_FREE);
+
   const value = useMemo<SubCtx>(() => ({
-    sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode, getCreditLogs,
-  }), [sub, loading, metered, usedLeft, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode, getCreditLogs]);
+    sub, loading, metered, usedLeft, creditBucket: bucket, usage, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode, getCreditLogs,
+  }), [sub, loading, metered, usedLeft, bucket, usage, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode, getCreditLogs]);
 
   return <Ctx.Provider value={value}>
     {children}

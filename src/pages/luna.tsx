@@ -3,7 +3,7 @@
  * ------------------------------------------------------------
  * 布局：左侧液态玻璃对话栏（桌面常驻 / 手机抽屉）+ 右侧纯白对话区。
  * 输入框是一个玻璃 composer，里面可以切换两种模式：
- *   · 对话      —— 由 DeepSeek-V4 驱动（免费用户固定此模型，不自选）
+ *   · 对话      —— 默认 DeepSeek-V4.1-Flash（不限额度）；会员可切其余 6 款，共用每日 ¥1 额度
  *   · 图像生成  —— 自己写画面描述，可选模型 / 比例 / 风格 / 模板
  * 全页不使用渐变：白底 + 极淡描边 + 一层柔和投影，靠留白分层。
  * 人设统一来自 engine/persona.ts，全站同一份。
@@ -13,11 +13,14 @@ import { Icon } from '../components/icons';
 import type { IconName } from '../components/icons';
 import type { ImageTier, LunaMessage } from '../types';
 import { useAuth } from '../cloud/auth';
-import { useChatStore, CHAT_MODELS } from '../cloud/useChatStore';
+import { useChatStore } from '../cloud/useChatStore';
+import { CHAT_MODELS, chatModel as findChatModel, fmtRMB, turnsForBudget } from '../cloud/chatModels';
 import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
+import { go } from '../ui';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageModel } from '../cloud/models';
+import { SideNavLinks, SideAccount, SideBrand, SideFold } from '../components/SideNav';
 
 type LunaMode = 'chat' | 'image';
 
@@ -122,6 +125,125 @@ function Pick({
   );
 }
 
+/** 「对话」这颗胶囊同时是对话模型的入口：
+ *  免费版只有 DeepSeek-V4.1-Flash 可用，其余点了走订阅引导；
+ *  会员可选全部，但六款会员模型共用「每人每天 ¥1」的额度，
+ *  弹层里直接给一条今日额度进度条 + 每个档位「≈还能聊几轮」。
+ *  真正的裁决在 useChatStore（额度用完 / 档位未开通都会退回默认模型），
+ *  这里只负责把规则讲清楚，不做静默降级。 */
+function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmpty, onRefresh }: {
+  pro: boolean;
+  value: string;
+  /** 今日已花费（元）；null = 统计中 / 非计量来源 */
+  spent: number | null;
+  budget: number;
+  onPick: (id: string) => void;
+  onNeedPro: () => void;
+  onQuotaEmpty: () => void;
+  onRefresh: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const cur = findChatModel(value);
+  const used = spent ?? 0;
+  const left = Math.max(0, budget - used);
+  const pct = Math.min(100, Math.round((used / budget) * 100));
+  // 超支时也只写到 ¥1.00：真实值是 1.05，但界面上「1.05/1.00」会让人以为系统算错了
+  const usedText = Math.min(used, budget);
+  const empty = spent !== null && used >= budget;
+  const maxTurns = turnsForBudget(cur, left);
+
+  const toggle = () => {
+    if (!open) onRefresh();
+    setOpen((o) => !o);
+  };
+
+  return (
+    <div className="lc-pick">
+      <button
+        className={`lc-tag on ${open ? 'open' : ''}`}
+        onClick={toggle}
+        title={`对话模型：${cur.label}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Icon name="message" size={14} />对话
+        <span className="lc-tag-sub">{cur.short}</span>
+        <Icon name="chevronDown" size={12} className="lc-tag-chev" />
+      </button>
+      {open && (
+        <>
+          <div className="lc-backdrop" onClick={() => setOpen(false)} />
+          <div className="lc-pop wide" role="menu">
+            <div className="lc-pop-title">选择语言模型</div>
+
+            {/* 今日额度：所有人共用一口 ¥1 的桶，会员模型按真实 token 花费计入 */}
+            <div className={`lc-quota ${empty ? 'full' : ''}`}>
+              <div className="lc-quota-head">
+                <span>今日额度 · 会员模型</span>
+                <span className="lc-quota-num">
+                  {spent === null ? '统计中…' : `${fmtRMB(usedText)} / ${fmtRMB(budget)}`}
+                </span>
+              </div>
+              <div className="lc-quota-bar">
+                {/* 0% 时不画那 1px 橙点：看起来像「已经花了 1%」，容易让人以为额度被偷跑 */}
+                <i className="lc-quota-fill" style={{ width: pct > 0 ? `${Math.max(pct, 2)}%` : 0 }} />
+              </div>
+              <div className="lc-quota-note">
+                {spent === null
+                  ? '连接云端后显示今日用量'
+                  : empty
+                    ? '今日额度已用完，会员模型明天 0 点恢复；DeepSeek-V4.1-Flash 不限'
+                    : cur.tier === 'free'
+                      // 默认档不占额度，必须写清楚，否则用户以为聊几句就把 ¥1 花光了
+                      ? '当前是免费默认档，不占额度；切到会员模型才按实际花费计算'
+                      : `按当前 ${cur.short} 估算约还能聊 ${maxTurns} 轮`}
+              </div>
+            </div>
+
+            {CHAT_MODELS.map((m) => {
+              const planLocked = !pro && m.tier === 'pro';
+              const quotaLocked = m.tier === 'pro' && empty;
+              const locked = planLocked || quotaLocked || !!m.soon;
+              const right = m.soon
+                ? '待开通'
+                : quotaLocked
+                  ? '额度用完'
+                  : planLocked
+                    ? '会员'
+                    : m.tier === 'free'
+                      ? '不限'
+                      : `约 ${turnsForBudget(m, left)} 轮`;
+              return (
+                <button
+                  key={m.id}
+                  role="menuitem"
+                  className={`lc-pop-opt model ${m.id === value ? 'sel' : ''} ${locked ? 'locked' : ''}`}
+                  onClick={() => {
+                    if (m.soon) return;
+                    if (planLocked) { onNeedPro(); return; }
+                    if (quotaLocked) { onQuotaEmpty(); return; }
+                    onPick(m.id); setOpen(false);
+                  }}
+                >
+                  <span className="lc-pop-main">
+                    <span className="lc-pop-name">{m.label}</span>
+                    <span className="lc-pop-sub">{m.note}</span>
+                  </span>
+                  <span className="lc-pop-hint">{right}</span>
+                  {m.id === value && !locked && <Icon name="check" size={13} className="lc-pop-check" />}
+                </button>
+              );
+            })}
+
+            {!pro && <div className="lc-pop-note">免费版可用 DeepSeek-V4.1-Flash；其余 6 款开通会员后解锁</div>}
+            {pro && <div className="lc-pop-note">会员模型共用今日 ¥{budget} 额度，按实际 token 花费计算，每天 0 点重置；默认档不占额度</div>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* --------------------------- 单条消息 --------------------------- */
 function Bubble({ m, onMedia }: { m: LunaMessage; onMedia?: () => void }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -133,6 +255,13 @@ function Bubble({ m, onMedia }: { m: LunaMessage; onMedia?: () => void }) {
         {m.reasoning && <ReasoningBlock reasoning={m.reasoning} />}
         {m.content && m.content !== '（参考图）' && (
           <div className={`lc-msg-text ${m.error ? 'error' : ''}`}>{toPlainText(m.content)}</div>
+        )}
+        {/* 用户中途取消：不写错误文案，只说明「没扣积分」，让用户放心 */}
+        {m.cancelled && (
+          <div className="lc-msg-cancelled">
+            <span className="lc-msg-cancelled-bar" aria-hidden />
+            已取消，本次未扣积分
+          </div>
         )}
         {m.image && (
           <div className="lc-msg-imgwrap">
@@ -182,7 +311,6 @@ export default function Luna() {
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
-
   /* 跟踪是否移动视口，用于切换「常驻侧栏 / 抽屉侧栏」两套交互 */
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 860px)');
@@ -245,7 +373,7 @@ export default function Luna() {
       // 这里明说一句，避免用户以为还是 86 积分却按 93 扣。
       if (imageModel(tier).id === 'gpt2-text') {
         chat.setTier('gpt2-ref');
-        setToast('已切到「GPT Image 2 · 输入图」（93 积分/张），因为这次带了参考图');
+        setToast(`已切到「${imageLabel('gpt2-ref')}」（${imageCost('gpt2-ref')} 积分/张），因为这次带了参考图`);
       }
     };
     reader.readAsDataURL(f);
@@ -267,7 +395,7 @@ export default function Luna() {
       }
       // 该档位必须有参考图，否则云函数会直接拒绝（不扣分，但白等一场）
       if (imageModel(tier).needsRef && !img) {
-        setToast('「GPT Image 2 · 输入图」需要先上传参考图；只用文字的话请切到「文字输入」档（86 积分）');
+        setToast(`「${imageLabel('gpt2-ref')}」需要先上传参考图；只用文字的话请切到「${imageLabel('gpt2-text')}」档（${imageCost('gpt2-text')} 积分）`);
         return;
       }
       // 余额不足时先拦住：绝不能先把输入框清空再被拒——用户刚写好的提示词会凭空消失
@@ -364,11 +492,12 @@ export default function Luna() {
       {/* ------------------------------ 左侧栏（桌面常驻 / 移动抽屉） ------------------------------ */}
       <aside className={`lc-side ${sideOpen ? '' : 'collapsed'} ${drawerOpen ? 'drawer-open' : ''}`}>
         <div className="lc-side-inner">
-          {/* 桌面端品牌头：与右上角的收起按钮组成一组，手机抽屉不渲染 */}
-          {!isMobile && <div className="lc-side-head">
-            <img src="./logo.png" alt="Luna" />
-            <span className="lc-side-head-text"><strong>Luna</strong><small>你的专属设计师</small></span>
-          </div>}
+          {/* 桌面端品牌头与全站左栏完全一致（同一组件、同一字号、同一套 EN/深色按钮）：
+              以前这里是「Luna / 你的专属设计师」，和别的页面对不上，看起来像两个产品 */}
+          {!isMobile && <SideBrand />}
+          {/* 桌面端把全站三个主入口接进这条侧栏，和左栏其他页面保持同一套信息架构；
+              手机端仍是「抽屉里只有对话」，不动已被验收过的移动端布局 */}
+          {!isMobile && <><SideNavLinks /><div className="sd-divider" /></>}
           <button className="lc-new" onClick={makeNew}>
             <Icon name="plus" size={16} />
             <span>新建对话</span>
@@ -422,7 +551,9 @@ export default function Luna() {
           </div>
 
           <div className="lc-side-foot">
-            <div className="lc-user">
+            {/* 桌面端用全站统一的账号卡（余额 + 用量 + 查看计划 + 账户菜单），
+                手机端保持原来的「头像 + 昵称 + 同步状态」一栏 */}
+            {!isMobile ? <SideAccount syncLabel={syncLabel} /> : <div className="lc-user">
               <div className="lc-user-avatar">
                 {auth.user.avatarUrl
                   ? <img src={auth.user.avatarUrl} alt="头像" />
@@ -432,32 +563,44 @@ export default function Luna() {
                 <div className="lc-user-name">{auth.user.label || auth.user.email}</div>
                 <div className={`lc-user-sync ${chat.syncState}`}>{syncLabel}</div>
               </div>
-            </div>
+            </div>}
           </div>
         </div>
 
         {/* 收起后只留一列图标快捷入口，点「搜索」会直接把侧栏展开 */}
         {!isMobile && !sideOpen && <div className="lc-rail">
+          <button className="lc-rail-logo" title="展开侧栏" aria-label="展开侧栏" onClick={() => setSideOpen(true)}>
+            <img src="./logo.png" alt="" />
+          </button>
           <button className="lc-rail-btn" title="新建对话" aria-label="新建对话" onClick={makeNew}>
             <Icon name="plus" size={18} />
           </button>
           <button className="lc-rail-btn" title="展开侧栏并搜索" aria-label="展开侧栏并搜索" onClick={() => setSideOpen(true)}>
             <Icon name="search" size={18} />
           </button>
+          {/* 收起后仍要能跳去别的页，否则「左栏」一收就把导航弄丢了 */}
+          <div className="lc-rail-sep" />
+          <button className="lc-rail-btn" title="工作台" aria-label="工作台" onClick={() => go('/workspace')}>
+            <Icon name="folder" size={18} />
+          </button>
+          <button className="lc-rail-btn" title="审美市场" aria-label="审美市场" onClick={() => go('/market')}>
+            <Icon name="grid" size={18} />
+          </button>
         </div>}
 
-        {/* 桌面端收起/展开常驻侧栏；移动端作为关闭抽屉按钮 */}
-        <button
-          className="lc-side-toggle"
-          onClick={toggleSide}
-          title={isMobile ? '关闭菜单' : sideOpen ? '收起侧栏' : '展开侧栏'}
-          aria-label={isMobile ? '关闭菜单' : sideOpen ? '收起侧栏' : '展开侧栏'}
-        >
-          <Icon name={isMobile ? 'close' : sideOpen ? 'chevronLeft' : 'chevronRight'} size={16} />
-          <span className="lc-side-toggle-text">
-            {isMobile ? '关闭菜单' : sideOpen ? '收起侧栏' : '展开'}
-          </span>
-        </button>
+        {/* 桌面端：贴边小胶囊收起/展开（和工作台等页面的左栏同一颗按钮）；
+            移动端保留顶部圆形关闭按钮 */}
+        {!isMobile
+          ? <SideFold folded={!sideOpen} onClick={() => setSideOpen((o) => !o)} />
+          : <button
+            className="lc-side-toggle"
+            onClick={toggleSide}
+            title="关闭菜单"
+            aria-label="关闭菜单"
+          >
+            <Icon name="close" size={16} />
+            <span className="lc-side-toggle-text">关闭菜单</span>
+          </button>}
       </aside>
 
       {/* 移动端抽屉遮罩：点击空白处关闭 */}
@@ -480,7 +623,19 @@ export default function Luna() {
           <div className="lc-scroll" ref={scrollRef}>
             <div className="lc-thread">
               {messages.map((m) => <Bubble key={m.id} m={m} onMedia={followMedia} />)}
-              {chat.busy && (
+              {/* 预备期：这 3 秒里请求还没发出去，取消是真的不花钱 */}
+              {chat.preflight > 0 && (
+                <div className="lc-msg assistant">
+                  <div className="lc-msg-avatar"><img src="./logo.png" alt="Luna" /></div>
+                  <div className="lc-preflight">
+                    <span className="lc-preflight-count">{chat.preflight}</span>
+                    <span className="lc-preflight-text">秒后开始生成</span>
+                    <button className="lc-preflight-cancel" onClick={chat.cancel}>取消</button>
+                  </div>
+                </div>
+              )}
+              {/* 已经开跑：这里不再给取消——请求已经发出去了，取消也拦不住计费 */}
+              {chat.busy && chat.preflight === 0 && (
                 <div className="lc-msg assistant">
                   <div className="lc-msg-avatar"><img src="./logo.png" alt="Luna" /></div>
                   <div className="lc-busy">
@@ -557,7 +712,16 @@ export default function Luna() {
 
                 {mode === 'chat' ? (
                   <>
-                    <span className="lc-tag on"><Icon name="message" size={14} />对话</span>
+                    <ChatModelTag
+                      pro={sub.isPro}
+                      value={chat.chatModel}
+                      spent={chat.chatSpendRmb}
+                      budget={chat.chatBudgetRmb}
+                      onPick={chat.setChatModel}
+                      onNeedPro={() => sub.setPaywall(true, '会员专属模型（Kimi-K3.1-Pro、DeepSeek-V4-pro、Doubao-Seed、GLM、经济版）开通会员后解锁，每天共用 ¥1 额度')}
+                      onQuotaEmpty={() => setToast('今日语言模型额度已用完，明天 0 点恢复；DeepSeek-V4.1-Flash 不限额度，可以继续聊')}
+                      onRefresh={() => void chat.refreshChatSpend()}
+                    />
                     <button className="lc-tag" onClick={() => setMode('image')} title="切换到图像生成">
                       <Icon name="image" size={14} />图像生成
                       <Icon name="chevronRight" size={12} className="lc-tag-chev" />
@@ -602,41 +766,38 @@ export default function Luna() {
                 )}
               </div>
 
-              <button
-                className="lc-send"
-                title={mode === 'image' ? '生成图片' : '发送'}
-                onClick={doSend}
-                disabled={chat.busy || !canSend}
-              >
-                <Icon name={mode === 'image' ? 'image' : 'send'} size={17} />
-              </button>
+              {/* 预备期：这颗按钮是「取消」，同一位置，不用去别处找；
+                  过了 3 秒请求已经发出，按钮回到禁用的发送态，避免给出停不掉的承诺 */}
+              {chat.preflight > 0 ? (
+                <button className="lc-send is-stop" title="取消这次生成（还没开始，不扣积分）" aria-label="取消生成" onClick={chat.cancel}>
+                  <span className="lc-stop-square" />
+                </button>
+              ) : chat.busy ? (
+                <button className="lc-send" title="正在生成…" aria-label="正在生成" disabled>
+                  <Icon name={mode === 'image' ? 'image' : 'send'} size={17} />
+                </button>
+              ) : (
+                <button
+                  className="lc-send"
+                  title={mode === 'image' ? '生成图片' : '发送'}
+                  onClick={doSend}
+                  disabled={!canSend}
+                >
+                  <Icon name={mode === 'image' ? 'image' : 'send'} size={17} />
+                </button>
+              )}
             </div>
           </div>
 
-          {/* 底部一行状态：对话模型（免费用户固定，不可自选） / 生图积分说明 */}
-          <div className="lc-dock-hint">
-            {mode === 'image' ? (
+          {/* 底部只留图像模式的计费说明；对话模型入口已经并到「对话」胶囊里 */}
+          {mode === 'image' && (
+            <div className="lc-dock-hint">
               <span className="lc-hint-text">
-                {tierShort(tier)} 生图 {tierCost(tier)} 积分/张
+                {tierName(tier)} · {tierCost(tier)} 积分/张
                 {typeof balance === 'number' ? ` · 当前余额 ${balance}` : ''}
               </span>
-            ) : sub.isPro ? (
-              <>
-                <Pick
-                  icon="spark"
-                  caption="对话模型"
-                  value={CHAT_MODELS.find((m) => m.id === chat.chatModel)?.label || 'DeepSeek-V4'}
-                  options={CHAT_MODELS.map((m) => ({ id: m.id, label: m.label }))}
-                  onPick={chat.setChatModel}
-                />
-                <span className="lc-hint-text">· 生图按档位消耗积分</span>
-              </>
-            ) : (
-              <span className="lc-hint-text">
-                <Icon name="spark" size={12} /> 对话由 DeepSeek-V4 驱动 · 生图按档位消耗积分
-              </span>
-            )}
-          </div>
+            </div>
+          )}
           </div>
         </div>
       </section>

@@ -10,6 +10,7 @@ import { ChatStoreProvider } from './cloud/useChatStore';
 import { CloudSyncProvider } from './cloud/useCloudSync';
 import { cloudConfigured } from './cloud/config';
 import { LunaLoader } from './components/LunaLoader';
+import SideNav from './components/SideNav';
 
 // 路由级代码分割：除首页外壳外，所有页面按需加载。
 // 这样首屏不会拉起 three.js（3D 预览）、jsPDF / JSZip（导出）等重库，
@@ -27,6 +28,9 @@ const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default
 const Subscribe = lazy(() => import('./pages/subscribe'));
 const Help = lazy(() => import('./pages/help'));
 const Luna = lazy(() => import('./pages/luna'));
+const Start = lazy(() => import('./pages/start'));
+const Terms = lazy(() => import('./pages/legal').then((m) => ({ default: m.Terms })));
+const Privacy = lazy(() => import('./pages/legal').then((m) => ({ default: m.Privacy })));
 const Studio = lazy(() => import('./pages/studio'));
 const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
@@ -103,6 +107,9 @@ export default function App() {
   else if (path === '/models') page = <ModelConfig />;
   else if (path === '/subscribe') page = <Subscribe />;
   else if (path === '/help') page = <Help />;
+  else if (path === '/start' || path === '/home') page = <Start />;
+  else if (path === '/terms') page = <Terms />;
+  else if (path === '/privacy') page = <Privacy />;
   else if (path === '/luna') page = <Luna />;
   else if (path === '/studio') page = <Studio />;
   else if (path === '/admin') page = <Admin />;
@@ -112,8 +119,11 @@ export default function App() {
     <CloudSyncProvider>
       <ProfileProvider>
         <ChatStoreProvider>
-          <div className="app">
+          <div className={`app ${path.startsWith('/luna') ? '' : path.startsWith('/studio') ? 'no-side' : 'has-side'}`}>
             <Nav onLogin={requestLogin} />
+            {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
+                其中 /studio 保留顶部条，避免工具栏页连导航都没有 */}
+            <SideNav onLogin={requestLogin} />
             <main className="main">
               {/* 全局返回：非首页且非 Luna 对话页显示 */}
               {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
