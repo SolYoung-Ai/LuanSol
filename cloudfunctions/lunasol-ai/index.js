@@ -658,6 +658,233 @@ async function handleChat(req, res, body) {
   }
 }
 
+/* ---------- 支付：Creem 接入（2026-11-11） ----------
+ * 两个路由：
+ *   POST /pay/checkout        前端建结账会话。必须登录 + 来源白名单 + 代理令牌，
+ *                             把 uid 写进 metadata，付款后才知道该给谁开通。
+ *   POST /pay/creem/webhook   Creem 服务端回调。HMAC-SHA256 验签通过才解析，
+ *                             落库走数据库函数 lunasol_pay_apply（幂等 + 二次 secret 校验）。
+ *
+ * 为什么不用静态 checkout link：静态链接带不了用户身份，付款成功后无法对应到账号。
+ *
+ * 环境变量（全部只存云函数，绝不进前端）：
+ *   CREEM_API_KEY          Creem 后台 Developers 页
+ *   CREEM_WEBHOOK_SECRET   Webhooks 端点详情页
+ *   CREEM_PRODUCT_ID       prod_xxx
+ *   PAY_APPLY_SECRET       本函数与数据库函数共享的落库口令
+ *   CREEM_TEST_MODE=1      走 test-api.creem.io
+ *   PAY_SUCCESS_URL        支付成功后跳回的前端地址（默认正式站点订阅页）
+ */
+const crypto = require('crypto');
+const PAY_ENV_ID = 'solyoung-d4gpp1f7s4e075f6d';
+// publishable key 是公开值（前端 .env 里本来就有），这里只用于调本环境的数据库函数。
+// 真正兜底的权限在数据库函数里：没有 PAY_APPLY_SECRET 无法开通任何人。
+const PAY_PUBLISHABLE_KEY = process.env.LUNASOL_PG_ANON_KEY || '';
+
+function payCfg() {
+  const test = String(process.env.CREEM_TEST_MODE || '') === '1';
+  return {
+    apiKey: String(process.env.CREEM_API_KEY || '').trim(),
+    webhookSecret: String(process.env.CREEM_WEBHOOK_SECRET || '').trim(),
+    applySecret: String(process.env.PAY_APPLY_SECRET || '').trim(),
+    productId: String(process.env.CREEM_PRODUCT_ID || '').trim(),
+    test,
+    base: test ? 'https://test-api.creem.io' : 'https://api.creem.io',
+    successUrl: String(process.env.PAY_SUCCESS_URL || 'https://luna.solyoung.top/#/subscribe?paid=1').trim(),
+  };
+}
+
+/** 读原始字节：验签必须对 Creem 发来的原始 body 做 HMAC，不能先 JSON.parse 再序列化 */
+function readRawBody(req, maxBytes = 256 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > maxBytes) { reject(new Error('请求体过大')); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+function creemSignatureValid(rawBuf, header) {
+  const secret = payCfg().webhookSecret;
+  if (!secret) return { ok: false, reason: 'webhook secret not configured' };
+  const sig = String(header || '').trim();
+  if (!sig) return { ok: false, reason: 'missing signature' };
+  const expect = crypto.createHmac('sha256', secret).update(rawBuf).digest('hex');
+  const a = Buffer.from(expect, 'utf8');
+  const b = Buffer.from(sig, 'utf8');
+  if (a.length !== b.length) return { ok: false, reason: 'signature mismatch' };
+  const ok = crypto.timingSafeEqual(a, b);
+  return ok ? { ok: true, reason: '' } : { ok: false, reason: 'signature mismatch' };
+}
+
+/** 落库：调数据库函数，开通/回收/幂等都在一个事务里 */
+async function payApply(payload) {
+  const key = PAY_PUBLISHABLE_KEY;
+  if (!key) throw new Error('LUNASOL_PG_ANON_KEY 未配置');
+  const r = await fetch(`https://${PAY_ENV_ID}.api.tcloudbasegateway.com/v1/rdb/rest/rpc/lunasol_pay_apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify(payload),
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`db ${r.status}: ${text.slice(0, 160)}`);
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+async function handlePayCheckout(req, res) {
+  const c = payCfg();
+  if (!c.apiKey || !c.productId) {
+    return sendJson(res, 503, { error: { message: '支付通道还没配置完成（缺少 Creem 密钥或产品 ID）' } });
+  }
+  const origin = String(req.headers.origin || '').trim().replace(/\/+$/, '');
+  if (!allowedOrigins().includes(origin)) {
+    return sendJson(res, 403, { error: { message: '来源不受信任：只能从站点页面调用' } });
+  }
+  if (process.env.LUNASOL_PROXY_TOKEN && String(req.headers['x-lunasol-token'] || '').trim() !== process.env.LUNASOL_PROXY_TOKEN) {
+    return sendJson(res, 401, { error: { message: '访问令牌无效' } });
+  }
+  const uid = String(req.headers['x-cloudbase-uid'] || '').trim();
+  if (!uid) return sendJson(res, 401, { error: { message: '请先登录再开通会员' } });
+
+  let body = {};
+  try { body = await readJsonBody(req, 8 * 1024); } catch { body = {}; }
+  const email = String(body.email || '').trim();
+
+  const payload = {
+    product_id: c.productId,
+    success_url: c.successUrl,
+    metadata: { uid },
+  };
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) payload.customer = { email };
+
+  try {
+    const r = await fetch(`${c.base}/v1/checkouts`, {
+      method: 'POST',
+      headers: { 'x-api-key': c.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const text = await r.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch { /* 保留原文用于报错 */ }
+    if (!r.ok || !data || !data.checkout_url) {
+      const upstream = (data && (data.message || data.error)) || text.slice(0, 160) || '未知错误';
+      console.error('[pay] checkout 创建失败', r.status, String(upstream).slice(0, 200));
+      return sendJson(res, 502, { error: { message: `结账会话创建失败：${String(upstream).slice(0, 120)}` } });
+    }
+    // 只回传跳转地址，不回传 API Key / 客户信息
+    return sendJson(res, 200, { ok: true, url: data.checkout_url, id: data.id || '' });
+  } catch (e) {
+    console.error('[pay] checkout 异常', (e && e.message) || e);
+    return sendJson(res, 502, { error: { message: '结账服务暂时不可用，请稍后再试' } });
+  }
+}
+
+/** 把 Creem 事件翻译成「开通」或「回收」两种动作。
+ *  取消分两种：scheduled_cancel 是「到期不续」，当期仍可用 → 不动有效期；
+ *  canceled / expired / refund.created 才立即回收。past_due 只是扣款失败待重试，先不动。 */
+function readCreemEvent(evt) {
+  const type = String((evt && evt.eventType) || '');
+  const obj = (evt && evt.object) || {};
+  const sub = obj.subscription && typeof obj.subscription === 'object' ? obj.subscription : null;
+  const md = obj.metadata || (sub && sub.metadata) || {};
+  const uid = String(md.uid || md.userId || '').trim();
+  const customerEmail = String((obj.customer && obj.customer.email) || (sub && sub.customer && sub.customer.email) || '').trim();
+  const periodEnd = String(
+    (sub && sub.current_period_end_date) || obj.current_period_end_date || ''
+  ).trim();
+  const order = obj.order && typeof obj.order === 'object' ? obj.order : null;
+  const amount = Number((order && order.amount_paid) || (order && order.amount) || (obj.last_transaction && obj.last_transaction.amount) || 0);
+
+  const base = {
+    type,
+    uid,
+    email: customerEmail,
+    amount: Number.isFinite(amount) ? Math.round(amount) : null,
+    currency: String((order && order.currency) || (obj.last_transaction && obj.last_transaction.currency) || '').trim() || null,
+    orderId: String((order && order.id) || (obj.last_transaction && obj.last_transaction.order) || '').trim() || null,
+    subscriptionId: String((sub && sub.id) || obj.id || '').trim() || null,
+    periodEnd: periodEnd || null,
+  };
+
+  if (type === 'checkout.completed') return { ...base, kind: 'grant', status: 'paid' };
+  if (type === 'subscription.paid' || type === 'subscription.active' || type === 'subscription.trialing') {
+    return { ...base, kind: 'grant', status: 'paid' };
+  }
+  if (type === 'subscription.canceled') return { ...base, kind: 'revoke', status: 'canceled' };
+  if (type === 'subscription.expired' || type === 'subscription.unpaid') return { ...base, kind: 'revoke', status: 'expired' };
+  if (type === 'refund.created') return { ...base, kind: 'revoke', status: 'refunded' };
+  // scheduled_cancel / past_due / update / dispute.created：只记录，不改有效期
+  return { ...base, kind: null, status: null };
+}
+
+async function handleCreemWebhook(req, res) {
+  const c = payCfg();
+  if (!c.webhookSecret || !c.applySecret) {
+    console.error('[pay] webhook 未配置 secret，拒绝处理');
+    return sendJson(res, 500, { error: { message: 'webhook secret not configured' } });
+  }
+
+  let raw;
+  try { raw = await readRawBody(req); } catch (e) {
+    return sendJson(res, 413, { error: { message: (e && e.message) || 'body too large' } });
+  }
+
+  const v = creemSignatureValid(raw, req.headers['creem-signature']);
+  if (!v.ok) {
+    console.error('[pay] webhook 验签失败：', v.reason);
+    return sendJson(res, 401, { error: { message: v.reason } });
+  }
+
+  let evt;
+  try { evt = JSON.parse(raw.toString('utf8')); } catch {
+    return sendJson(res, 400, { error: { message: 'invalid json' } });
+  }
+
+  const e = readCreemEvent(evt);
+  const eventId = String(evt.id || '').trim();
+  if (!eventId) return sendJson(res, 400, { error: { message: 'missing event id' } });
+
+  if (!e.kind) {
+    console.log('[pay] 事件忽略（不改有效期）：', e.type);
+    return sendJson(res, 200, { ok: true, ignored: true });
+  }
+
+  // 拿不到 uid 说明会话不是本函数创建的（例如后台手工开单）。落一条待人工处理的记录，
+  // 仍然返回 200 —— 返回 5xx 只会让 Creem 反复重投同一件处理不了的事。
+  const owner = e.uid || `unresolved:${e.email || e.subscriptionId || 'unknown'}`;
+
+  try {
+    const out = await payApply({
+      p_secret: c.applySecret,
+      p_owner_id: owner,
+      p_event_id: eventId,
+      p_status: e.status,
+      p_kind: e.kind,
+      p_period_end: e.periodEnd,
+      p_amount: e.amount,
+      p_currency: e.currency,
+      p_order_id: e.orderId,
+      p_subscription_id: e.subscriptionId,
+      p_raw: evt,
+    });
+    if (!out || out.ok !== true) {
+      console.error('[pay] 落库被拒：', JSON.stringify(out).slice(0, 200));
+      return sendJson(res, 500, { error: { message: 'apply rejected' } });
+    }
+    console.log('[pay] 已处理', e.type, 'kind=' + e.kind, 'uid=' + (e.uid ? e.uid.slice(0, 8) + '…' : 'none'), out.duplicate ? '(重复事件)' : '');
+    return sendJson(res, 200, { ok: true, kind: e.kind, duplicate: Boolean(out.duplicate) });
+  } catch (err) {
+    // 落库失败必须让 Creem 重试，否则用户付了钱没开通
+    console.error('[pay] 落库失败：', (err && err.message) || err);
+    return sendJson(res, 500, { error: { message: 'apply failed' } });
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   res.cors = corsHeaders(req);
   if (req.method === 'OPTIONS') return sendOptions(res);
@@ -682,7 +909,20 @@ const server = http.createServer(async (req, res) => {
       gptImageEnabled: Boolean(process.env.BAI_API_KEY),
       hyper3dEnabled: Boolean(process.env.SEEDREAM_API_KEY),
       limits: { ratePerMinute: RATE_PER_MINUTE, dailyLimit: DAILY_LIMIT, dailyUsed: dayUsed, requireOrigin: REQUIRE_ORIGIN },
+      pay: {
+        configured: Boolean(payCfg().apiKey && payCfg().productId),
+        webhookReady: Boolean(payCfg().webhookSecret && payCfg().applySecret),
+        testMode: payCfg().test,
+        productId: payCfg().productId || '',
+      },
     });
+  }
+
+  if (req.method === 'POST' && pathname.endsWith('/pay/checkout')) {
+    return handlePayCheckout(req, res);
+  }
+  if (req.method === 'POST' && pathname.endsWith('/pay/creem/webhook')) {
+    return handleCreemWebhook(req, res);
   }
 
   const isChat = pathname.endsWith('/chat/completions') || pathname === '/' || pathname.endsWith('/lunasol-ai');

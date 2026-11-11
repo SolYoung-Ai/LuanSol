@@ -77,9 +77,9 @@ const GROUPS: Group[] = [
       },
       {
         q: '会员包含什么？支付能付吗？',
-        a: <>会员 ¥{PRICING.proMonthlyPriceRMB}/月：签到双倍、全部对话模型、云端跨设备同步与全部历史版本、
-          PDF / SVG / DXF / ZIP 印刷级导出。<strong>会员已开放，但支付通道还没接入</strong>，
-          当前只能用兑换码开通；购买积分可加微信 soyo-ang（测试期间 5 折，另送 2 个月标准会员）。
+        a: <>会员 US${PRICING.proMonthlyPriceUSD}/月（约 ¥{Math.round(PRICING.proMonthlyPriceRMB)}）：签到双倍、全部对话模型、云端跨设备同步与全部历史版本、
+          PDF / SVG / DXF / ZIP 印刷级导出。订阅页可直接用 <strong>Visa / Mastercard / PayPal / Apple Pay</strong> 付款，
+          到期自动续费；没有海外卡可以继续用兑换码或加微信 soyo-ang 开通。
           充值包价格：{RECHARGE}。</>,
       },
     ],

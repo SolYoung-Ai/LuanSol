@@ -14,6 +14,7 @@ import { accountKey, otpTarget, emailTarget, isEmail, rowId, projectIdOf, ownsPr
 import { LOGIN_CONFIG } from '../src/cloud/loginConfig';
 import { decideGate, usageStat, CREDIT_BUCKET_FREE, CREDIT_BUCKET_PRO } from '../src/cloud/subscription';
 import { PRICING } from '../src/cloud/plans';
+import { payReturnFlag } from '../src/cloud/pay';
 import { IMAGE_MODELS, OPEN_IMAGE_MODELS, HYPER3D_COST, imageCost, imageModel, isProOnlyTier, resolveTier } from '../src/cloud/models';
 import {
   CHAT_MODELS, CHAT_DAILY_BUDGET_RMB, FREE_CHAT_MODEL, chatModel, costOfUsage, isPeakNow, turnsForBudget,
@@ -835,6 +836,31 @@ export async function runTests(): Promise<Result[]> {
     // 未登录 / 未计量 → null，界面显示占位而不是 0%
     A(usageStat(null, { pro: true }) === null, '无余额时应返回 null');
     return '免费 100 / 会员 600 / 充值量 / 小额发放 / 超桶 五种情况均正确';
+  });
+
+  await t('定价口径 · 会员价以美元为唯一权威，RMB 只是测算', () => {
+    A(PRICING.proMonthlyPriceUSD === 4, `美元价应为 4，实际 ${PRICING.proMonthlyPriceUSD}`);
+    const derived = +(PRICING.proMonthlyPriceUSD * PRICING.usdToRmb).toFixed(2);
+    A(Math.abs(PRICING.proMonthlyPriceRMB - derived) < 1,
+      `RMB 测算值应与美元价对得上：${PRICING.proMonthlyPriceRMB} vs ${derived}`);
+    return `US$${PRICING.proMonthlyPriceUSD} ≈ ¥${PRICING.proMonthlyPriceRMB}（按 ${PRICING.usdToRmb} 折算）`;
+  });
+
+  await t('支付回跳 · hash 路由下的参数识别', () => {
+    const g = globalThis as unknown as { window?: unknown };
+    const prev = g.window;
+    const set = (hash: string) => { g.window = { location: { hash, search: '', pathname: '/' }, history: { replaceState() {} } }; };
+    try {
+      set('#/subscribe?paid=1');
+      A(payReturnFlag().returned && payReturnFlag().paid, 'paid=1 应识别为支付回跳');
+      set('#/subscribe?checkout_id=ch_123');
+      A(payReturnFlag().returned && payReturnFlag().paid, 'checkout_id 也应识别为回跳');
+      set('#/subscribe');
+      A(!payReturnFlag().returned && !payReturnFlag().paid, '无参数时不应识别为回跳');
+      set('#/wizard?step=3&paid=0');
+      A(payReturnFlag().returned && !payReturnFlag().paid, 'paid=0 是回跳但不代表已付');
+      return 'paid=1 / checkout_id / 无参 / paid=0 四种情况正确';
+    } finally { g.window = prev; }
   });
 
   return R;

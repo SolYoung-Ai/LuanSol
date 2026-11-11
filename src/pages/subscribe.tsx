@@ -5,8 +5,7 @@
  * Hyper3D-Gen2 21（3D 生成，暂未开放入口）
  *  - 新注册送 PRICING.freeTrialUses 积分
  *  - 每日签到 +10（会员双倍 +20/天，会员月上限 600）；已取消「连续 10 天额外 +100」
- *  - 会员已开放，但支付通道未接入，当前只能用兑换码开通
- *  - 购买积分走人工：加微信 soyo-ang（点一下自动复制）
+ *  - 会员已开放：主通道 Creem（US$4/月，卡 / PayPal），国内可继续用兑换码或微信人工
  * 视觉：与账户信息页同一套玻璃材质，靠圆角与间距分组，不画分割线。
  * 所有数字都从 PRICING 读，不在页面里写死。
  * ============================================================ */
@@ -14,7 +13,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { go } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
-import { useSubscription, type CreditLog } from '../cloud/subscription';
+import { useSubscription, getSubscription, isProActive, type CreditLog } from '../cloud/subscription';
+import { startCheckout, payReturnFlag, clearPayReturnFlag } from '../cloud/pay';
 import { PRICING } from '../cloud/plans';
 import { IMAGE_MODELS, HYPER3D_COST } from '../cloud/models';
 import { useLang } from '../i18n';
@@ -34,6 +34,9 @@ export default function Subscribe() {
   const [logsOpen, setLogsOpen] = useState(false);
   /** 兑换码输入框：会员卡的「用兑换码开通」要滚到这里并聚焦 */
   const redeemRef = useRef<HTMLInputElement>(null);
+  /** Creem 结账：跳转收银台前按钮进入 loading；回跳后轮询确认开通结果 */
+  const [paying, setPaying] = useState(false);
+  const [payMsg, setPayMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   /** 购买积分的对公微信号，点一下复制 */
   const WX_ID = 'soyo-ang';
@@ -109,6 +112,51 @@ export default function Subscribe() {
     if (r.ok) setRedeemCode('');
   };
 
+  // 从 Creem 收银台回跳：webhook 到账有几秒延迟，这里轮询数据库最多约 24 秒，
+  // 拿到真实会员状态再收工——否则用户会看到「已付款但仍是免费版」，以为钱白花了。
+  useEffect(() => {
+    const flag = payReturnFlag();
+    const uid = a.user?.id;
+    if (!flag.returned || !uid) return;
+    let cancelled = false;
+    let tries = 0;
+    setPayMsg({ ok: true, text: '支付已完成，正在确认订单…' });
+    const tick = async () => {
+      if (cancelled) return;
+      tries += 1;
+      const got = await getSubscription(uid);
+      if (cancelled) return;
+      if (got.ok && isProActive(got.data)) {
+        await sub.refresh();
+        clearPayReturnFlag();
+        setPayMsg({ ok: true, text: '会员已开通，有效期见上方。' });
+        return;
+      }
+      if (tries >= 8) {
+        setPayMsg({ ok: false, text: '暂未收到支付确认。若已扣款，通常 1 分钟内到账，稍后刷新即可；超过 10 分钟仍未开通请联系客服。' });
+        return;
+      }
+      window.setTimeout(() => void tick(), 3000);
+    };
+    void tick();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [a.user?.id]);
+
+  const doPay = async () => {
+    if (!a.user) {
+      setToast('请先登录再开通，会员会绑定到你的账号');
+      go('/account');
+      return;
+    }
+    if (paying) return;
+    setPaying(true); setPayMsg(null);
+    const r = await startCheckout({ uid: a.user.id, email: a.user.email });
+    if (!r.ok) { setPaying(false); setPayMsg({ ok: false, text: r.message }); return; }
+    // 不复位 paying：用户可能点浏览器返回，按钮维持「确认中」比闪回可点更诚实
+    window.location.href = r.url;
+  };
+
   return <div className="gl-page gl-credits">
     <header className="gl-head">
       <span className="gl-kicker">CREDITS</span>
@@ -161,7 +209,7 @@ export default function Subscribe() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className={`gl-pill ${pro ? 'on' : ''}`}>
-            {pro ? `会员 · ¥${PRICING.proMonthlyPriceRMB}/月` : t('免费版', 'Free')}
+            {pro ? `会员 · US$${PRICING.proMonthlyPriceUSD}/月` : t('免费版', 'Free')}
           </span>
           {pro && sub.sub?.period_end && <span className="gl-pill">
             有效期至 {new Date(sub.sub.period_end).toLocaleDateString()}
@@ -248,7 +296,7 @@ export default function Subscribe() {
       <section className="gl-plan gl-plan-pro">
         <span className="gl-plan-flag">推荐</span>
         <div className="gl-plan-name">{t('会员 · 每月特权', 'Member · Monthly')}</div>
-        <div className="gl-plan-price">¥{PRICING.proMonthlyPriceRMB}<span>/月</span></div>
+        <div className="gl-plan-price">US${PRICING.proMonthlyPriceUSD}<span> {t('/月', '/mo')}</span></div>
         <ul className="gl-plan-feats">
           <li><Icon name="check" size={13} />签到双倍（+20/天，月上限 600）</li>
           <li><Icon name="check" size={13} />全部对话模型解锁</li>
@@ -258,11 +306,21 @@ export default function Subscribe() {
         </ul>
         {pro
           ? <button className="gl-btn gl-btn-soft" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</button>
-          : <button className="gl-btn" onClick={goRedeem}>{t('用兑换码开通', 'Activate with code')}</button>}
+          : <>
+            <button className="gl-btn" disabled={paying} onClick={() => void doPay()}>
+              {paying ? t('正在前往支付…', 'Redirecting…') : `立即开通 · US$${PRICING.proMonthlyPriceUSD}${t('/月', '/mo')}`}
+            </button>
+            <button className="gl-btn gl-btn-soft" style={{ marginTop: 8 }} onClick={goRedeem}>
+              {t('用兑换码开通', 'Activate with code')}
+            </button>
+          </>}
+        {payMsg && <div style={{ marginTop: 10 }}>
+          <span className={`gl-pill ${payMsg.ok ? '' : 'gl-pill-accent'}`}>{payMsg.text}</span>
+        </div>}
         <p className="gl-plan-note">
           {pro
-            ? '会员权益已生效，到期后可用兑换码续期。'
-            : '会员已开放，支付通道接入前仅支持兑换码开通。'}
+            ? '会员权益已生效，到期自动续费；不想续费可在 Creem 收据里的客户门户取消。'
+            : '支持 Visa / Mastercard / PayPal / Apple Pay。没有海外卡可用兑换码或联系微信开通。'}
         </p>
       </section>
     </div>
@@ -277,7 +335,7 @@ export default function Subscribe() {
           <div className="gl-pack-points"><Coin size={14} />{p.points} 积分</div>
         </div>)}
       </div>
-      <p className="gl-note">支付系统未开放，暂不支持自助购买；购买方式见下方「兑换码」。</p>
+      <p className="gl-note">积分包暂不支持自助购买，需要时联系微信或使用兑换码。</p>
     </section>
 
     {/* ---------- 兑换码 ---------- */}
@@ -303,7 +361,7 @@ export default function Subscribe() {
         <span className={`gl-pill ${redeemMsg.ok ? '' : 'gl-pill-accent'}`}>{redeemMsg.text}</span>
       </div>}
       <p className="gl-note">
-        支付系统未开放，购买积分可以联系微信{' '}
+        购买积分可以联系微信{' '}
         <button className="gl-wx" onClick={() => void copyWx()} title="点击复制微信号">
           {WX_ID}<Icon name="copy" size={11} />
         </button>
