@@ -6,7 +6,8 @@
  * Hyper3D-Gen2 21（3D 生成，暂未开放入口）
  *  - 新注册送 PRICING.freeTrialUses 积分
  *  - 每日签到 +10（会员双倍 +20/天，会员月上限 600）；已取消「连续 10 天额外 +100」
- *  - 会员已开放：主通道 Creem（US$4/月，卡 / Apple Pay / Google Pay），国内可继续用兑换码或微信人工
+ *  - 会员已开放：主通道 Creem（US$5/月，卡 / Apple Pay / Google Pay）；
+ *    中国内地走兑换码（¥28/月）或微信人工——两条通道价格是分开定的，不要互相折算。
  * 视觉：与账户信息页同一套玻璃材质，靠圆角与间距分组，不画分割线。
  * 所有数字都从 PRICING 读，不在页面里写死。
  * ============================================================ */
@@ -36,8 +37,9 @@ export default function Subscribe() {
   /** 兑换码输入框：会员卡的「用兑换码开通」要滚到这里并聚焦 */
   const redeemRef = useRef<HTMLInputElement>(null);
   /** Creem 结账：跳转收银台前按钮进入 loading；回跳后轮询确认开通结果。
-   *  payingKind 区分是「会员」还是「积分包」在跳转，两个按钮各自显示进度。 */
-  const [payingKind, setPayingKind] = useState<PayKind | null>(null);
+   *  payingKind 区分是「会员」还是「哪一档积分包」在跳转（'pro' / 'credits:2100'），
+   *  三档各有各的按钮，不能共用一个 'credits' 让三个按钮同时转圈。 */
+  const [payingKind, setPayingKind] = useState<string | null>(null);
   /** kind 一并存在消息里：回跳后 payingKind 已随页面重载丢失，只靠它会把
    *  「积分到账」提示渲染到会员卡下面。 */
   const [payMsg, setPayMsg] = useState<{ ok: boolean; text: string; kind: PayKind } | null>(null);
@@ -174,16 +176,17 @@ export default function Subscribe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [a.user?.id]);
 
-  const doPay = async (kind: PayKind) => {
+  const doPay = async (kind: PayKind, points?: number) => {
     if (!a.user) {
       setToast(kind === 'credits' ? '请先登录再购买，积分会记到你的账号' : '请先登录再开通，会员会绑定到你的账号');
       go('/account');
       return;
     }
     if (paying) return;
-    setPayingKind(kind); setPayMsg(null);
+    const key = kind === 'credits' ? `credits:${points || 0}` : 'pro';
+    setPayingKind(key); setPayMsg(null);
     markPayKind(kind);
-    const r = await startCheckout({ uid: a.user.id, email: a.user.email, kind });
+    const r = await startCheckout({ uid: a.user.id, email: a.user.email, kind, points });
     if (!r.ok) { setPayingKind(null); setPayMsg({ ok: false, kind, text: r.message }); return; }
     // 不复位 payingKind：用户可能点浏览器返回，按钮维持「确认中」比闪回可点更诚实
     window.location.href = r.url;
@@ -344,7 +347,7 @@ export default function Subscribe() {
               {payingKind === 'pro' ? t('正在前往支付…', 'Redirecting…') : `立即开通 · US$${PRICING.proMonthlyPriceUSD}${t('/月', '/mo')}`}
             </button>
             <button className="gl-btn gl-btn-soft" style={{ marginTop: 8 }} onClick={goRedeem}>
-              {t('用兑换码开通', 'Activate with code')}
+              {t('兑换码开通', 'Activate with code')}
             </button>
           </>}
         {payMsg && payMsg.kind === 'pro' && <div style={{ marginTop: 10 }}>
@@ -353,7 +356,7 @@ export default function Subscribe() {
         <p className="gl-plan-note">
           {pro
             ? '会员权益已生效，到期自动续费；不想续费可在 Creem 收据里的客户门户取消。'
-            : '支持 Visa / Mastercard / Apple Pay / Google Pay。没有海外卡可用兑换码或联系微信开通。'}
+            : '支持 Visa / Mastercard / Apple Pay / Google Pay。中国内地用户可用兑换码开通。'}
         </p>
       </section>
     </div>
@@ -362,26 +365,23 @@ export default function Subscribe() {
     <section className="gl-card">
       <div className="gl-label">充值积分包 <em>TOP-UP</em></div>
       <div className="gl-packs">
-        <div className="gl-pack hot">
-          <div className="gl-pack-tag">在线可买</div>
-          <div className="gl-pack-price">US${PRICING.creditsPack.priceUSD}</div>
-          <div className="gl-pack-points"><Coin size={14} />{PRICING.creditsPack.points} 积分</div>
-          <button className="gl-btn gl-btn-sm" disabled={paying} onClick={() => void doPay('credits')}>
-            {payingKind === 'credits' ? '正在前往支付…' : '立即购买'}
-          </button>
-        </div>
-        {PRICING.recharge.map((p) => <div className="gl-pack" key={p.price}>
-          <div className="gl-pack-tag">{p.tag} · 人工通道</div>
-          <div className="gl-pack-price">¥{p.price}</div>
-          <div className="gl-pack-points"><Coin size={14} />{p.points} 积分</div>
-        </div>)}
+        {PRICING.creditsPacks.map((p) => (
+          <div className={`gl-pack${p.points === 2100 ? ' hot' : ''}`} key={p.points}>
+            <div className="gl-pack-tag">{p.tag} · 在线可买</div>
+            <div className="gl-pack-price">US${p.priceUSD}</div>
+            <div className="gl-pack-points"><Coin size={14} />{p.points} 积分</div>
+            <button className="gl-btn gl-btn-sm" disabled={paying} onClick={() => void doPay('credits', p.points)}>
+              {payingKind === `credits:${p.points}` ? '正在前往支付…' : '立即购买'}
+            </button>
+          </div>
+        ))}
       </div>
       {payMsg && payMsg.kind === 'credits' && <div style={{ marginTop: 12 }}>
         <span className={`gl-pill ${payMsg.ok ? '' : 'gl-pill-accent'}`}>{payMsg.text}</span>
       </div>}
       <p className="gl-note">
-        US${PRICING.creditsPack.priceUSD} 那一档支持 Visa / Mastercard / Apple Pay / Google Pay 在线支付，付款后积分自动到账；
-        ¥ 价的两档走微信人工或兑换码，没有海外卡也能买。积分永久有效，不随会员到期清零。
+        支持 Visa / Mastercard / Apple Pay / Google Pay 在线支付，付款后积分自动到账；
+        中国内地用户可走微信人工或兑换码。积分永久有效，不随会员到期清零。
       </p>
     </section>
 
@@ -389,7 +389,11 @@ export default function Subscribe() {
     <section className="gl-card">
       <div className="gl-label">兑换码 <em>REDEEM</em></div>
       <p className="gl-sub" style={{ fontSize: 13, marginBottom: 14 }}>
-        有兑换码（内测、活动、邀请奖励）就在这里兑换，积分立即到账。
+        中国内地用户获取会员/积分请联系微信{' '}
+        <button className="gl-wx" onClick={() => void copyWx()} title="点击复制微信号">
+          {WX_ID}<Icon name="copy" size={11} />
+        </button>
+        {' '}购买兑换码。
       </p>
       <div className="gl-redeem">
         <input
@@ -407,13 +411,23 @@ export default function Subscribe() {
       {redeemMsg && <div style={{ marginTop: 12 }}>
         <span className={`gl-pill ${redeemMsg.ok ? '' : 'gl-pill-accent'}`}>{redeemMsg.text}</span>
       </div>}
-      <p className="gl-note">
-        购买积分可以联系微信{' '}
-        <button className="gl-wx" onClick={() => void copyWx()} title="点击复制微信号">
-          {WX_ID}<Icon name="copy" size={11} />
-        </button>
-        ，测试期间所有积分 5 折，并赠送 2 个月标准会员。
-      </p>
+
+      {/* 兑换码价格表：中国内地用户问得最多的就是「多少钱多少积分」，
+          写在兑换入口下面比让他们加微信问一句更省事。数字全部来自 PRICING。 */}
+      <div className="gl-code-price">
+        <div className="gl-code-price-head">中国内地兑换码价格 · CNY</div>
+        <div className="gl-code-price-row">
+          <span>LunaSol 标准会员</span><strong>¥{PRICING.proMonthlyPriceCodeRMB} / 月</strong>
+        </div>
+        {PRICING.creditsPacks.map((p) => (
+          <div className="gl-code-price-row" key={p.points}>
+            <span>{p.points} 积分</span><strong>¥{p.priceRMB}</strong>
+          </div>
+        ))}
+        <div className="gl-code-price-row">
+          <span>自定义积分</span><strong>¥1 = {PRICING.customPointsPerRMB} 积分</strong>
+        </div>
+      </div>
     </section>
   </div>;
 }

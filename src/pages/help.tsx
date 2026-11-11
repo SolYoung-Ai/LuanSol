@@ -17,7 +17,8 @@ import { imageCost, imagePromoLabel } from '../cloud/models';
 type Faq = { q: string; a: React.ReactNode };
 type Group = { id: string; title: string; en: string; items: Faq[] };
 
-const RECHARGE = PRICING.recharge.map((p) => `¥${p.price}=${p.points}`).join(' / ');
+const PACKS_ONLINE = PRICING.creditsPacks.map((p) => `${p.points} 积分 US$${p.priceUSD}`).join(' / ');
+const PACKS_CODE = PRICING.creditsPacks.map((p) => `${p.points}=¥${p.priceRMB}`).join(' / ');
 
 const GROUPS: Group[] = [
   {
@@ -80,11 +81,12 @@ const GROUPS: Group[] = [
       },
       {
         q: '会员包含什么？支付能付吗？',
-        a: <>会员 US${PRICING.proMonthlyPriceUSD}/月（约 ¥{Math.round(PRICING.proMonthlyPriceRMB)}）：签到双倍、全部对话模型、云端跨设备同步与全部历史版本、
+        a: <>会员 US${PRICING.proMonthlyPriceUSD}/月：签到双倍、全部对话模型、云端跨设备同步与全部历史版本、
           PDF / SVG / DXF / ZIP 印刷级导出。订阅页可直接用 <strong>Visa / Mastercard / Apple Pay / Google Pay</strong> 付款，
-          到期自动续费；          没有海外卡可以继续用兑换码或加微信 soyo-ang 开通。
-          积分包：{PRICING.creditsPack.points} 积分 US${PRICING.creditsPack.priceUSD}（在线支付，自动到账），
-          {RECHARGE}（人工通道）。</>,
+          到期自动续费，可随时在账户页取消。
+          中国内地用户可用兑换码开通：<strong>¥{PRICING.proMonthlyPriceCodeRMB}/月</strong>，请联系微信 soyo-ang 购买。
+          积分包在线三档：{PACKS_ONLINE}（付款后自动到账）；
+          兑换码三档：{PACKS_CODE}，自定义积分按 ¥1 = {PRICING.customPointsPerRMB} 积分折算。</>,
       },
     ],
   },

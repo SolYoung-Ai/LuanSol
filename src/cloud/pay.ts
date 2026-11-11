@@ -30,10 +30,13 @@ export function clearPayKind(): void {
   try { sessionStorage.removeItem(KIND_KEY); } catch { /* 忽略 */ }
 }
 
-/** 创建结账会话并返回 Creem 收银台地址。uid 由调用方传入（云函数会做来源与令牌校验）。 */
-export async function startCheckout(opts: { uid: string; email?: string; kind?: PayKind }): Promise<PayStart> {
+/** 创建结账会话并返回 Creem 收银台地址。uid 由调用方传入（云函数会做来源与令牌校验）。
+ *  积分包要带 points：三档同价不同量，服务端按 points 查它自己的产品白名单——
+ *  这里传的是「买哪一档」，不是「给我多少积分」，实际发放量由产品 ID 决定。 */
+export async function startCheckout(opts: { uid: string; email?: string; kind?: PayKind; points?: number }): Promise<PayStart> {
   const base = CLOUD.aiBaseUrl;
   if (!base) return { ok: false, message: '支付服务未配置，请先在账户页联系人工开通' };
+  const kind = opts.kind || 'pro';
   try {
     const r = await fetch(`${base}/pay/checkout`, {
       method: 'POST',
@@ -42,7 +45,11 @@ export async function startCheckout(opts: { uid: string; email?: string; kind?: 
         ...(CLOUD.aiToken ? { 'X-LunaSol-Token': CLOUD.aiToken } : {}),
         'X-CloudBase-Uid': opts.uid,
       },
-      body: JSON.stringify({ email: opts.email || '', kind: opts.kind || 'pro' }),
+      body: JSON.stringify({
+        email: opts.email || '',
+        kind,
+        ...(kind === 'credits' && opts.points ? { pack: opts.points } : {}),
+      }),
     });
     const data = await r.json().catch(() => null) as { ok?: boolean; url?: string; error?: { message?: string } } | null;
     if (!r.ok || !data || !data.ok || !data.url) {

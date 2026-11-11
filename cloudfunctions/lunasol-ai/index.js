@@ -729,8 +729,10 @@ async function handleChat(req, res, body) {
  *   CREEM_API_KEY              Creem 后台 Developers 页
  *   CREEM_WEBHOOK_SECRET       Webhooks 端点详情页
  *   CREEM_PRODUCT_ID           会员（订阅）产品 prod_xxx
- *   CREEM_CREDITS_PRODUCT_ID   积分包（一次性）产品 prod_xxx
- *   CREEM_CREDITS_PER_PACK     每份积分包含多少积分（默认 1000）
+ *   CREEM_CREDIT_PRODUCTS      积分包白名单 JSON：{"prod_xxx":1000,"prod_yyy":2100}。
+ *                              不配则用代码里内置的三档（1000 / 2100 / 3500）。
+ *                              加档位优先配这一项，不用改代码、不用重新部署。
+ *   CREEM_CREDITS_PER_PACK     仅在事件里拿不到产品 ID 时使用的兜底积分量（默认 1000）
  *   PAY_APPLY_SECRET           本函数与数据库函数共享的落库口令
  *   CREEM_TEST_MODE=1          走 test-api.creem.io
  *   PAY_SUCCESS_URL            支付成功后跳回的前端地址（默认正式站点订阅页）
@@ -747,15 +749,66 @@ const PAY_ENV_ID = 'solyoung-d4gpp1f7s4e075f6d';
 const PAY_PUBLISHABLE_KEY_DEFAULT = 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjdhMWU4NzFjLTJjNzMtNDY4Yy04OTQ5LTVlMjMyNDFjM2MxNyJ9.eyJpc3MiOiJodHRwczovL3NvbHlvdW5nLWQ0Z3BwMWY3czRlMDc1ZjZkLmFwLXNoYW5naGFpLnRjYi1hcGkudGVuY2VudGNsb3VkYXBpLmNvbSIsInN1YiI6ImFub24iLCJhdWQiOiJzb2x5b3VuZy1kNGdwcDFmN3M0ZTA3NWY2ZCIsImV4cCI6NDA5NTgyMjQ2MywiaWF0IjoxNzkyMTM5MjYzLCJub25jZSI6IjNKMmNFOXJKUkZXMllOSF9MbkIyMUEiLCJhdF9oYXNoIjoiM0oyY0U5ckpSRlcyWU5IX0xuQjIxQSIsIm5hbWUiOiJBbm9ueW1vdXMiLCJzY29wZSI6ImFub255bW91cyIsInByb2plY3RfaWQiOiJzb2x5b3VuZy1kNGdwcDFmN3M0ZTA3NWY2ZCIsIm1ldGEiOnsicGxhdGZvcm0iOiJQdWJsaXNoYWJsZUtleSJ9LCJyb2xlIjoiYW5vbiIsImlzX2Fub255bW91cyI6dHJ1ZSwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiYW5vbnltb3VzIiwicHJvdmlkZXJzIjpbImFub255bW91cyJdfSwidXNlcl9tZXRhZGF0YSI6eyJuYW1lIjoiQW5vbnltb3VzIn0sInVzZXJfdHlwZSI6IiIsImNsaWVudF90eXBlIjoiY2xpZW50X3VzZXIiLCJpc19zeXN0ZW1fYWRtaW4iOmZhbHNlfQ.Xeks40kq-23Qryw8_XNQbtQOIIP-NmirzVl3ynZ9VhorEdoXL_BjHZpBxXwYsSA7MufdoM14XH9zAxMF031471IbMcyAp5SxYpZ6V0Q3pbvVovyK0ndirDV2C4PFdrhNNHaAKiIFSsKuV-uwcm9FJKRR-KoMK8GSuTImUN7GALieYx3AtBv84hhM-ODw9raRp5oLgcqe5CSLqw6fj2BcEhk78i5EJ5nqdF_i4ESk3ff5t-k4klpalyYVIaK9GUwXWhg6H8r4JYnku8N2AjYzVUq4_pLz9s3EtHMTYn7lYu4H8jK-SqkC86EQKlbGSPYmKqjqkISdqWpkuNUC--BWNA';
 const PAY_PUBLISHABLE_KEY = process.env.LUNASOL_PG_ANON_KEY || PAY_PUBLISHABLE_KEY_DEFAULT;
 
+/** 积分包产品白名单：Creem 产品 ID → 该产品发多少积分。
+ *
+ *  为什么是一张表而不是一个 id：1000 / 2100 / 3500 三档同价不同量，
+ *  用户点哪一档由**产品 ID**决定，绝不接受前端传来的「给我 3500 积分」——
+ *  否则谁都能用 1000 积分那一档的价格买到 3500 积分。
+ *
+ *  内置一份当前上架的三档（产品 ID 不是密钥，它本来就会出现在结账请求里），
+ *  需要增删档位时优先改云函数环境变量 CREEM_CREDIT_PRODUCTS（JSON），不必改代码：
+ *    CREEM_CREDIT_PRODUCTS={"prod_xxx":1000,"prod_yyy":2100}
+ */
+const CREDIT_PACKS_DEFAULT = {
+  prod_7NiVzlPdBAHijnv06eQ0uw: 1000,   // US$13.70
+  prod_1Pu40n8LlNNn3bTOLIY0wR: 2100,   // US$28.00
+  prod_TiM2kUweFHmfqUIukrEUu: 3500,    // US$43.00
+};
+
+function creditPacks() {
+  const raw = String(process.env.CREEM_CREDIT_PRODUCTS || '').trim();
+  if (raw) {
+    try {
+      const src = JSON.parse(raw);
+      const out = {};
+      for (const k of Object.keys(src || {})) {
+        const id = String(k).trim();
+        const n = Math.round(Number(src[k]) || 0);
+        if (id && n > 0) out[id] = Math.min(1000000, n);
+      }
+      if (Object.keys(out).length) return out;
+      console.error('[pay] CREEM_CREDIT_PRODUCTS 为空，回退内置三档');
+    } catch (e) {
+      console.error('[pay] CREEM_CREDIT_PRODUCTS 不是合法 JSON，回退内置三档：', (e && e.message) || e);
+    }
+  }
+  return CREDIT_PACKS_DEFAULT;
+}
+
+/** 按积分数量找产品 ID；points 省略时取最小档（1000），保持旧调用方式可用。 */
+function creditProductFor(points) {
+  const packs = creditPacks();
+  const ids = Object.keys(packs);
+  if (!ids.length) return { productId: '', points: 0 };
+  if (points) {
+    const hit = ids.find((id) => packs[id] === points);
+    if (hit) return { productId: hit, points };
+    return { productId: '', points: 0 };
+  }
+  const smallest = ids.reduce((a, b) => (packs[a] <= packs[b] ? a : b));
+  return { productId: smallest, points: packs[smallest] };
+}
+
 function payCfg() {
   const test = String(process.env.CREEM_TEST_MODE || '') === '1';
   const creditsPerPack = Number(process.env.CREEM_CREDITS_PER_PACK || '') || 1000;
+  const packs = creditPacks();
   return {
+    packs,
     apiKey: String(process.env.CREEM_API_KEY || '').trim(),
     webhookSecret: String(process.env.CREEM_WEBHOOK_SECRET || '').trim(),
     applySecret: String(process.env.PAY_APPLY_SECRET || '').trim(),
     productId: String(process.env.CREEM_PRODUCT_ID || '').trim(),
-    creditsProductId: String(process.env.CREEM_CREDITS_PRODUCT_ID || '').trim(),
     creditsPerPack: Math.max(1, Math.min(1000000, Math.round(creditsPerPack))),
     test,
     base: test ? 'https://test-api.creem.io' : 'https://api.creem.io',
@@ -841,19 +894,28 @@ async function handlePayCheckout(req, res) {
   try { body = await readJsonBody(req, 8 * 1024); } catch { body = {}; }
   const email = String(body.email || '').trim();
 
-  // 产品只认服务端白名单：前端传什么 kind 决定买哪个 prod_，传金额一律无效
+  // 产品只认服务端白名单：前端只能声明「买会员」还是「买哪一档积分」，
+  // 具体对应哪个 prod_、发多少积分，全由这里决定——传金额一律无效。
   const kind = String(body.kind || 'pro') === 'credits' ? 'credits' : 'pro';
-  const productId = kind === 'credits' ? c.creditsProductId : c.productId;
+  const wantPoints = Math.round(Number(body.pack || body.points || 0) || 0);
+  const picked = kind === 'credits'
+    ? creditProductFor(wantPoints)
+    : { productId: c.productId, points: 0 };
+  const productId = picked.productId;
   if (!productId) {
     return sendJson(res, 503, {
-      error: { message: kind === 'credits' ? '积分包还没配置产品 ID，请先联系客服' : '会员产品还没配置完整' },
+      error: {
+        message: kind === 'credits'
+          ? (wantPoints ? `没有 ${wantPoints} 积分这一档，请刷新页面后重试` : '积分包还没配置产品 ID，请先联系客服')
+          : '会员产品还没配置完整',
+      },
     });
   }
 
   const payload = {
     product_id: productId,
     success_url: c.successUrl,
-    metadata: { uid, kind },
+    metadata: { uid, kind, ...(kind === 'credits' ? { points: picked.points } : {}) },
   };
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) payload.customer = { email };
 
@@ -889,7 +951,7 @@ async function handlePayDiag(req, res) {
   if (process.env.LUNASOL_PROXY_TOKEN && String(req.headers['x-lunasol-token'] || '').trim() !== process.env.LUNASOL_PROXY_TOKEN) {
     return sendJson(res, 401, { error: { message: '访问令牌无效' } });
   }
-  const out = { base: c.base, hasKey: Boolean(c.apiKey), dns: null, http: null };
+  const out = { base: c.base, hasKey: Boolean(c.apiKey), dns: null, http: null, products: [] };
   try {
     const dns = require('dns').promises;
     out.dns = await dns.lookup(new URL(c.base).hostname, { all: true }).then((r) => r.map((x) => `${x.address}/${x.family}`)).catch((e) => `ERR ${e.code || e.message}`);
@@ -904,6 +966,27 @@ async function handlePayDiag(req, res) {
     out.http = { status: r.status, ms: Date.now() - t0, body: text.slice(0, 300) };
   } catch (e) {
     out.http = { ms: Date.now() - t0, error: (e && e.message) || String(e), cause: String((e && e.cause && (e.cause.code || e.cause.message)) || '') };
+  }
+  /* 逐个核对配置的产品在 Creem 上的真实标价。这是「界面写 US$5、收银台却收 US$4」
+   * 这类事故的唯一可靠防线：两边数字只有 Creem 说了算。失败不影响上面的连通性结论。 */
+  const ids = [['pro', c.productId]].concat(Object.keys(c.packs).map((id) => [`credits_${c.packs[id]}`, id]));
+  for (const [label, id] of ids) {
+    if (!id) continue;
+    try {
+      const r = await fetch(`${c.base}/v1/products?product_id=${encodeURIComponent(id)}`, { headers: { 'x-api-key': c.apiKey } });
+      const j = await r.json().catch(() => null);
+      out.products.push({
+        label,
+        productId: id,
+        http: r.status,
+        priceCents: j && typeof j.price === 'number' ? j.price : null,
+        currency: (j && j.currency) || null,
+        name: (j && j.name) || null,
+        error: r.ok ? null : String((j && (j.message || j.error)) || '').slice(0, 120) || 'not found',
+      });
+    } catch (e) {
+      out.products.push({ label, productId: id, http: 0, error: (e && e.message) || String(e) });
+    }
   }
   return sendJson(res, 200, out);
 }
@@ -1005,9 +1088,10 @@ async function handleCreemWebhook(req, res) {
   const owner = e.uid || `unresolved:${e.email || e.subscriptionId || 'unknown'}`;
 
   // 积分包与会员走不同落库函数：积分包加 bonus_credits，会员改 period_end。
-  // 判定只认产品 ID，metadata.kind 仅作参考（metadata 是前端声明，可被伪造）。
-  const isCredits = (Boolean(c.creditsProductId) && e.productId === c.creditsProductId)
-    || (!e.productId && e.metaKind === 'credits');
+  // 判定只认产品 ID → 白名单里查这一档发多少积分；metadata.kind 仅在拿不到产品 ID 时兜底
+  // （metadata 是前端声明，可被伪造；产品 ID 是付款时 Creem 认定的，改不了）。
+  const packPoints = (e.productId && c.packs[e.productId]) || 0;
+  const isCredits = packPoints > 0 || (!e.productId && e.metaKind === 'credits');
 
   if (isCredits) {
     // 没有 uid 就不知道该给谁加积分。绝不能落到 unresolved:xxx 这种假账号上，
@@ -1017,7 +1101,9 @@ async function handleCreemWebhook(req, res) {
       return sendJson(res, 200, { ok: true, needsManual: true });
     }
     const sign = e.kind === 'revoke' ? -1 : 1;
-    const credits = sign * c.creditsPerPack * (sign > 0 ? e.quantity : 1);
+    // 退款按原档位扣回；拿不到产品 ID 时才退回单档默认值
+    const perPack = packPoints || c.creditsPerPack;
+    const credits = sign * perPack * (sign > 0 ? e.quantity : 1);
     try {
       const out = await payApply({
         p_secret: c.applySecret,
@@ -1111,8 +1197,8 @@ const server = http.createServer(async (req, res) => {
         webhookReady: Boolean(payCfg().webhookSecret && payCfg().applySecret),
         testMode: payCfg().test,
         productId: payCfg().productId || '',
-        creditsConfigured: Boolean(payCfg().apiKey && payCfg().creditsProductId),
-        creditsProductId: payCfg().creditsProductId || '',
+        creditsConfigured: Boolean(payCfg().apiKey && Object.keys(payCfg().packs).length),
+        creditPacks: Object.keys(payCfg().packs).map((id) => ({ productId: id, points: payCfg().packs[id] })),
         creditsPerPack: payCfg().creditsPerPack,
       },
       // 出图前的内容审核状态：支付通道审核会核对这一项是否真的在跑

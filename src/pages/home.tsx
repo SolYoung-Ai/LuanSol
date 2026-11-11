@@ -13,6 +13,7 @@ import { createEmptyBrief } from '../engine/brief';
 import { createEmptyDraft } from '../v3/draft';
 import { WIZARD_STEPS, stepProgress } from '../v3/steps';
 import { useLang } from '../i18n';
+import { PRICING } from '../cloud/plans';
 
 export default function Home() {
   const { s, update, newProject } = useApp();
@@ -54,23 +55,14 @@ export default function Home() {
     </div>
 
     {/* 价格必须在登录前就能看到：支付通道审核明确要求公开页展示会员与积分价格。
-        直接指向静态页 /pricing/，不用 hash 路由。 */}
+        直接指向静态页 /pricing/，不用 hash 路由。
+        数字一律从 PRICING 读——写死一个 $4 在这里，改价时必然漏掉首屏。 */}
     <a className="v4-home-price" href="./pricing/">
       {t(
-        '会员 US$4/月 · 1000 积分 US$13.7 · 注册送 100 积分',
-        'Membership US$4/mo · 1,000 credits US$13.7 · 100 free credits on sign-up'
+        `会员 US$${PRICING.proMonthlyPriceUSD}/月 · ${PRICING.creditsPacks[0].points} 积分 US$${PRICING.creditsPacks[0].priceUSD} · 注册送 ${PRICING.freeTrialUses} 积分`,
+        `Membership US$${PRICING.proMonthlyPriceUSD}/mo · ${PRICING.creditsPacks[0].points} credits US$${PRICING.creditsPacks[0].priceUSD} · ${PRICING.freeTrialUses} free credits on sign-up`
       )}
     </a>
-
-    {/* 首屏必须能走到法务页：整站页脚在首页是隐藏的（避免与侧栏重复），
-        所以这里单独放一行静态链接，审核员不用猜就能点到。 */}
-    <nav className="v4-home-legal">
-      <a href="./pricing/">{t('价格', 'Pricing')}</a>
-      <a href="./terms/">{t('服务条款', 'Terms')}</a>
-      <a href="./privacy/">{t('隐私说明', 'Privacy')}</a>
-      <a href="./aup/">{t('使用规范', 'AUP')}</a>
-      <a href="./contact/">{t('联系', 'Contact')}</a>
-    </nav>
 
     <Modal open={confirmNew} title={t('你有一份未完成的草稿', 'You have a draft in progress')} onClose={() => setConfirmNew(false)}>
       <p className="modal-p">{t(

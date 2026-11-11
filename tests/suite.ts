@@ -740,7 +740,9 @@ export async function runTests(): Promise<Result[]> {
   });
 
   await t('图像档位 · 促销只作用于 GPT Image 2，且毛利不低于 70%', () => {
-    /* 硬约束：积分净收入 = (US$13.70 − 3.9% − $0.40) × 7.1 ÷ 1000 ≈ ¥0.0906。
+    /* 硬约束：积分净收入 = (US$14.00 − 3.9% − $0.40) × 7.1 ÷ 1000 ≈ ¥0.0927。
+     * 这里故意沿用更低的 ¥0.0906（当年 US$13.70 的口径）算毛利：口径取低，
+     * 涨价时测试不会虚高，降价到 13.7 附近也不至于误报。
      * 任何一档的实付积分 × 0.0906 都必须 ≥ 成本 ÷ 0.30，否则毛利跌破 70%。
      * Seedream 那两档不打折就是因为它本来就贴着成本线，一打折立刻亏。 */
     const RMB_PER_CREDIT = 0.0906;
@@ -861,11 +863,38 @@ export async function runTests(): Promise<Result[]> {
   });
 
   await t('定价口径 · 会员价以美元为唯一权威，RMB 只是测算', () => {
-    A(PRICING.proMonthlyPriceUSD === 4, `美元价应为 4，实际 ${PRICING.proMonthlyPriceUSD}`);
+    A(PRICING.proMonthlyPriceUSD === 5, `美元价应为 5，实际 ${PRICING.proMonthlyPriceUSD}`);
     const derived = +(PRICING.proMonthlyPriceUSD * PRICING.usdToRmb).toFixed(2);
     A(Math.abs(PRICING.proMonthlyPriceRMB - derived) < 1,
       `RMB 测算值应与美元价对得上：${PRICING.proMonthlyPriceRMB} vs ${derived}`);
-    return `US$${PRICING.proMonthlyPriceUSD} ≈ ¥${PRICING.proMonthlyPriceRMB}（按 ${PRICING.usdToRmb} 折算）`;
+    // 中国内地兑换码价是单独定的：必须比美元折算价低，否则没人愿意走人工通道
+    A(PRICING.proMonthlyPriceCodeRMB < PRICING.proMonthlyPriceRMB,
+      `兑换码价 ¥${PRICING.proMonthlyPriceCodeRMB} 不应高于美元折算 ¥${PRICING.proMonthlyPriceRMB}`);
+    return `US$${PRICING.proMonthlyPriceUSD} ≈ ¥${PRICING.proMonthlyPriceRMB}（按 ${PRICING.usdToRmb} 折算）· 兑换码 ¥${PRICING.proMonthlyPriceCodeRMB}`;
+  });
+
+  await t('积分包 · 三档递增、单位价格递减、兑换码价低于美元折算', () => {
+    const packs = PRICING.creditsPacks;
+    A(packs.length === 3, `应有 3 档积分包，实际 ${packs.length}`);
+    for (let i = 0; i < packs.length; i += 1) {
+      const p = packs[i];
+      A(p.points > 0 && p.priceUSD > 0 && p.priceRMB > 0, `第 ${i + 1} 档价格或积分缺失`);
+      // 兑换码价（人民币）必须低于美元折算价：双轨定价的意义就在这里
+      const converted = p.priceUSD * PRICING.usdToRmb;
+      A(p.priceRMB < converted,
+        `${p.points} 积分兑换码价 ¥${p.priceRMB} 高于美元折算 ¥${converted.toFixed(1)}`);
+      if (i > 0) {
+        const prev = packs[i - 1];
+        A(p.points > prev.points, '积分档位必须按积分从少到多排列');
+        // 单位积分价必须递减，否则大包不划算，用户没有买大包的理由
+        A(p.priceUSD / p.points < prev.priceUSD / prev.points,
+          `${p.points} 积分的美元单价不低于 ${prev.points} 积分那档`);
+        A(p.priceRMB / p.points < prev.priceRMB / prev.points,
+          `${p.points} 积分的兑换码单价不低于 ${prev.points} 积分那档`);
+      }
+    }
+    A(PRICING.customPointsPerRMB > 0, '自定义积分比例必须为正');
+    return packs.map((p) => `${p.points}=US$${p.priceUSD}/¥${p.priceRMB}`).join(' / ');
   });
 
   await t('支付回跳 · hash 路由下的参数识别', () => {
