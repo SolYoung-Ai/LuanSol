@@ -285,7 +285,8 @@ interface SubCtx {
 export interface CreditLog {
   id: number;
   owner_id: string;
-  change_type: 'consume' | 'grant' | 'checkin' | 'redeem' | 'refund';
+  /** recharge = 积分包购买（Creem 在线支付写入，见 lunasol_credits_apply） */
+  change_type: 'consume' | 'grant' | 'checkin' | 'redeem' | 'recharge' | 'refund';
   amount: number;
   balance_after: number;
   reason: string;

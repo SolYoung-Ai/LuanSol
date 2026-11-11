@@ -6,7 +6,7 @@
  *   - 会员 US$4/月（Creem 结算，海外卡 / PayPal）：
  *     解锁全部模型 + 云端同步 + 印刷级导出 + 签到双倍，
  *     **不含固定积分包**（积分只来自签到 / 充值 / 兑换码）
- *   - 充值包：¥99=1000 / ¥199=2100 / ¥299=3500（人工/兑换码通道）
+ *   - 积分包：1000 积分 US$13.7（Creem 在线）/ 2100=¥199、3500=¥299（人工通道）
  *   - 消费单价：聊天 0 积分/轮（免费）；Seedream Flash 6 积分/张、Pro 10
  *   - 价格只有一处权威：proMonthlyPriceUSD 是界面展示与 Creem 产品价，
  *     proMonthlyPriceRMB 只是按汇率折算的测算值，不要拿去当售价展示。
@@ -33,9 +33,15 @@ export const PRICING = {
   /** 会员的默认桶：签到双倍后一个月的常规量级（600），比免费版更能反映使用节奏 */
   proCreditBucket: 600,
 
-  /** 充值包 */
+  /** 在线积分包（Creem 一次性付款）：1000 积分 = US$13.7。
+   *  必须与 Creem 后台 prod_7NiVzlPdBAHijnv06eQ0uw 的价格一致，否则用户结账时
+   *  看到的金额与页面不同。改价请先改 Creem 产品价，再改这里。 */
+  creditsPack: { points: 1000, priceUSD: 13.7 },
+
+  /** 人工通道的充值包（人民币，微信 / 兑换码）。
+   *  1000 积分那档已改到在线通道（creditsPack），这里不再重复列，
+   *  避免同一个商品出现 ¥99 与 US$13.7 两个价。 */
   recharge: [
-    { price: 99, points: 1000, tag: '入门' },
     { price: 199, points: 2100, tag: '热门' },
     { price: 299, points: 3500, tag: '超值' },
   ] as const,

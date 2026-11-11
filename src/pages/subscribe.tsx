@@ -14,7 +14,7 @@ import { go } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, getSubscription, isProActive, type CreditLog } from '../cloud/subscription';
-import { startCheckout, payReturnFlag, clearPayReturnFlag } from '../cloud/pay';
+import { startCheckout, payReturnFlag, clearPayReturnFlag, markPayKind, lastPayKind, clearPayKind, type PayKind } from '../cloud/pay';
 import { PRICING } from '../cloud/plans';
 import { IMAGE_MODELS, HYPER3D_COST } from '../cloud/models';
 import { useLang } from '../i18n';
@@ -34,9 +34,13 @@ export default function Subscribe() {
   const [logsOpen, setLogsOpen] = useState(false);
   /** 兑换码输入框：会员卡的「用兑换码开通」要滚到这里并聚焦 */
   const redeemRef = useRef<HTMLInputElement>(null);
-  /** Creem 结账：跳转收银台前按钮进入 loading；回跳后轮询确认开通结果 */
-  const [paying, setPaying] = useState(false);
-  const [payMsg, setPayMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  /** Creem 结账：跳转收银台前按钮进入 loading；回跳后轮询确认开通结果。
+   *  payingKind 区分是「会员」还是「积分包」在跳转，两个按钮各自显示进度。 */
+  const [payingKind, setPayingKind] = useState<PayKind | null>(null);
+  /** kind 一并存在消息里：回跳后 payingKind 已随页面重载丢失，只靠它会把
+   *  「积分到账」提示渲染到会员卡下面。 */
+  const [payMsg, setPayMsg] = useState<{ ok: boolean; text: string; kind: PayKind } | null>(null);
+  const paying = payingKind !== null;
 
   /** 购买积分的对公微信号，点一下复制 */
   const WX_ID = 'soyo-ang';
@@ -113,27 +117,53 @@ export default function Subscribe() {
   };
 
   // 从 Creem 收银台回跳：webhook 到账有几秒延迟，这里轮询数据库最多约 24 秒，
-  // 拿到真实会员状态再收工——否则用户会看到「已付款但仍是免费版」，以为钱白花了。
+  // 拿到真实会员状态 / 积分余额再收工——否则用户会看到「已付款但余额没变」，以为钱白花了。
   useEffect(() => {
     const flag = payReturnFlag();
     const uid = a.user?.id;
     if (!flag.returned || !uid) return;
+    const kind = lastPayKind();
     let cancelled = false;
     let tries = 0;
-    setPayMsg({ ok: true, text: '支付已完成，正在确认订单…' });
+    setPayMsg({
+      ok: true,
+      kind,
+      text: kind === 'credits' ? '支付已完成，正在确认积分到账…' : '支付已完成，正在确认订单…',
+    });
     const tick = async () => {
       if (cancelled) return;
       tries += 1;
-      const got = await getSubscription(uid);
-      if (cancelled) return;
-      if (got.ok && isProActive(got.data)) {
-        await sub.refresh();
-        clearPayReturnFlag();
-        setPayMsg({ ok: true, text: '会员已开通，有效期见上方。' });
-        return;
+      if (kind === 'credits') {
+        // 积分包的到账标志是「近 15 分钟有一条 recharge 明细」，比对比余额更可靠：
+        // 页面重载后拿不到付款前的余额，而明细是幂等的。
+        const logs = await sub.getCreditLogs(8);
+        if (cancelled) return;
+        const fresh = logs.some((l) => l.change_type === 'recharge'
+          && Date.now() - Date.parse(l.created_at) < 15 * 60 * 1000);
+        if (fresh) {
+          await sub.refresh();
+          clearPayReturnFlag(); clearPayKind();
+          setPayMsg({ ok: true, kind: 'credits', text: '积分已到账，余额已更新。' });
+          return;
+        }
+      } else {
+        const got = await getSubscription(uid);
+        if (cancelled) return;
+        if (got.ok && isProActive(got.data)) {
+          await sub.refresh();
+          clearPayReturnFlag(); clearPayKind();
+          setPayMsg({ ok: true, kind: 'pro', text: '会员已开通，有效期见上方。' });
+          return;
+        }
       }
       if (tries >= 8) {
-        setPayMsg({ ok: false, text: '暂未收到支付确认。若已扣款，通常 1 分钟内到账，稍后刷新即可；超过 10 分钟仍未开通请联系客服。' });
+        setPayMsg({
+          ok: false,
+          kind,
+          text: kind === 'credits'
+            ? '暂未收到积分到账确认。若已扣款，通常 1 分钟内到账，稍后刷新即可；超过 10 分钟仍未到账请联系客服。'
+            : '暂未收到支付确认。若已扣款，通常 1 分钟内到账，稍后刷新即可；超过 10 分钟仍未开通请联系客服。',
+        });
         return;
       }
       window.setTimeout(() => void tick(), 3000);
@@ -143,17 +173,18 @@ export default function Subscribe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [a.user?.id]);
 
-  const doPay = async () => {
+  const doPay = async (kind: PayKind) => {
     if (!a.user) {
-      setToast('请先登录再开通，会员会绑定到你的账号');
+      setToast(kind === 'credits' ? '请先登录再购买，积分会记到你的账号' : '请先登录再开通，会员会绑定到你的账号');
       go('/account');
       return;
     }
     if (paying) return;
-    setPaying(true); setPayMsg(null);
-    const r = await startCheckout({ uid: a.user.id, email: a.user.email });
-    if (!r.ok) { setPaying(false); setPayMsg({ ok: false, text: r.message }); return; }
-    // 不复位 paying：用户可能点浏览器返回，按钮维持「确认中」比闪回可点更诚实
+    setPayingKind(kind); setPayMsg(null);
+    markPayKind(kind);
+    const r = await startCheckout({ uid: a.user.id, email: a.user.email, kind });
+    if (!r.ok) { setPayingKind(null); setPayMsg({ ok: false, kind, text: r.message }); return; }
+    // 不复位 payingKind：用户可能点浏览器返回，按钮维持「确认中」比闪回可点更诚实
     window.location.href = r.url;
   };
 
@@ -307,14 +338,14 @@ export default function Subscribe() {
         {pro
           ? <button className="gl-btn gl-btn-soft" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</button>
           : <>
-            <button className="gl-btn" disabled={paying} onClick={() => void doPay()}>
-              {paying ? t('正在前往支付…', 'Redirecting…') : `立即开通 · US$${PRICING.proMonthlyPriceUSD}${t('/月', '/mo')}`}
+            <button className="gl-btn" disabled={paying} onClick={() => void doPay('pro')}>
+              {payingKind === 'pro' ? t('正在前往支付…', 'Redirecting…') : `立即开通 · US$${PRICING.proMonthlyPriceUSD}${t('/月', '/mo')}`}
             </button>
             <button className="gl-btn gl-btn-soft" style={{ marginTop: 8 }} onClick={goRedeem}>
               {t('用兑换码开通', 'Activate with code')}
             </button>
           </>}
-        {payMsg && <div style={{ marginTop: 10 }}>
+        {payMsg && payMsg.kind === 'pro' && <div style={{ marginTop: 10 }}>
           <span className={`gl-pill ${payMsg.ok ? '' : 'gl-pill-accent'}`}>{payMsg.text}</span>
         </div>}
         <p className="gl-plan-note">
@@ -329,13 +360,27 @@ export default function Subscribe() {
     <section className="gl-card">
       <div className="gl-label">充值积分包 <em>TOP-UP</em></div>
       <div className="gl-packs">
-        {PRICING.recharge.map((p) => <div className={`gl-pack ${p.tag === '热门' ? 'hot' : ''}`} key={p.price}>
-          <div className="gl-pack-tag">{p.tag}</div>
+        <div className="gl-pack hot">
+          <div className="gl-pack-tag">在线可买</div>
+          <div className="gl-pack-price">US${PRICING.creditsPack.priceUSD}</div>
+          <div className="gl-pack-points"><Coin size={14} />{PRICING.creditsPack.points} 积分</div>
+          <button className="gl-btn gl-btn-sm" disabled={paying} onClick={() => void doPay('credits')}>
+            {payingKind === 'credits' ? '正在前往支付…' : '立即购买'}
+          </button>
+        </div>
+        {PRICING.recharge.map((p) => <div className="gl-pack" key={p.price}>
+          <div className="gl-pack-tag">{p.tag} · 人工通道</div>
           <div className="gl-pack-price">¥{p.price}</div>
           <div className="gl-pack-points"><Coin size={14} />{p.points} 积分</div>
         </div>)}
       </div>
-      <p className="gl-note">积分包暂不支持自助购买，需要时联系微信或使用兑换码。</p>
+      {payMsg && payMsg.kind === 'credits' && <div style={{ marginTop: 12 }}>
+        <span className={`gl-pill ${payMsg.ok ? '' : 'gl-pill-accent'}`}>{payMsg.text}</span>
+      </div>}
+      <p className="gl-note">
+        US${PRICING.creditsPack.priceUSD} 那一档支持 Visa / Mastercard / PayPal / Apple Pay 在线支付，付款后积分自动到账；
+        ¥ 价的两档走微信人工或兑换码，没有海外卡也能买。积分永久有效，不随会员到期清零。
+      </p>
     </section>
 
     {/* ---------- 兑换码 ---------- */}

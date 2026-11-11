@@ -668,12 +668,18 @@ async function handleChat(req, res, body) {
  * 为什么不用静态 checkout link：静态链接带不了用户身份，付款成功后无法对应到账号。
  *
  * 环境变量（全部只存云函数，绝不进前端）：
- *   CREEM_API_KEY          Creem 后台 Developers 页
- *   CREEM_WEBHOOK_SECRET   Webhooks 端点详情页
- *   CREEM_PRODUCT_ID       prod_xxx
- *   PAY_APPLY_SECRET       本函数与数据库函数共享的落库口令
- *   CREEM_TEST_MODE=1      走 test-api.creem.io
- *   PAY_SUCCESS_URL        支付成功后跳回的前端地址（默认正式站点订阅页）
+ *   CREEM_API_KEY              Creem 后台 Developers 页
+ *   CREEM_WEBHOOK_SECRET       Webhooks 端点详情页
+ *   CREEM_PRODUCT_ID           会员（订阅）产品 prod_xxx
+ *   CREEM_CREDITS_PRODUCT_ID   积分包（一次性）产品 prod_xxx
+ *   CREEM_CREDITS_PER_PACK     每份积分包含多少积分（默认 1000）
+ *   PAY_APPLY_SECRET           本函数与数据库函数共享的落库口令
+ *   CREEM_TEST_MODE=1          走 test-api.creem.io
+ *   PAY_SUCCESS_URL            支付成功后跳回的前端地址（默认正式站点订阅页）
+ *
+ * 两个产品怎么区分：**只认产品 ID 白名单**，不认前端传来的任何金额或名称。
+ * 前端只能传 kind='pro' | 'credits'，具体对应哪个 prod_ 由这里决定——
+ * 否则用户改一个请求体就能用积分包的价格买到会员。
  */
 const crypto = require('crypto');
 const PAY_ENV_ID = 'solyoung-d4gpp1f7s4e075f6d';
@@ -685,11 +691,14 @@ const PAY_PUBLISHABLE_KEY = process.env.LUNASOL_PG_ANON_KEY || PAY_PUBLISHABLE_K
 
 function payCfg() {
   const test = String(process.env.CREEM_TEST_MODE || '') === '1';
+  const creditsPerPack = Number(process.env.CREEM_CREDITS_PER_PACK || '') || 1000;
   return {
     apiKey: String(process.env.CREEM_API_KEY || '').trim(),
     webhookSecret: String(process.env.CREEM_WEBHOOK_SECRET || '').trim(),
     applySecret: String(process.env.PAY_APPLY_SECRET || '').trim(),
     productId: String(process.env.CREEM_PRODUCT_ID || '').trim(),
+    creditsProductId: String(process.env.CREEM_CREDITS_PRODUCT_ID || '').trim(),
+    creditsPerPack: Math.max(1, Math.min(1000000, Math.round(creditsPerPack))),
     test,
     base: test ? 'https://test-api.creem.io' : 'https://api.creem.io',
     successUrl: String(process.env.PAY_SUCCESS_URL || 'https://luna.solyoung.top/#/subscribe?paid=1').trim(),
@@ -725,10 +734,10 @@ function creemSignatureValid(rawBuf, header) {
 }
 
 /** 落库：调数据库函数，开通/回收/幂等都在一个事务里 */
-async function payApply(payload) {
+async function payApply(payload, fn = 'lunasol_pay_apply') {
   const key = PAY_PUBLISHABLE_KEY;
   if (!key) throw new Error('LUNASOL_PG_ANON_KEY 未配置');
-  const r = await fetch(`https://${PAY_ENV_ID}.api.tcloudbasegateway.com/v1/rdb/rest/rpc/lunasol_pay_apply`, {
+  const r = await fetch(`https://${PAY_ENV_ID}.api.tcloudbasegateway.com/v1/rdb/rest/rpc/${fn}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify(payload),
@@ -738,10 +747,27 @@ async function payApply(payload) {
   try { return JSON.parse(text); } catch { return null; }
 }
 
+/** 调 Creem 的兜底：国际链路偶发握手超时（实测冷启动实例上出现过一次
+ *  「fetch failed」在 10s 处），失败一次立刻重试，仍然失败才报错。 */
+async function creemFetch(url, init, tries = 2) {
+  let lastErr = null;
+  for (let i = 0; i < tries; i += 1) {
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(20000) });
+    } catch (e) {
+      lastErr = e;
+      const cause = e && e.cause ? ` (${e.cause.code || e.cause.message || String(e.cause)})` : '';
+      console.error(`[pay] creem 请求失败 第${i + 1}次：${(e && e.message) || e}${cause}`);
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 600));
+    }
+  }
+  throw lastErr;
+}
+
 async function handlePayCheckout(req, res) {
   const c = payCfg();
-  if (!c.apiKey || !c.productId) {
-    return sendJson(res, 503, { error: { message: '支付通道还没配置完成（缺少 Creem 密钥或产品 ID）' } });
+  if (!c.apiKey) {
+    return sendJson(res, 503, { error: { message: '支付通道还没配置完成（缺少 Creem 密钥）' } });
   }
   const origin = String(req.headers.origin || '').trim().replace(/\/+$/, '');
   if (!allowedOrigins().includes(origin)) {
@@ -751,21 +777,30 @@ async function handlePayCheckout(req, res) {
     return sendJson(res, 401, { error: { message: '访问令牌无效' } });
   }
   const uid = String(req.headers['x-cloudbase-uid'] || '').trim();
-  if (!uid) return sendJson(res, 401, { error: { message: '请先登录再开通会员' } });
+  if (!uid) return sendJson(res, 401, { error: { message: '请先登录再购买' } });
 
   let body = {};
   try { body = await readJsonBody(req, 8 * 1024); } catch { body = {}; }
   const email = String(body.email || '').trim();
 
+  // 产品只认服务端白名单：前端传什么 kind 决定买哪个 prod_，传金额一律无效
+  const kind = String(body.kind || 'pro') === 'credits' ? 'credits' : 'pro';
+  const productId = kind === 'credits' ? c.creditsProductId : c.productId;
+  if (!productId) {
+    return sendJson(res, 503, {
+      error: { message: kind === 'credits' ? '积分包还没配置产品 ID，请先联系客服' : '会员产品还没配置完整' },
+    });
+  }
+
   const payload = {
-    product_id: c.productId,
+    product_id: productId,
     success_url: c.successUrl,
-    metadata: { uid },
+    metadata: { uid, kind },
   };
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) payload.customer = { email };
 
   try {
-    const r = await fetch(`${c.base}/v1/checkouts`, {
+    const r = await creemFetch(`${c.base}/v1/checkouts`, {
       method: 'POST',
       headers: { 'x-api-key': c.apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -779,11 +814,48 @@ async function handlePayCheckout(req, res) {
       return sendJson(res, 502, { error: { message: `结账会话创建失败：${String(upstream).slice(0, 120)}` } });
     }
     // 只回传跳转地址，不回传 API Key / 客户信息
-    return sendJson(res, 200, { ok: true, url: data.checkout_url, id: data.id || '' });
+    return sendJson(res, 200, { ok: true, url: data.checkout_url, id: data.id || '', kind });
   } catch (e) {
-    console.error('[pay] checkout 异常', (e && e.message) || e);
+    // fetch 的根因在 e.cause 里（ENOTFOUND / ETIMEDOUT / ECONNRESET），
+    // 只打 "fetch failed" 排查不了问题。
+    const cause = e && e.cause ? ` cause=${e.cause.code || e.cause.message || String(e.cause)}` : '';
+    console.error('[pay] checkout 异常', (e && e.message) || e, cause);
     return sendJson(res, 502, { error: { message: '结账服务暂时不可用，请稍后再试' } });
   }
+}
+
+/** 诊断：云函数能不能连上 Creem。只在配了代理令牌时可调，返回不含密钥。
+ *  用途：结账 502 时区分「密钥错」「网络不通」「Creem 拒绝」三种原因。 */
+async function handlePayDiag(req, res) {
+  const c = payCfg();
+  if (process.env.LUNASOL_PROXY_TOKEN && String(req.headers['x-lunasol-token'] || '').trim() !== process.env.LUNASOL_PROXY_TOKEN) {
+    return sendJson(res, 401, { error: { message: '访问令牌无效' } });
+  }
+  const out = { base: c.base, hasKey: Boolean(c.apiKey), dns: null, http: null };
+  try {
+    const dns = require('dns').promises;
+    out.dns = await dns.lookup(new URL(c.base).hostname, { all: true }).then((r) => r.map((x) => `${x.address}/${x.family}`)).catch((e) => `ERR ${e.code || e.message}`);
+  } catch (e) { out.dns = `ERR ${e.message}`; }
+  const t0 = Date.now();
+  try {
+    const r = await fetch(`${c.base}/v1/products?product_id=${encodeURIComponent(c.productId || '')}`, {
+      method: 'GET',
+      headers: { 'x-api-key': c.apiKey },
+    });
+    const text = await r.text();
+    out.http = { status: r.status, ms: Date.now() - t0, body: text.slice(0, 300) };
+  } catch (e) {
+    out.http = { ms: Date.now() - t0, error: (e && e.message) || String(e), cause: String((e && e.cause && (e.cause.code || e.cause.message)) || '') };
+  }
+  return sendJson(res, 200, out);
+}
+
+/** Creem 的 product 字段在不同事件里可能是字符串 id，也可能是对象。统一取 id。 */
+function productIdOf(v) {
+  if (!v) return '';
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'object') return String(v.id || '').trim();
+  return '';
 }
 
 /** 把 Creem 事件翻译成「开通」或「回收」两种动作。
@@ -801,15 +873,23 @@ function readCreemEvent(evt) {
   ).trim();
   const order = obj.order && typeof obj.order === 'object' ? obj.order : null;
   const amount = Number((order && order.amount_paid) || (order && order.amount) || (obj.last_transaction && obj.last_transaction.amount) || 0);
+  // 产品归属：order.product / subscription.product / object.product 逐级回退
+  const productId = productIdOf(order && order.product)
+    || productIdOf(sub && sub.product)
+    || productIdOf(obj.product)
+    || productIdOf(evt && evt.product);
 
   const base = {
     type,
     uid,
     email: customerEmail,
+    productId,
+    metaKind: String(md.kind || '').trim(),
+    quantity: Math.max(1, Math.round(Number((order && order.quantity) || 1) || 1)),
     amount: Number.isFinite(amount) ? Math.round(amount) : null,
     currency: String((order && order.currency) || (obj.last_transaction && obj.last_transaction.currency) || '').trim() || null,
-    orderId: String((order && order.id) || (obj.last_transaction && obj.last_transaction.order) || '').trim() || null,
-    subscriptionId: String((sub && sub.id) || obj.id || '').trim() || null,
+    orderId: String((order && order.id) || (obj.last_transaction && obj.last_transaction.order) || obj.id || '').trim() || null,
+    subscriptionId: String((sub && sub.id) || (obj.subscription && typeof obj.subscription === 'string' ? obj.subscription : '') || '').trim() || null,
     periodEnd: periodEnd || null,
   };
 
@@ -859,6 +939,43 @@ async function handleCreemWebhook(req, res) {
   // 拿不到 uid 说明会话不是本函数创建的（例如后台手工开单）。落一条待人工处理的记录，
   // 仍然返回 200 —— 返回 5xx 只会让 Creem 反复重投同一件处理不了的事。
   const owner = e.uid || `unresolved:${e.email || e.subscriptionId || 'unknown'}`;
+
+  // 积分包与会员走不同落库函数：积分包加 bonus_credits，会员改 period_end。
+  // 判定只认产品 ID，metadata.kind 仅作参考（metadata 是前端声明，可被伪造）。
+  const isCredits = (Boolean(c.creditsProductId) && e.productId === c.creditsProductId)
+    || (!e.productId && e.metaKind === 'credits');
+
+  if (isCredits) {
+    // 没有 uid 就不知道该给谁加积分。绝不能落到 unresolved:xxx 这种假账号上，
+    // 那会凭空建出一行订阅；记日志留痕，返回 200 避免 Creem 反复重投。
+    if (!e.uid) {
+      console.error('[pay] 积分包事件缺少 uid，需人工补积分：order=' + e.orderId, 'email=' + e.email);
+      return sendJson(res, 200, { ok: true, needsManual: true });
+    }
+    const sign = e.kind === 'revoke' ? -1 : 1;
+    const credits = sign * c.creditsPerPack * (sign > 0 ? e.quantity : 1);
+    try {
+      const out = await payApply({
+        p_secret: c.applySecret,
+        p_owner_id: e.uid,
+        p_event_id: eventId,
+        p_credits: credits,
+        p_amount: e.amount,
+        p_currency: e.currency,
+        p_order_id: e.orderId,
+        p_raw: evt,
+      }, 'lunasol_credits_apply');
+      if (!out || out.ok !== true) {
+        console.error('[pay] 积分落库被拒：', JSON.stringify(out).slice(0, 200));
+        return sendJson(res, 500, { error: { message: 'credits apply rejected' } });
+      }
+      console.log('[pay] 积分已处理', e.type, 'credits=' + credits, 'uid=' + (e.uid ? e.uid.slice(0, 8) + '…' : 'none'), out.duplicate ? '(重复)' : '');
+      return sendJson(res, 200, { ok: true, kind: 'credits', credits, duplicate: Boolean(out.duplicate) });
+    } catch (err) {
+      console.error('[pay] 积分落库失败：', (err && err.message) || err);
+      return sendJson(res, 500, { error: { message: 'credits apply failed' } });
+    }
+  }
 
   try {
     const out = await payApply({
@@ -916,6 +1033,9 @@ const server = http.createServer(async (req, res) => {
         webhookReady: Boolean(payCfg().webhookSecret && payCfg().applySecret),
         testMode: payCfg().test,
         productId: payCfg().productId || '',
+        creditsConfigured: Boolean(payCfg().apiKey && payCfg().creditsProductId),
+        creditsProductId: payCfg().creditsProductId || '',
+        creditsPerPack: payCfg().creditsPerPack,
       },
     });
   }
@@ -925,6 +1045,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && pathname.endsWith('/pay/creem/webhook')) {
     return handleCreemWebhook(req, res);
+  }
+  if (pathname.endsWith('/pay/diag')) {
+    return handlePayDiag(req, res);
   }
 
   const isChat = pathname.endsWith('/chat/completions') || pathname === '/' || pathname.endsWith('/lunasol-ai');
