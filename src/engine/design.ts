@@ -8,6 +8,7 @@ import type { StyleConfig } from '../v3/styles';
 import { encodeBarcode } from '../v3/barcode';
 import { faceSizes } from './structure';
 import { clamp, escapeXml, ptToMm, readableOn, round, seeded, uid, wrapText } from './utils';
+import { currentLang, tl } from '../langStore';
 
 export const FONTS = [
   { id: '"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif', label: '现代黑体' },
@@ -336,17 +337,26 @@ export interface ClassifiedText { role: TextRole; text: string; placeholder?: bo
 export function classifyText(b: DesignBrief): ClassifiedText[] {
   const out: ClassifiedText[] = [
     { role: 'brand', text: b.brand || 'LunaSol', placeholder: !b.brand },
-    { role: 'product', text: b.product ? `${b.product}${/茶|咖啡|礼|盒|袋|贴/.test(b.product) ? '' : ''}` : '精选好物', placeholder: !b.product },
+    { role: 'product', text: b.product ? `${b.product}${/茶|咖啡|礼|盒|袋|贴/.test(b.product) ? '' : ''}` : tl('精选好物', 'Featured pick'), placeholder: !b.product },
     { role: 'tagline', text: b.tagline || suggestTagline(b), placeholder: !b.tagline },
-    { role: 'info', text: b.spec ? `净含量 ${b.spec.replace(/净含量[:：]?/, '')}` : '净含量：请填写', placeholder: !b.spec },
-    { role: 'info', text: b.description || '产品说明：请替换为真实介绍文字', placeholder: !b.description },
-    { role: 'legal', text: '配料 / 产地 / 保质期 / 生产信息：请按实际核实后填写', placeholder: true },
+    { role: 'info', text: b.spec ? `净含量 ${b.spec.replace(/净含量[:：]?/, '')}` : tl('净含量：请填写', 'Net weight: to fill in'), placeholder: !b.spec },
+    { role: 'info', text: b.description || tl('产品说明：请替换为真实介绍文字', 'Product description: replace with real copy'), placeholder: !b.description },
+    { role: 'legal', text: tl('配料 / 产地 / 保质期 / 生产信息：请按实际核实后填写', 'Ingredients / origin / shelf life / production details: verify and fill in'), placeholder: true },
   ];
   for (const t of b.extraText) out.push({ role: 'custom', text: t });
   return out;
 }
 
 export function suggestTagline(b: DesignBrief) {
+  // 没有用户文案时给的示例宣传语：英文界面下给英文，避免「英文界面 + 中文罐头文案」
+  if (currentLang() === 'en') {
+    if (/茶|tea/i.test(b.product)) return 'A quiet cup of the mountains';
+    if (/咖啡|coffee/i.test(b.product)) return 'Make every day taste better';
+    if (/礼|文创|gift/i.test(b.product)) return 'Wrapped with care';
+    if (/美妆|护肤|skin|beauty/i.test(b.product)) return 'A little calm for your skin';
+    if (/食|零食|果|snack/i.test(b.product)) return 'Good ingredients, simply made';
+    return 'A little better, every day';
+  }
   if (/茶/.test(b.product)) return '一盏山野，慢享自然';
   if (/咖啡/.test(b.product)) return '把日常，冲得香一点';
   if (/礼|文创/.test(b.product)) return '把心意，好好包起来';
@@ -354,6 +364,17 @@ export function suggestTagline(b: DesignBrief) {
   if (/食|零食|果/.test(b.product)) return '好原料，简单做';
   return '为日常，做一点好东西';
 }
+
+/* 图层名是给用户在图层列表里看的「界面文字」，英文界面下要跟着变；
+ * 包装上真正印出来的文字（classifyText 的 text）不在这里处理——
+ * 那是设计内容，只在字段为空、属于占位符时才给英文版本。 */
+const LAYER_EN: Record<string, string> = {
+  品牌名称: 'Brand name', 产品名称: 'Product name', 宣传语: 'Tagline', 规格: 'Spec',
+  印章: 'Seal', 细分割线: 'Divider', 分隔线: 'Divider', 强调线: 'Accent line',
+  主插画: 'Main illustration', 点缀: 'Accent motif', 网格: 'Grid', 品牌色块: 'Brand block',
+  标题底板: 'Title plate', 背面品牌: 'Back brand', 附加文字: 'Extra text', 信息文字: 'Info text',
+};
+const nm = (zh: string) => (currentLang() === 'en' ? LAYER_EN[zh] || zh : zh);
 
 const baseLayer = (name: string, x: number, y: number, w: number, h: number) => ({
   id: uid('ly'), name, x, y, w, h, rotation: 0, opacity: 1, locked: false,
@@ -439,40 +460,40 @@ function buildFace(id: FaceId, spec: FaceSpec, b: DesignBrief, p: Palette, schem
 
   if (scheme === 'minimal') {
     if (id === 'front' || id === 'top' || isSmall) {
-      layers.push(makeShape('细分割线', 'line', { x: m, y: h * 0.30, w: innerW, h: 1 }, { fill: p.primary, opacity: 0.5 }));
-      layers.push(makeText('品牌名称', brand.text, 'brand', { x: m, y: h * 0.10, w: innerW, h: h * 0.17 }, {
+      layers.push(makeShape(nm('细分割线'), 'line', { x: m, y: h * 0.30, w: innerW, h: 1 }, { fill: p.primary, opacity: 0.5 }));
+      layers.push(makeText(nm('品牌名称'), brand.text, 'brand', { x: m, y: h * 0.10, w: innerW, h: h * 0.17 }, {
         fontFamily: font, fontSize: S, fontWeight: 500, color: p.ink, align: id === 'front' ? 'center' : 'left', letterSpacing: 0.16, lineHeight: 1.2, locked: false,
       }));
-      layers.push(makeText('产品名称', product.text, 'product', { x: m, y: h * 0.38, w: innerW, h: h * 0.16 }, {
+      layers.push(makeText(nm('产品名称'), product.text, 'product', { x: m, y: h * 0.38, w: innerW, h: h * 0.16 }, {
         fontFamily: font, fontSize: S * 0.62, fontWeight: 400, color: p.ink, align: 'center', letterSpacing: 0.22, lineHeight: 1.3, locked: false,
       }));
-      layers.push(makeShape('印章', 'seal', { x: w - m - Math.min(w, h) * 0.13, y: h * 0.54, w: Math.min(w, h) * 0.13, h: Math.min(w, h) * 0.13 }, { fill: p.primary, opacity: 0.9 }));
-      if (!isSmall) layers.push(makeText('宣传语', tagline.text, 'tagline', { x: m, y: h * 0.72, w: innerW, h: h * 0.12 }, { fontFamily: font, fontSize: S * 0.31, color: p.ink, align: 'center', letterSpacing: 0.1 }));
-      layers.push(makeText('规格', infos[0].text, 'info', { x: m, y: h * 0.88, w: innerW, h: h * 0.08 }, { fontFamily: FONTS[0].id, fontSize: 7, color: p.muted, align: 'center', placeholder: infos[0].placeholder }));
+      layers.push(makeShape(nm('印章'), 'seal', { x: w - m - Math.min(w, h) * 0.13, y: h * 0.54, w: Math.min(w, h) * 0.13, h: Math.min(w, h) * 0.13 }, { fill: p.primary, opacity: 0.9 }));
+      if (!isSmall) layers.push(makeText(nm('宣传语'), tagline.text, 'tagline', { x: m, y: h * 0.72, w: innerW, h: h * 0.12 }, { fontFamily: font, fontSize: S * 0.31, color: p.ink, align: 'center', letterSpacing: 0.1 }));
+      layers.push(makeText(nm('规格'), infos[0].text, 'info', { x: m, y: h * 0.88, w: innerW, h: h * 0.08 }, { fontFamily: FONTS[0].id, fontSize: 7, color: p.muted, align: 'center', placeholder: infos[0].placeholder }));
     } else {
       layers.push(...buildInfoFace(spec, b, p, font, S, texts));
     }
   } else if (scheme === 'illustration') {
     const motif: ShapeKind = /山水|云|水墨/.test(b.motif) ? 'mountain' : /植物|花|叶/.test(b.motif) ? 'botanical' : /几何|条纹|波点/.test(b.motif) ? 'stripes' : 'mountain';
-    layers.push(makeShape('主插画', motif, { x: 0, y: h * 0.25, w, h: h * 0.75 }, { fill: p.primary, opacity: 0.95, seed: 31 }));
-    layers.push(makeShape('点缀', 'sun', { x: w * 0.62, y: h * 0.06, w: w * 0.3, h: h * 0.24 }, { fill: p.accent, opacity: 0.7 }));
-    layers.push(makeText('品牌名称', brand.text, 'brand', { x: m, y: h * 0.07, w: innerW * 0.66, h: h * 0.14 }, { fontFamily: font, fontSize: S * 0.78, fontWeight: 600, color: p.ink, locked: false }));
+    layers.push(makeShape(nm('主插画'), motif, { x: 0, y: h * 0.25, w, h: h * 0.75 }, { fill: p.primary, opacity: 0.95, seed: 31 }));
+    layers.push(makeShape(nm('点缀'), 'sun', { x: w * 0.62, y: h * 0.06, w: w * 0.3, h: h * 0.24 }, { fill: p.accent, opacity: 0.7 }));
+    layers.push(makeText(nm('品牌名称'), brand.text, 'brand', { x: m, y: h * 0.07, w: innerW * 0.66, h: h * 0.14 }, { fontFamily: font, fontSize: S * 0.78, fontWeight: 600, color: p.ink, locked: false }));
     if (id === 'front' || id === 'top' || isSmall) {
-      layers.push(makeShape('标题底板', 'rect', { x: m, y: h * 0.68, w: innerW, h: h * 0.19 }, { fill: p.bg, opacity: 0.86, rx: 1.5 }));
-      layers.push(makeText('产品名称', product.text, 'product', { x: m + 3, y: h * 0.69, w: innerW - 6, h: h * 0.12 }, { fontFamily: font, fontSize: S * 0.7, fontWeight: 600, color: p.ink, locked: false }));
-      layers.push(makeText('宣传语', tagline.text, 'tagline', { x: m + 3, y: h * 0.81, w: innerW - 6, h: h * 0.06 }, { fontSize: S * 0.3, color: p.ink }));
-      layers.push(makeText('规格', infos[0].text, 'info', { x: m, y: h * 0.91, w: innerW, h: h * 0.06 }, { fontSize: 7, color: p.ink, align: 'center', placeholder: infos[0].placeholder }));
+      layers.push(makeShape(nm('标题底板'), 'rect', { x: m, y: h * 0.68, w: innerW, h: h * 0.19 }, { fill: p.bg, opacity: 0.86, rx: 1.5 }));
+      layers.push(makeText(nm('产品名称'), product.text, 'product', { x: m + 3, y: h * 0.69, w: innerW - 6, h: h * 0.12 }, { fontFamily: font, fontSize: S * 0.7, fontWeight: 600, color: p.ink, locked: false }));
+      layers.push(makeText(nm('宣传语'), tagline.text, 'tagline', { x: m + 3, y: h * 0.81, w: innerW - 6, h: h * 0.06 }, { fontSize: S * 0.3, color: p.ink }));
+      layers.push(makeText(nm('规格'), infos[0].text, 'info', { x: m, y: h * 0.91, w: innerW, h: h * 0.06 }, { fontSize: 7, color: p.ink, align: 'center', placeholder: infos[0].placeholder }));
     } else layers.push(...buildInfoFace(spec, b, p, font, S, texts));
   } else {
     const bandH = h * 0.2;
-    layers.push(makeShape('品牌色块', 'rect', { x: 0, y: 0, w, h: bandH }, { fill: p.primary }));
-    layers.push(makeShape('网格', 'grid', { x: 0, y: bandH, w, h: h - bandH }, { fill: p.ink, opacity: 0.14, strokeWidth: 0.25 }));
-    layers.push(makeText('品牌名称', brand.text, 'brand', { x: m, y: bandH * 0.22, w: innerW, h: bandH * 0.62 }, { fontFamily: FONTS[3].id, fontSize: S * 0.62, fontWeight: 700, color: p.bg, letterSpacing: 0.12, locked: false }));
+    layers.push(makeShape(nm('品牌色块'), 'rect', { x: 0, y: 0, w, h: bandH }, { fill: p.primary }));
+    layers.push(makeShape(nm('网格'), 'grid', { x: 0, y: bandH, w, h: h - bandH }, { fill: p.ink, opacity: 0.14, strokeWidth: 0.25 }));
+    layers.push(makeText(nm('品牌名称'), brand.text, 'brand', { x: m, y: bandH * 0.22, w: innerW, h: bandH * 0.62 }, { fontFamily: FONTS[3].id, fontSize: S * 0.62, fontWeight: 700, color: p.bg, letterSpacing: 0.12, locked: false }));
     if (id === 'front' || id === 'top' || isSmall) {
-      layers.push(makeText('产品名称', product.text, 'product', { x: m, y: h * 0.30, w: innerW, h: h * 0.22 }, { fontFamily: font, fontSize: S * 0.95, fontWeight: 700, color: p.ink, letterSpacing: 0.02, locked: false }));
-      layers.push(makeShape('强调线', 'line', { x: m, y: h * 0.56, w: innerW * 0.28, h: 1 }, { fill: p.accent }));
-      layers.push(makeText('宣传语', tagline.text, 'tagline', { x: m, y: h * 0.62, w: innerW, h: h * 0.12 }, { fontSize: S * 0.34, color: p.ink }));
-      layers.push(makeText('规格', infos[0].text, 'info', { x: m, y: h * 0.86, w: innerW, h: h * 0.08 }, { fontSize: 7.5, color: p.muted, placeholder: infos[0].placeholder }));
+      layers.push(makeText(nm('产品名称'), product.text, 'product', { x: m, y: h * 0.30, w: innerW, h: h * 0.22 }, { fontFamily: font, fontSize: S * 0.95, fontWeight: 700, color: p.ink, letterSpacing: 0.02, locked: false }));
+      layers.push(makeShape(nm('强调线'), 'line', { x: m, y: h * 0.56, w: innerW * 0.28, h: 1 }, { fill: p.accent }));
+      layers.push(makeText(nm('宣传语'), tagline.text, 'tagline', { x: m, y: h * 0.62, w: innerW, h: h * 0.12 }, { fontSize: S * 0.34, color: p.ink }));
+      layers.push(makeText(nm('规格'), infos[0].text, 'info', { x: m, y: h * 0.86, w: innerW, h: h * 0.08 }, { fontSize: 7.5, color: p.muted, placeholder: infos[0].placeholder }));
     } else layers.push(...buildInfoFace(spec, b, p, font, S, texts));
   }
   /* 风格纹样置于所有文字图层之下。
@@ -492,8 +513,8 @@ function buildInfoFace(spec: FaceSpec, b: DesignBrief, p: Palette, font: string,
   const m = Math.min(8, Math.max(3, Math.min(w, h) * 0.06));
   const innerW = w - m * 2;
   const out: Layer[] = [
-    makeText('背面品牌', texts[0].text, 'brand', { x: m, y: h * 0.07, w: innerW, h: h * 0.1 }, { fontFamily: font, fontSize: S * 0.45, color: p.ink, locked: false }),
-    makeShape('分隔线', 'line', { x: m, y: h * 0.18, w: innerW, h: 1 }, { fill: p.primary, opacity: 0.6 }),
+    makeText(nm('背面品牌'), texts[0].text, 'brand', { x: m, y: h * 0.07, w: innerW, h: h * 0.1 }, { fontFamily: font, fontSize: S * 0.45, color: p.ink, locked: false }),
+    makeShape(nm('分隔线'), 'line', { x: m, y: h * 0.18, w: innerW, h: 1 }, { fill: p.primary, opacity: 0.6 }),
   ];
   const info = texts.filter((t) => t.role === 'info' || t.role === 'legal' || t.role === 'custom');
   let y = h * 0.23;
