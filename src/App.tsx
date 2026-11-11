@@ -31,6 +31,7 @@ const Luna = lazy(() => import('./pages/luna'));
 const Start = lazy(() => import('./pages/start'));
 const Terms = lazy(() => import('./pages/legal').then((m) => ({ default: m.Terms })));
 const Privacy = lazy(() => import('./pages/legal').then((m) => ({ default: m.Privacy })));
+const AcceptableUse = lazy(() => import('./pages/legal').then((m) => ({ default: m.AcceptableUse })));
 const Studio = lazy(() => import('./pages/studio'));
 const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
@@ -43,6 +44,9 @@ function Footer() {
       <a href="#/workspace">工作台</a>
       <a href="#/market">审美市场</a>
       <a href="#/subscribe">会员说明</a>
+      <a href="#/terms">服务条款</a>
+      <a href="#/privacy">隐私说明</a>
+      <a href="#/aup">使用规范</a>
     </div>
     <span className="footer-min-copy">© 2026 LunaSol · 从想法，到一件作品</span>
   </div></footer>;
@@ -110,6 +114,7 @@ export default function App() {
   else if (path === '/start' || path === '/home') page = <Start />;
   else if (path === '/terms') page = <Terms />;
   else if (path === '/privacy') page = <Privacy />;
+  else if (path === '/aup') page = <AcceptableUse />;
   else if (path === '/luna') page = <Luna />;
   else if (path === '/studio') page = <Studio />;
   else if (path === '/admin') page = <Admin />;

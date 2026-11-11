@@ -507,6 +507,50 @@ function downloadToBase64(fileUrl) {
   });
 }
 
+/** Creem 内容审核（平台硬性要求）：任何出图请求都必须先筛提示词。
+ *  - allow          → 放行
+ *  - deny / flag    → 阻止，绝不发给模型
+ *  - 超时 / 5xx     → 默认也阻止（fail-closed），只有 MODERATION_STRICT=0 才应急放行
+ *  只筛用户自己写的文本，不拼模板，避免为固定文案重复计费（$0.30/1000 字符单位）。 */
+async function moderatePrompt(prompt) {
+  const c = payCfg();
+  if (String(process.env.MODERATION_ENFORCE || '1') === '0') return { ok: true, skipped: 'disabled' };
+  if (!c.apiKey) return { ok: true, skipped: 'no-key' };
+  const strict = String(process.env.MODERATION_STRICT || '1') !== '0';
+
+  const attempt = async () => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    try {
+      const r = await fetch(`${c.base}/v1/moderation/prompt`, {
+        method: 'POST',
+        headers: { 'x-api-key': c.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt.slice(0, 4000), external_id: `lunasol-${Date.now()}` }),
+        signal: ctrl.signal,
+      });
+      const text = await r.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch { /* 保留原文 */ }
+      if (!r.ok) throw new Error(`${r.status}: ${String((data && (data.message || data.error)) || text).slice(0, 120)}`);
+      return { decision: String((data && data.decision) || '').toLowerCase() };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  try {
+    let out;
+    try { out = await attempt(); }
+    catch { out = await attempt(); }   // 国际链路偶发握手失败，重试一次
+    if (out.decision === 'allow') return { ok: true };
+    return { ok: false, blocked: true, decision: out.decision || 'unknown' };
+  } catch (e) {
+    console.error('[moderation] 审核调用失败', (e && e.message) || e);
+    if (!strict) return { ok: true, skipped: 'error' };
+    return { ok: false, blocked: false, error: true };
+  }
+}
+
 async function handleImage(req, res, body) {
   const token = process.env.LUNASOL_PROXY_TOKEN || '';
   if (!token || String(req.headers['x-lunasol-token'] || '') !== token) {
@@ -517,6 +561,19 @@ async function handleImage(req, res, body) {
 
   const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, 2000) : '';
   if (!prompt) return sendJson(res, 400, { error: { message: '缺少 prompt' } });
+
+  // 审核放在档位校验之前：违规提示词无论选哪个档位都直接拒绝，不消耗任何上游额度
+  const mod = await moderatePrompt(prompt);
+  if (!mod.ok) {
+    return sendJson(res, mod.blocked ? 403 : 503, {
+      error: {
+        code: mod.blocked ? 'moderation_blocked' : 'moderation_unavailable',
+        message: mod.blocked
+          ? '这段描述未通过内容审核，无法生成图片。请去掉涉及色情、暴力、他人肖像或侵权的内容后重试。'
+          : '内容审核服务暂时不可用，请稍后重试。',
+      },
+    });
+  }
 
   // 档位必须命中映射表。传表外的值直接拒绝，绝不做「回落到 Flash」这种悄悄换模型的事：
   // 前端按档位扣积分，一旦静默回落，用户付了 GPT Image 2 的钱却拿到 Seedream 的图。

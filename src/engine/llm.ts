@@ -9,6 +9,15 @@ import { CancelledError } from './cancel';
 
 const preset = deepSeekReady ? deepSeekPreset() : null;
 
+/** 不可重试的失败：内容审核拦截、参数错误。
+ *  重试只会把同一段违规提示词再送审一次，对用户没有任何帮助。 */
+export class FatalAIError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FatalAIError';
+  }
+}
+
 export const DEFAULT_AI: AISettings = {
   mode: preset ? 'proxy' : 'off',
   baseUrl: preset ? preset.baseUrl : 'https://api.openai.com/v1',
@@ -131,8 +140,8 @@ async function withRetry<T>(fn: () => Promise<T>, retries: number, signal?: Abor
   for (let i = 0; i <= Math.max(0, retries); i++) {
     try { return await fn(); } catch (e) {
       last = e;
-      // 用户点了取消 / 超时：立刻结束，不要偷偷再发一次请求（那会照样扣钱）
-      if (e instanceof CancelledError || signal?.aborted) throw e;
+      // 用户点了取消 / 超时 / 命中审核：立刻结束，不要偷偷再发一次请求（那会照样扣钱）
+      if (e instanceof CancelledError || e instanceof FatalAIError || signal?.aborted) throw e;
       if (i < retries) await new Promise((r) => setTimeout(r, 500 * (i + 1)));
     }
   }
@@ -255,7 +264,18 @@ export async function llmImage(prompt: string, s: AISettings): Promise<{ src: st
         body: JSON.stringify({ model: s.imageModel.trim() || 'gpt-image-1', prompt, n: 1, size: '1024x1024', response_format: 'b64_json' }),
         signal: ctrl.signal,
       });
-      if (!res.ok) throw new Error(`图像接口返回 ${res.status}：${(await res.text()).slice(0, 180)}`);
+      if (!res.ok) {
+        // 云函数在出图前会做内容审核：403 = 提示词被拦，400 = 参数问题，都不该重试
+        const raw = await res.text();
+        let msg = '';
+        try {
+          const j = JSON.parse(raw);
+          msg = String(j?.error?.message || j?.message || '');
+        } catch { /* 不是 JSON，用原文 */ }
+        const text = msg || raw.slice(0, 180);
+        if (res.status === 403 || res.status === 400) throw new FatalAIError(text);
+        throw new Error(`图像接口返回 ${res.status}：${text}`);
+      }
       const data = await res.json();
       const item = data?.data?.[0];
       let src: string | undefined;
