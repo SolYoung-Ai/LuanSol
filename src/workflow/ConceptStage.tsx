@@ -159,7 +159,7 @@ export default function ConceptStage() {
 
   /** 单张重新生成 */
   const regenerate = async (img: ConceptImage) => {
-    // 会员到期后仍停在上次选的 GPT Image 2：按当前身份归一，避免按 86/93 积分下单
+    // 会员到期后仍停在上次选的 GPT Image 2：按当前身份归一，避免按会员档价格下单
     const tier = resolveTier(draftTier, sub.isPro);
     if (tier !== draftTier) setDraftTier(tier);
     const cost = tierCost(tier);

@@ -196,7 +196,8 @@ function arkKey() {
  * B.AI 提供 OpenAI 兼容网关，Base URL 固定 https://api.b.ai/v1。
  * GPT Image 2 按「输入 token 档位」计费：纯文字输入 5，带参考图输入 8，
  * 因此前端分两个档位（gpt2-text / gpt2-ref），由这里映射到同一个真实模型 ID，
- * 但前端扣分不同（86 / 93）——映射写错就会扣错积分，改动前先核对这张表。
+ * 但前端扣分不同（改图档更贵）——映射写错就会扣错积分，改动前先核对这张表；
+ * 具体积分以 src/cloud/models.ts 为准，这里不写死数字，避免改价后注释变成错的。
  */
 const BAI_BASE_URL = (process.env.BAI_BASE_URL || 'https://api.b.ai/v1').replace(/\/+$/, '');
 const BAI_IMAGE_MODEL = process.env.BAI_IMAGE_MODEL || 'gpt-image-2';

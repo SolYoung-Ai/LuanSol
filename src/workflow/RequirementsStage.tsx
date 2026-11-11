@@ -12,6 +12,7 @@ import type { ProductInfo } from '../types';
 import { useApp } from '../store';
 import ReferenceUploader from './components/ReferenceUploader';
 import { Icon } from '../components/icons';
+import { imageCost } from '../cloud/models';
 
 /** 主题色预设：覆盖常见包装调性，用户也可自定义取色 */
 const PRESET_COLORS = [
@@ -253,7 +254,7 @@ export default function RequirementsStage() {
           <Icon name="spark" size={16} /> {submitting ? '正在进入…' : '开始 AI 设计'}
         </button>
       </div>
-      <p className="wf-foot-note">下一步会按 6 积分的档位生成 3 张完整包装效果图，可单张重新生成。</p>
+      <p className="wf-foot-note">下一步会按 {imageCost('flash')} 积分的档位生成 3 张完整包装效果图，可单张重新生成。</p>
     </div>
   );
 }

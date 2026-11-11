@@ -333,7 +333,7 @@ function useChatStoreState(): ChatStore {
   /* ----------------------------- 切换生图档 ----------------------------- */
   const setTier = useCallback((tier: ImageTier) => {
     // 会员专属档（GPT Image 2）不让免费用户选中：界面已经灰显，这里再兜一层，
-    // 免得从别的入口（快捷键 / 老状态）绕过界面把 86/93 积分的档位设进来
+    // 免得从别的入口（快捷键 / 老状态）绕过界面把会员档设进来
     if (isProOnlyTier(tier) && !sub.isPro) {
       setToast('GPT Image 2 为会员专属生图模型，开通会员后可用');
       return;

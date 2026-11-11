@@ -19,7 +19,7 @@ import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
 import { go } from '../ui';
 import { LoginDialog } from '../cloud/LoginDialog';
-import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageModel, resolveTier } from '../cloud/models';
+import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageListCost, imageModel, imagePromoLabel, isPromoTier, resolveTier } from '../cloud/models';
 import { SideNavLinks, SideAccount, SideBrand, SideFold } from '../components/SideNav';
 
 type LunaMode = 'chat' | 'image';
@@ -371,7 +371,7 @@ export default function Luna() {
   const messages = active?.messages || [];
   const hasThread = messages.length > 0;
   // 会员到期后老会话里可能还留着 GPT Image 2：这里先归一到当前身份可用的档位，
-  // 否则界面会显示一个买不到的档、并按 86/93 积分下单
+  // 否则界面会显示一个买不到的档、并按会员档的价格下单
   const tier: ImageTier = resolveTier(active?.imageTier || chat.draftTier, sub.isPro);
 
   /* 自动滚动到底部：图片是异步解码的，刚插进 DOM 时高度还没算出来，
@@ -402,8 +402,8 @@ export default function Luna() {
     const reader = new FileReader();
     reader.onload = () => {
       setPendingImage(String(reader.result));
-      // GPT Image 2 的「文字输入」档不收参考图，带图必须走「输入图」档（93 积分）。
-      // 这里明说一句，避免用户以为还是 86 积分却按 93 扣。
+      // GPT Image 2 的「文字输入」档不收参考图，带图必须走「输入图」档。
+      // 这里明说一句，避免用户以为还是文字档的价却按改图档扣。
       if (imageModel(tier).id === 'gpt2-text') {
         chat.setTier('gpt2-ref');
         setToast(`已切到「${imageLabel('gpt2-ref')}」（${imageCost('gpt2-ref')} 积分/张），因为这次带了参考图`);
@@ -712,7 +712,7 @@ export default function Luna() {
               <span>{mode === 'image' ? '参考图已就绪，会按它出图' : '参考图已就绪'}</span>
               <button onClick={() => {
                 setPendingImage(null);
-                // 参考图去掉后回到「文字输入」档，不然会按 93 积分的图生图档下单
+                // 参考图去掉后回到「文字输入」档，不然会按更贵的图生图档下单
                 if (imageModel(tier).id === 'gpt2-ref') chat.setTier('gpt2-text');
               }} aria-label="移除参考图">
                 <Icon name="close" size={13} />
@@ -774,7 +774,9 @@ export default function Luna() {
                       options={OPEN_IMAGE_MODELS.map((m) => ({
                         id: m.id,
                         label: m.label,
-                        hint: `${m.cost} 积分`,
+                        hint: m.cost < m.listCost
+                          ? `${m.cost} 积分 · 原价 ${m.listCost}`
+                          : `${m.cost} 积分`,
                         locked: !!m.pro && !sub.isPro,
                       }))}
                       onPick={(id) => chat.setTier(id as ImageTier)}
@@ -831,6 +833,7 @@ export default function Luna() {
             <div className="lc-dock-hint">
               <span className="lc-hint-text">
                 {tierName(tier)} · {tierCost(tier)} 积分/张
+                {isPromoTier(tier) ? `（${imagePromoLabel(tier)}，原价 ${imageListCost(tier)}）` : ''}
                 {typeof balance === 'number' ? ` · 当前余额 ${balance}` : ''}
               </span>
             </div>

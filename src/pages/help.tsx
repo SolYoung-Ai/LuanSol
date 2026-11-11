@@ -12,6 +12,7 @@ import React, { useState } from 'react';
 import { Icon } from '../components/icons';
 import { go } from '../ui';
 import { PRICING } from '../cloud/plans';
+import { imageCost, imagePromoLabel } from '../cloud/models';
 
 type Faq = { q: string; a: React.ReactNode };
 type Group = { id: string; title: string; en: string; items: Faq[] };
@@ -59,8 +60,10 @@ const GROUPS: Group[] = [
         a: <><strong>对话不扣积分</strong>（免费版用 DeepSeek-V4.1-Flash；会员可切其余 6 款，共用每天一份额度）。
           生图按档位：<strong>Seedream 快速 {PRICING.costs.imageFlash} 积分/张</strong>、
           <strong>Seedream 精细 {PRICING.costs.imagePro} 积分/张</strong>；
-          <strong>GPT Image 2 文字输入 {PRICING.costs.imageGpt2Text} 积分/张</strong>，
-          带参考图的<strong>输入图档 {PRICING.costs.imageGpt2Ref} 积分/张</strong>（上传参考图会自动切换并提示）。
+          <strong>GPT Image 2 文字输入 {imageCost('gpt2-text')} 积分/张</strong>
+          （原价 {PRICING.costs.imageGpt2Text}，上线特惠 {imagePromoLabel('gpt2-text')}），
+          带参考图的<strong>输入图档 {imageCost('gpt2-ref')} 积分/张</strong>
+          （原价 {PRICING.costs.imageGpt2Ref}，上传参考图会自动切换并提示）。
           方案页第一次是一批出 3 张，按 Seedream 快速档计 <strong>{PRICING.costs.imageFlash} 积分</strong>（不是每张都扣）；
           单张重新生成才按你选的档位逐张计。<strong>扣费以实际成功返回的图为准，失败不扣。</strong></>,
       },

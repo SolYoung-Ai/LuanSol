@@ -731,10 +731,32 @@ export async function runTests(): Promise<Result[]> {
     A(new Set(ids).size === ids.length, '档位 id 有重复');
     A(imageCost('flash') === PRICING.costs.imageFlash, `flash 价格不一致: ${imageCost('flash')}`);
     A(imageCost('pro') === PRICING.costs.imagePro, `pro 价格不一致: ${imageCost('pro')}`);
-    A(imageCost('gpt2-text') === 86, `GPT Image 2 文字输入应为 86，实际 ${imageCost('gpt2-text')}`);
-    A(imageCost('gpt2-ref') === 93, `GPT Image 2 输入图应为 93，实际 ${imageCost('gpt2-ref')}`);
+    A(imageCost('gpt2-text') === Math.round(PRICING.costs.imageGpt2Text * PRICING.gptImagePromoRate),
+      `GPT Image 2 文字输入应为原价 ${PRICING.costs.imageGpt2Text} × ${PRICING.gptImagePromoRate}，实际 ${imageCost('gpt2-text')}`);
+    A(imageCost('gpt2-ref') === Math.round(PRICING.costs.imageGpt2Ref * PRICING.gptImagePromoRate),
+      `GPT Image 2 输入图应为原价 ${PRICING.costs.imageGpt2Ref} × ${PRICING.gptImagePromoRate}，实际 ${imageCost('gpt2-ref')}`);
     A(HYPER3D_COST === 21, `Hyper3D-Gen2 应为 21，实际 ${HYPER3D_COST}`);
     return ids.map((id) => `${id}=${imageCost(id)}`).join(' / ');
+  });
+
+  await t('图像档位 · 促销只作用于 GPT Image 2，且毛利不低于 70%', () => {
+    /* 硬约束：积分净收入 = (US$13.70 − 3.9% − $0.40) × 7.1 ÷ 1000 ≈ ¥0.0906。
+     * 任何一档的实付积分 × 0.0906 都必须 ≥ 成本 ÷ 0.30，否则毛利跌破 70%。
+     * Seedream 那两档不打折就是因为它本来就贴着成本线，一打折立刻亏。 */
+    const RMB_PER_CREDIT = 0.0906;
+    const floor = 0.30;
+    const upstream: Record<string, number> = { flash: 0.12, pro: 0.30, 'gpt2-text': 0.9, 'gpt2-ref': 1.1 };
+    for (const m of IMAGE_MODELS) {
+      const margin = 1 - upstream[m.id] / (m.cost * RMB_PER_CREDIT);
+      A(margin >= floor - 1e-6, `${m.label} 毛利只有 ${(margin * 100).toFixed(1)}%，低于 70%`);
+      A(m.cost <= m.listCost, `${m.label} 实付高于原价`);
+      // Seedream 不该进促销：成本已贴近下限
+      if (m.id === 'flash' || m.id === 'pro') A(m.promoRate === undefined, `${m.label} 不应参加促销`);
+    }
+    return IMAGE_MODELS.map((m) => {
+      const margin = 1 - upstream[m.id] / (m.cost * RMB_PER_CREDIT);
+      return `${m.short}=${m.cost}(${(margin * 100).toFixed(0)}%)`;
+    }).join(' / ');
   });
 
   await t('图像档位 · 展示价与扣费同源、未知档位不偷偷换价', () => {

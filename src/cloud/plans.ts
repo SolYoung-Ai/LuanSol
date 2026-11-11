@@ -7,7 +7,8 @@
  *     解锁全部模型 + 云端同步 + 印刷级导出 + 签到双倍，
  *     **不含固定积分包**（积分只来自签到 / 充值 / 兑换码）
  *   - 积分包：1000 积分 US$13.7（Creem 在线）/ 2100=¥199、3500=¥299（人工通道）
- *   - 消费单价：聊天 0 积分/轮（免费）；Seedream Flash 6 积分/张、Pro 10
+ *   - 消费单价：聊天 0 积分/轮（免费）；Seedream Flash 6 积分/张、Pro 10；
+ *     GPT Image 2 文字 60 / 改图 65，上线期七折 → 实付 42 / 46
  *   - 价格只有一处权威：proMonthlyPriceUSD 是界面展示与 Creem 产品价，
  *     proMonthlyPriceRMB 只是按汇率折算的测算值，不要拿去当售价展示。
  *     改价请同步改 Creem 后台的产品价格。
@@ -46,18 +47,25 @@ export const PRICING = {
     { price: 299, points: 3500, tag: '超值' },
   ] as const,
 
-  /** 每次消费扣减（积分） */
+  /** 每次消费扣减（积分）。这里写的是**原价**，实付见
+   *  IMAGE_MODELS 里的 promoRate（GPT Image 2 两档有上线折扣）。 */
   costs: {
     chat: 0,             // 对话免费（吸引用户聊，靠生图变现）
-    imageFlash: 6,       // Seedream 5.0 Flash（成本约 ¥0.12，毛利约 80%）
-    imagePro: 10,        // Seedream 5.0 Pro（成本约 ¥0.30，名义毛利约 70%，与 Flash 仅差 4 积分）
+    imageFlash: 6,       // Seedream 5.0 Flash（成本约 ¥0.12，毛利约 78%）
+    imagePro: 12,        // Seedream 5.0 Pro（成本约 ¥0.30，毛利约 72%；10 分只有 67%，不达 70% 底线）
     /** GPT Image 2 · 文字输入（B.AI，按输入 token 5 档计费，约 ¥0.9/张） */
-    imageGpt2Text: 86,
-    /** GPT Image 2 · 输入图（B.AI，带参考图按输入 token 8 档计费，约 ¥1.1/张） */
-    imageGpt2Ref: 93,
+    imageGpt2Text: 60,
+    /** GPT Image 2 · 输入图（B.AI，带参考图按输入 token 8 档计费，约 ¥1.1/张）。
+     *  比文字档高 5 分：参考图要走图生图，输入 token 更贵，同价会让毛利压到 71% 以下。 */
+    imageGpt2Ref: 65,
     /** Hyper3D-Gen2 文/图生 3D（方舟，官方 ¥1.8/次） */
     hyper3d: 21,
   } as const,
+
+  /** GPT Image 2 上线促销折扣：0.7 = 七折。实付 = 原价 × 该值（四舍五入）。
+   *  只作用于 GPT Image 2 两档——Seedream 的 6/10 分已按成本定价，再打折毛利就破了 70%。
+   *  结束促销把这里改成 1 即可，不用回头改上面的原价。 */
+  gptImagePromoRate: 0.7,
 
   /** 内部管理员邮箱（仅此邮箱可见开发者管理入口） */
   adminEmail: 'solyoungwork@gmail.com',
