@@ -130,8 +130,8 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
         <button
           className="v4-icon-btn v4-lang-btn"
           onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-          aria-label={lang === 'zh' ? 'Switch to English' : '切换到简体中文'}
-          title={lang === 'zh' ? 'Switch to English' : '切换到简体中文'}
+          aria-label={lang === 'zh' ? '切换到英文' : 'Switch to Simplified Chinese'}
+          title={lang === 'zh' ? '切换到英文' : 'Switch to Simplified Chinese'}
         >{lang === 'zh' ? 'EN' : '中'}</button>
 
         <button

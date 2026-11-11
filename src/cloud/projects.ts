@@ -9,6 +9,7 @@
 import type { Project } from '../types';
 import { db, sdkUsable } from './sdk';
 import { rowId } from './keys';
+import { tl } from '../langStore';
 
 export interface CloudMeta {
   id: string;
@@ -54,7 +55,7 @@ export async function pushProject(uid: string, p: Project): Promise<CloudResult>
   const row = {
     id: rowId(uid, p.id),
     owner_id: uid,
-    title: p.name || '未命名包装项目',
+    title: p.name || tl('未命名包装项目', 'Untitled package'),
     payload: p as unknown as Record<string, unknown>,
     updated_at: new Date(p.updatedAt || Date.now()).toISOString(),
   };

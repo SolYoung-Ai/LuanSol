@@ -48,10 +48,10 @@ export default function PropertiesPanel() {
       {/* 未选中：工程属性 */}
       {!l && (
         <div style={{ fontSize: 12, color: '#555', lineHeight: 2 }}>
-          <div>{t('当前面', 'Face')}：{ed.currentFace}</div>
-          <div>{t('面尺寸', 'Face size')}：{ed.face ? `${ed.face.w} × ${ed.face.h} mm` : '—'}</div>
-          <div>{t('背景色', 'Background')}：{ed.face?.bg || '—'}</div>
-          <div>{t('缩放', 'Zoom')}：{Math.round(ed.zoom * 100)}%</div>
+          <div>{t('当前面：', 'Face: ')}{ed.currentFace}</div>
+          <div>{t('面尺寸：', 'Face size: ')}{ed.face ? `${ed.face.w} × ${ed.face.h} mm` : '—'}</div>
+          <div>{t('背景色：', 'Background: ')}{ed.face?.bg || '—'}</div>
+          <div>{t('缩放：', 'Zoom: ')}{Math.round(ed.zoom * 100)}%</div>
         </div>
       )}
 

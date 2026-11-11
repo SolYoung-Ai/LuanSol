@@ -22,11 +22,11 @@ export default function AIAssistant() {
         </button>
         {ed.briefOpen && (
           <div style={{ marginTop: 8, fontSize: 12, color: '#666', lineHeight: 1.9 }}>
-            <div>{t('产品', 'Product')}：{ed.brief.product || '—'}</div>
-            <div>{t('品牌', 'Brand')}：{ed.brief.brand || '—'}</div>
-            <div>{t('风格', 'Style')}：{ed.brief.style || '—'}</div>
-            <div>{t('材质', 'Material')}：{ed.brief.material || '—'}</div>
-            <div>{t('主色', 'Primary colour')}：{ed.brief.colors.join(', ') || '—'}</div>
+            <div>{t('产品：', 'Product: ')}{ed.brief.product || '—'}</div>
+            <div>{t('品牌：', 'Brand: ')}{ed.brief.brand || '—'}</div>
+            <div>{t('风格：', 'Style: ')}{ed.brief.style || '—'}</div>
+            <div>{t('材质：', 'Material: ')}{ed.brief.material || '—'}</div>
+            <div>{t('主色：', 'Primary colour: ')}{ed.brief.colors.join(', ') || '—'}</div>
           </div>
         )}
       </div>

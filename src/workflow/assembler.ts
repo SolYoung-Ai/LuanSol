@@ -25,6 +25,7 @@ import { faceSizes } from '../engine/structure';
 import { makeText } from '../engine/design';
 import { parseSize } from '../engine/brief';
 import { readableOn, uid } from '../engine/utils';
+import { tl } from '../langStore';
 
 /** 从产品信息推断包装结构 */
 export function inferStructure(wf: ProjectWorkflow): StructureId {
@@ -216,7 +217,7 @@ export function assembleDesign(wf: ProjectWorkflow): DesignDoc {
   }
 
   const usedCount = wf.tasks.filter((t) => t.status === 'success').length;
-  const name = wf.productInfo.brandName || wf.productInfo.productName || '未命名包装项目';
+  const name = wf.productInfo.brandName || wf.productInfo.productName || tl('未命名包装项目', 'Untitled package');
 
   return {
     id: uid('design'),
@@ -303,7 +304,7 @@ export function assembleFromConceptImage(wf: ProjectWorkflow, image: ConceptImag
     };
   }
 
-  const name = info.brandName || info.productName || '未命名包装项目';
+  const name = info.brandName || info.productName || tl('未命名包装项目', 'Untitled package');
   return {
     id: uid('design'),
     name: `${name} · 方案 ${image.label}`,

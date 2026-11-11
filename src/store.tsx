@@ -9,6 +9,7 @@ import { uid } from './engine/utils';
 import { createEmptyDraft, normalizeDraft, type ProjectDraft } from './v3/draft';
 import { createInitialWorkflow } from './types';
 import { migrateProject } from './migrations';
+import { tl } from './langStore';
 
 const DB_NAME = 'lunasol-studio';
 const STORE = 'state';
@@ -202,7 +203,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ? [...(old?.versions || []), { id: uid('ver'), label: '自动保存', at: now, design: cloneDesign(prev.design) }].slice(-20)
         : (old?.versions || []);
       const proj: Project = {
-        id, name: name || old?.name || (prev.brief.brand ? `${prev.brief.brand} · ${prev.brief.product || '包装'}` : '未命名包装项目'),
+        id, name: name || old?.name || (prev.brief.brand ? `${prev.brief.brand} · ${prev.brief.product || tl('包装', 'Package')}` : tl('未命名包装项目', 'Untitled package')),
         brief: prev.brief, structure: prev.brief.structure,
         scheme: prev.design?.scheme || 'minimal', design: prev.design ? cloneDesign(prev.design) : null,
         versions, createdAt: old?.createdAt || now, updatedAt: now,
@@ -292,7 +293,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const workflow = createInitialWorkflow(now);
       workflow.stage = 'entry';
       const proj: Project = {
-        id: uid('proj'), name: '未命名草稿', brief: createEmptyBrief(),
+        id: uid('proj'), name: tl('未命名草稿', 'Untitled draft'), brief: createEmptyBrief(),
         structure: 'tuck', scheme: 'minimal', design: null, versions: [],
         createdAt: now, updatedAt: now, status: 'draft', workflow,
       };
@@ -326,7 +327,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         name: input.name
           || input.productInfo.brandName
           || input.productInfo.productName
-          || '未命名包装项目',
+          || tl('未命名包装项目', 'Untitled package'),
         brief: createEmptyBrief(),
         structure: 'tuck',
         scheme: 'minimal',

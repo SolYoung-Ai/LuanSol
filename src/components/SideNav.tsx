@@ -90,8 +90,8 @@ export function SideBrand() {
     </button>
     <div className="sd-tools">
       <button className="sd-icon-btn" onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-        aria-label={lang === 'zh' ? 'Switch to English' : '切换到简体中文'}
-        title={lang === 'zh' ? 'Switch to English' : '切换到简体中文'}>{lang === 'zh' ? 'EN' : '中'}</button>
+        aria-label={lang === 'zh' ? '切换到英文' : 'Switch to Simplified Chinese'}
+        title={lang === 'zh' ? '切换到英文' : 'Switch to Simplified Chinese'}>{lang === 'zh' ? 'EN' : '中'}</button>
       <button className="sd-icon-btn" onClick={toggleTheme}
         aria-label={theme === 'dark' ? t('切换到浅色模式', 'Switch to light mode') : t('切换到深色模式', 'Switch to dark mode')}
         title={theme === 'dark' ? t('浅色模式', 'Light mode') : t('深色模式', 'Dark mode')}>
