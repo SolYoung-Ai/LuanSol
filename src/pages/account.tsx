@@ -16,12 +16,18 @@
  * ============================================================ */
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
-import { Notice } from '../ui';
+import { Notice, go } from '../ui';
 import { useAuth } from '../cloud/auth';
 import { useProfile } from '../cloud/profile';
+import { useSubscription } from '../cloud/subscription';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { cloudConfigured, cloudOriginSupported, CLOUD_SITE_URL } from '../cloud/config';
 import { Icon, type IconName } from '../components/icons';
+
+/** Creem 的客户自助门户：用购买时的邮箱登录即可查订单、下载发票、取消续费。
+ *  条款里承诺「可在账户页取消续费」，所以这里必须给出真实可点的入口——
+ *  由我们代客点「取消」既做不到也说不清，交给 MoR 的自助门户最稳。 */
+const CREEM_PORTAL = 'https://creem.io/my-orders/login';
 
 type Panel = 'profile' | 'password' | 'email' | null;
 
@@ -33,6 +39,7 @@ function Ico({ name }: { name: IconName }) {
 export default function Account() {
   const a = useAuth();
   const profile = useProfile();
+  const sub = useSubscription();
   const { setToast } = useApp();
   const [loginOpen, setLoginOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
@@ -122,6 +129,13 @@ export default function Account() {
   const avatarUrl = avatar.trim();
   const initial = (a.user?.label || '?').slice(0, 1).toUpperCase();
 
+  /* 订阅状态只读 sub 上下文，和左侧账号卡、订阅页同一个来源，不另算一份。 */
+  const isPro = sub.isPro;
+  const periodEndRaw = sub.sub?.period_end || '';
+  const periodEnd = periodEndRaw
+    ? new Date(periodEndRaw).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    : '';
+
   return <div className="page page-narrow ag-page">
     <input ref={avatarFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickAvatar} />
 
@@ -186,6 +200,41 @@ export default function Account() {
             <button className="ag-btn" onClick={() => void saveProfile()} disabled={saving}>{saving ? '保存中…' : '保存资料'}</button>
           </div>
         </div>}
+      </section>
+
+      {/* ---------- 订阅与账单 ---------- */}
+      <div className="ag-group-label">订阅与账单</div>
+      <section className="ag-card ag-group">
+        <div className="ag-row ag-row-static">
+          <Ico name="badge" />
+          <span className="ag-row-main">
+            <strong>{isPro ? '会员已开通' : '当前为免费版'}</strong>
+            <small>{isPro
+              ? (periodEnd ? `有效期至 ${periodEnd}，到期自动续费` : '有效期见订阅页')
+              : '会员解锁全部对话模型、云端同步与印刷级导出'}</small>
+          </span>
+          <span className="ag-value">{periodEnd && isPro ? periodEnd : '—'}</span>
+        </div>
+
+        <button className="ag-row" onClick={() => go('/subscribe')}>
+          <Ico name="spark" />
+          <span className="ag-row-main">
+            <strong>{isPro ? '续费 / 购买积分包' : '订阅会员'}</strong>
+            <small>在线支付，开通后立即生效；没有海外卡可用兑换码或微信</small>
+          </span>
+          <Icon name="chevronRight" size={16} className="ag-chev" />
+        </button>
+
+        {/* 支付由 Creem 作为记录商户（MoR）处理，订单、发票与退订都在它的自助门户里。
+            我们这边不存卡号，也就不该假装能在站内「一键取消」——把真实入口给出来。 */}
+        <button className="ag-row" onClick={() => window.open(CREEM_PORTAL, '_blank', 'noopener,noreferrer')}>
+          <Ico name="cloud" />
+          <span className="ag-row-main">
+            <strong>订单、发票与取消续费</strong>
+            <small>用付款时的邮箱登录 Creem 自助门户；取消后权益保留到当期结束</small>
+          </span>
+          <Icon name="chevronRight" size={16} className="ag-chev" />
+        </button>
       </section>
 
       {/* ---------- 登录与安全 ---------- */}

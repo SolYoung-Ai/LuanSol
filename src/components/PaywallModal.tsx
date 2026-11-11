@@ -1,6 +1,7 @@
 /* 付费墙 / 登录引导弹窗：匿名用 AI 或超额时弹出。
- * 支付系统未接入：这里只解释额度与状态，不提供任何「输入激活码即开通」的入口。
- * 旧版激活输入框已移除——它背后的前端校验形同虚设（任意字符串都可开通）。 */
+ * 2026-11-11 Creem 审核通过，支付通道已正式开放：这里的主动作是「去订阅页下单」，
+ * 兑换码只是国内用户的备选通道。
+ * 旧的「输入激活码即开通」输入框不会回来——它背后的前端校验形同虚设。 */
 import React from 'react';
 import { Button, Modal, Notice, Tag, go, useHash } from '../ui';
 import { PRICING } from '../cloud/plans';
@@ -55,15 +56,17 @@ export function PaywallModal({ open, reason, need = 'subscribe', onClose, onLogi
         {planLine}
       </div>
       <p className="modal-p">
-        会员目前通过<strong>兑换码</strong>开通（支付通道接入前不产生扣费），兑换后立即生效。
-        会员<strong>不含固定积分包</strong>，积分来自每日签到（会员双倍）、充值或兑换码。
+        会员 <strong>US${PRICING.proMonthlyPriceUSD}/月</strong>，用银行卡 / Apple Pay / Google Pay 在线订阅，
+        开通后立即生效，随时可取消续费。
+        会员<strong>不含固定积分包</strong>，积分来自每日签到（会员双倍）、积分包购买或兑换码。
         内置设计引擎、编辑、3D 预览、印前检查与 PNG / JPG 预览图不依赖会员；
         印刷级文件导出（PDF / SVG / DXF / ZIP）、云端跨设备同步与全部历史版本为会员权益。
       </p>
       <Notice tone="info">额度用完后，AI 建议会自动回退为内置设计引擎的结果，并如实标注「未调用 AI」。</Notice>
       <div className="modal-buttons">
-        {!onPlansPage && <Button variant="dark" onClick={() => { onClose(); go('/subscribe'); }}>用兑换码开通</Button>}
-        <Button variant="ghost" onClick={onClose}>知道了</Button>
+        {!onPlansPage && <Button variant="dark" onClick={() => { onClose(); go('/subscribe'); }}>订阅会员 · US${PRICING.proMonthlyPriceUSD}/月</Button>}
+        {onPlansPage && <Button variant="dark" onClick={onClose}>去看上方套餐</Button>}
+        <Button variant="ghost" onClick={onClose}>稍后再说</Button>
       </div>
     </>}
   </Modal>;

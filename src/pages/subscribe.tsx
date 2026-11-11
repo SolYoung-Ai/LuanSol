@@ -322,7 +322,8 @@ export default function Subscribe() {
           <li><Icon name="check" size={13} />本机保存项目（IndexedDB）</li>
           <li><Icon name="check" size={13} />每日签到 +10</li>
         </ul>
-        <button className="gl-btn gl-btn-soft" disabled>{pro ? '当前方案' : '默认方案'}</button>
+        {/* 免费卡上的状态必须跟真实方案一致：会员用户看着免费卡写「当前方案」会以为没开通成功 */}
+        <button className="gl-btn gl-btn-soft" disabled>{pro ? t('已升级会员', 'Upgraded') : t('当前方案', 'Current plan')}</button>
       </section>
 
       <section className="gl-plan gl-plan-pro">
