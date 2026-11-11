@@ -893,6 +893,8 @@ async function handlePayCheckout(req, res) {
   let body = {};
   try { body = await readJsonBody(req, 8 * 1024); } catch { body = {}; }
   const email = String(body.email || '').trim();
+  // 名字只用于预填收银台，并给风控多一点信号；不参与开通判断
+  const name = String(body.name || '').trim().slice(0, 60);
 
   // 产品只认服务端白名单：前端只能声明「买会员」还是「买哪一档积分」，
   // 具体对应哪个 prod_、发多少积分，全由这里决定——传金额一律无效。
@@ -917,7 +919,7 @@ async function handlePayCheckout(req, res) {
     success_url: c.successUrl,
     metadata: { uid, kind, ...(kind === 'credits' ? { points: picked.points } : {}) },
   };
-  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) payload.customer = { email };
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) payload.customer = { email, ...(name ? { name } : {}) };
 
   try {
     const r = await creemFetch(`${c.base}/v1/checkouts`, {

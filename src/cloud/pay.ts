@@ -34,7 +34,7 @@ export function clearPayKind(): void {
 /** 创建结账会话并返回 Creem 收银台地址。uid 由调用方传入（云函数会做来源与令牌校验）。
  *  积分包要带 points：三档同价不同量，服务端按 points 查它自己的产品白名单——
  *  这里传的是「买哪一档」，不是「给我多少积分」，实际发放量由产品 ID 决定。 */
-export async function startCheckout(opts: { uid: string; email?: string; kind?: PayKind; points?: number }): Promise<PayStart> {
+export async function startCheckout(opts: { uid: string; email?: string; name?: string; kind?: PayKind; points?: number }): Promise<PayStart> {
   const base = CLOUD.aiBaseUrl;
   if (!base) return { ok: false, message: tl('支付服务未配置，请先在账户页联系人工开通', 'Payments are not configured — contact us from the account page to activate manually') };
   const kind = opts.kind || 'pro';
@@ -48,6 +48,8 @@ export async function startCheckout(opts: { uid: string; email?: string; kind?: 
       },
       body: JSON.stringify({
         email: opts.email || '',
+        // 名字只用来预填收银台、给风控多一点信号，不参与开通判断
+        name: opts.name || '',
         kind,
         ...(kind === 'credits' && opts.points ? { pack: opts.points } : {}),
       }),

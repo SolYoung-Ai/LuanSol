@@ -199,7 +199,7 @@ export default function Subscribe() {
     const key = kind === 'credits' ? `credits:${points || 0}` : 'pro';
     setPayingKind(key); setPayMsg(null);
     markPayKind(kind);
-    const r = await startCheckout({ uid: a.user.id, email: a.user.email, kind, points });
+    const r = await startCheckout({ uid: a.user.id, email: a.user.email, name: a.user.label, kind, points });
     if (!r.ok) { setPayingKind(null); setPayMsg({ ok: false, kind, text: r.message }); return; }
     // 不复位 payingKind：用户可能点浏览器返回，按钮维持「确认中」比闪回可点更诚实
     window.location.href = r.url;
@@ -386,8 +386,8 @@ export default function Subscribe() {
           {pro
             ? t('会员权益已生效，到期自动续费；不想续费可在 Creem 收据里的客户门户取消。',
               'Your membership is active and renews automatically. To stop renewing, cancel in the Creem customer portal linked from your receipt.')
-            : t('支持 Visa / Mastercard / Apple Pay / Google Pay。中国内地用户可用兑换码开通。',
-              'Visa / Mastercard / Apple Pay / Google Pay. Mainland China users can activate with a redeem code.')}
+            : t('支持 Visa / Mastercard / Apple Pay / Google Pay。中国内地发行的银行卡常被跨境收单风控拦下，建议直接用下面的兑换码（微信）开通，不必反复试卡。',
+              'Visa / Mastercard / Apple Pay / Google Pay. Cards issued in mainland China are often blocked by cross-border risk checks — use a redeem code (WeChat) below instead of retrying the card.')}
         </p>
       </section>
     </div>
