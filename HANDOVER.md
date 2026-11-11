@@ -341,3 +341,65 @@ GitHub Pages 会自动部署，约 1-2 分钟生效。
 **交接人：** Doubao
 **交接日期：** 2026-11-07
 **最后更新：** 部署了空值保护修复，等待用户验证
+
+---
+
+## 十一、前端实现约定（原 README 移入，2026-11-12）
+
+README 改成对外介绍后，这些「接手才需要知道」的内容挪到这里。
+
+### 11.1 登录配置：控制台 ↔ 前端镜像
+
+网站登录是**自建 React 弹窗**（`src/cloud/LoginDialog.tsx`），不是 CloudBase 托管默认登录页。
+控制台「身份认证 → 登录页」里的品牌化与注册模式配置**不会自动显示到网站**，
+CloudBase 也没给前端提供只读该配置的 API，所以把开关手工镜像在 `src/cloud/loginConfig.ts`。
+
+| 控制台项 | 当前值 | 前端落点 |
+| --- | --- | --- |
+| 账户密码登录 | 开 | 弹窗「密码登录」tab |
+| 短信验证码 | 关 | 全链路禁用：`emailTarget()` 只认邮箱、`auth.startLink(phone)` 直接拒绝、账户页无「绑定手机」入口 |
+| 邮箱登录（验证码） | 开 | 弹窗「邮箱验证码」tab |
+| 注册模式 | 自动注册并登录 | 不展示独立注册 tab；收为「设置密码 / 注册账号」次级入口，云端返回「账号不存在」时自动展开 |
+| 企业名称 | LunaSol | 弹窗品牌头（Logo + 名称 + 标语），样式 `.login-brand` |
+
+> ⚠️ 改控制台开关后必须同步改 `loginConfig.ts`，否则会出现「界面有入口、服务端已关闭」的死按钮。
+> 短信验证码单次约 0.05 元、邮箱约 0.0001 元，因此主动关闭；任何路径都不得再构造 `phone` 参数。
+> 回归保护见 `tests/suite.ts` 的「登录配置 · 短信已关闭」用例。
+
+### 11.2 账户信息是唯一入口
+
+`/account` 合并了原先的「个人资料」与「账号安全」，头像菜单里只保留**账户信息**一项；
+`/security` 是兼容旧链接的别名，直接渲染同一页（`src/pages/security.tsx` 只做重导出）。
+
+页面按 iOS 分组设置组织：身份卡 → 个人资料（头像 / 称呼 / 生日）→ 登录与安全
+（登录账号只读、改密、换绑邮箱）→ 云端项目 → 退出登录。点击行才展开编辑区，不铺一屏输入框。
+改密仍是「注册邮箱验证码 + 新密码」的强制二次验证。
+
+视觉统一走 `src/v4.css` 的液态玻璃变量（`--v4-glass-*`）：半透明底 + 背景模糊 + 顶部内高光 + 远距柔影。
+Luna 对话页的桌面侧栏是浮起的圆角玻璃卡，收起后留一列图标入口；
+**所有 Luna 新样式限定在 `min-width: 861px`，手机端抽屉保持原样**。
+
+### 11.3 目录
+
+```
+src/
+  engine/      brief / structure / design / prepress / export / llm / utils
+  components/  DesignView / DielineView / ProductMockup / Viewer3D / SideNav
+  editor/      在线编辑器（画布、图层面板、属性面板、素材库、左栏工具）
+  workflow/    /new 四步流程（入口 → 需求 → 方案 → 编辑器）
+  pages/       start / luna / workspace / market / account / subscribe / help / settings
+  cloud/       鉴权 / 订阅与额度 / 云同步 / 支付 / 模型目录 / 登录配置
+  store.tsx    全局项目仓库（IndexedDB）
+  App.tsx      hash 路由（无需服务端 rewrite）
+tests/         suite.ts（Node + 浏览器共用断言）/ browser.html / e2e.html
+cloudfunctions/lunasol-ai/   CloudBase HTTP 云函数（AI 代理 + 支付 + webhook）
+```
+
+### 11.4 浏览器测试
+
+```bash
+npm test                                      # 生成 tests/suite.browser.js
+python3 -m http.server 8765 --bind 127.0.0.1
+# 打开 http://127.0.0.1:8765/tests/browser.html 与 /tests/e2e.html
+# 或用无头 Chrome：--headless=new --dump-dom <url>
+```
