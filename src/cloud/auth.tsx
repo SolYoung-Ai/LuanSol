@@ -13,7 +13,7 @@
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { authApi, type Err, type RawSession, type RawUser, type OtpCallback, type ReauthUpdate, type LinkVerifyCallback } from './sdk';
-import { cloudConfigured, cloudOriginSupported } from './config';
+import { CLOUD_SITE_URL, cloudConfigured, cloudOriginSupported } from './config';
 import { humanizeAuthError, isSessionNoise } from './authErrors';
 import { currentLang, tl } from '../langStore';
 import { accountKey, emailTarget } from './keys';
@@ -274,7 +274,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!auth) return { ok: false, message: unavailable(labelZh, labelEn) };
     setBusy(true); setError(null);
     try {
-      const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+      // 回跳地址固定用正式站点：Google 那边登记的是一个确定的字符串，
+      // 若按当前访问域名生成，用户从 tcloudbaseapp 测试域名进来就会再撞一次
+      // redirect_uri_mismatch。本机开发仍用本机地址。
+      const isLocal = typeof window !== 'undefined'
+        && /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/.test(window.location.hostname);
+      const redirectTo = typeof window === 'undefined'
+        ? undefined
+        : isLocal ? `${window.location.origin}${window.location.pathname}` : CLOUD_SITE_URL;
       const r = await (auth as unknown as {
         signInWithOAuth(p: { provider: string; redirectTo?: string }): Promise<{ data?: { url?: string } | null; error?: { message?: string } | null }>;
       }).signInWithOAuth({ provider, redirectTo });
