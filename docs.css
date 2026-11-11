@@ -65,8 +65,9 @@ td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .plan { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 18px; }
 .plan.hot { border-color: #f0c6a8; box-shadow: 0 6px 20px rgba(232, 120, 58, 0.08); }
 .plan-name { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
-.plan-price { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
-.plan-price span { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.plan-price { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+/* 单位单独一行：写在同一行时「/1000 积分」会被挤断成「积 / 分」 */
+.plan-price span { display: block; margin-top: 3px; font-size: 12px; line-height: 1.4; font-weight: 400; color: var(--muted); letter-spacing: 0; }
 .plan-points { font-size: 13px; color: var(--muted); margin-top: 4px; }
 .plan ul { margin: 12px 0 0; padding-left: 16px; font-size: 13px; }
 
