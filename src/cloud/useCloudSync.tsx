@@ -69,6 +69,9 @@ function useCloudSyncState(): CloudSync {
   const cloudIdsRef = useRef<Set<string>>(new Set());
   /** 已删除的 project_id（本地缓存 ∪ 云端墓碑）：同步时用它压制复活 */
   const tombstones = useRef<Set<string>>(new Set());
+  /** 已完成首次同步的账号：在那之前不允许自动上传，否则可能在拉到「墓碑」之前
+   *  就把别处已删除的项目又推回云端（同步虽会自愈，但会白跑一轮、也可能闪一下）。 */
+  const syncedFor = useRef<string | null>(null);
   const deletedStore = useRef<Record<string, string[]>>(readDeleted());
   const running = useRef(false);
   const projectsRef = useRef(s.projects);
@@ -167,6 +170,7 @@ function useCloudSyncState(): CloudSync {
       const total = cloudIdsRef.current.size;
       setCloudCount(total);
       setLastSync(Date.now());
+      syncedFor.current = user.id;
       setState('ok');
       setMessage(`已同步 ${total} 个项目${skipped ? ` · ${skipped} 个属于其他账号，未上传` : ''} · ${timeLabel(new Date().toISOString())}`);
     } catch (e) {
@@ -181,6 +185,7 @@ function useCloudSyncState(): CloudSync {
   useEffect(() => {
     if (!user) {
       mergedFor.current = null;
+      syncedFor.current = null;
       pushedAt.current = {};
       cloudIdsRef.current = new Set();
       tombstones.current = new Set();
@@ -205,6 +210,7 @@ function useCloudSyncState(): CloudSync {
   /** 变更自动上传（4 秒防抖，只传有新修改且属于当前账号的项目） */
   useEffect(() => {
     if (!user || !isPro) return;
+    if (syncedFor.current !== user.id) return;   // 首次同步（含墓碑）完成后再允许自动上传
     const dirty = s.projects.filter((p) => {
       if (tombstones.current.has(p.id)) return false;   // 删过的不再上传
       const o = owners.current[p.id];
@@ -245,9 +251,10 @@ function useCloudSyncState(): CloudSync {
     if (tombs.size) dropProjects(Array.from(tombs));
     const list = await listProjects();
     if (list.ok) { cloudIdsRef.current = new Set(list.data.map((x) => projectIdOf(x.id))); setCloudCount(alive.length); }
+    syncedFor.current = user.id;
     setState('ok');
     setLastSync(Date.now());
-    setMessage(`已从云端取回 ${r.data.length} 个项目`);
+    setMessage(`已从云端取回 ${alive.length} 个项目`);
     setToast(`已取回 ${r.data.length} 个云端项目`);
   }, [user, mergeCloudProjects, setToast, claim]);
 
