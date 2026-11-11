@@ -60,6 +60,7 @@ table { width: 100%; border-collapse: collapse; margin: 6px 0 18px; font-size: 1
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.num s { color: var(--muted); font-size: 12px; margin-left: 4px; opacity: 0.75; }
 
 .plans { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 18px 0 26px; }
 .plan { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 18px; }
