@@ -35,11 +35,15 @@ export const LOGIN_CONFIG = {
     logo: '/logo.png',
   },
 
-  /** 登录方式选择，逐项对应控制台三个开关。 */
+  /** 登录方式选择，逐项对应控制台开关。 */
   methods: {
     password: true,
     sms: false,
     emailCode: true,
+    /** 社交登录 · Google Web 端（控制台「Google Web 端」已启用） */
+    google: true,
+    /** 微信开放平台登录：控制台未启用，按钮不出现 */
+    wechat: false,
   },
 
   /** 安全设置 → 注册模式。auto = 自动注册并登录，不展示独立注册入口。 */

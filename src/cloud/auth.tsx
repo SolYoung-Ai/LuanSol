@@ -52,6 +52,8 @@ interface AuthCtx {
   startSignup: (target: string, password: string) => Promise<ActionResult>;
   startCodeLogin: (target: string) => Promise<ActionResult>;
   signInWithWechat: () => Promise<ActionResult>;
+  /** 第三方 OAuth：Google（控制台已启用 Google Web 端） */
+  signInWithGoogle: () => Promise<ActionResult>;
   verifyCode: (token: string) => Promise<ActionResult>;
   cancelCode: () => void;
   signOut: () => Promise<ActionResult>;
@@ -260,24 +262,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const cancelCode = useCallback(() => { setPending(null); verifyRef.current = null; setError(null); }, []);
 
-  const signInWithWechat = useCallback(async (): Promise<ActionResult> => {
+  /** 第三方 OAuth 的公共流程：发起授权 → 浏览器跳走 → 回到本站后由 SDK 用 URL 里的
+   *  code 自动建会话（init 里开了 detectSessionInUrl）。
+   *  redirectTo 只取 origin+pathname：本站是 hash 路由，带上 # 会让 ?code= 落进 hash 里，
+   *  SDK 从 location.search 读不到。 */
+  const startOAuth = useCallback(async (
+    provider: 'wechat' | 'google',
+    labelZh: string, labelEn: string,
+  ): Promise<ActionResult> => {
     const auth = await authApi();
-    if (!auth) return { ok: false, message: unavailable('微信登录', 'sign in with WeChat') };
+    if (!auth) return { ok: false, message: unavailable(labelZh, labelEn) };
     setBusy(true); setError(null);
     try {
-      // 重定向到微信授权页；成功后会跳回本站，CloudBase 自动用 URL 里的 code 建立会话。
-      // redirectTo 只取 origin+pathname，避免 hash 路由把 ?code= 塞进 hash 导致 SDK 读不到。
       const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
       const r = await (auth as unknown as {
-        signInWithOAuth(p: { provider: string; redirectTo?: string }): Promise<{ data?: unknown; error?: { message?: string } | null }>;
-      }).signInWithOAuth({ provider: 'wechat', redirectTo });
-      if (r?.error) { const m = (r.error as { message?: string })?.message || tl('微信登录发起失败', 'Could not start WeChat sign-in'); setError(m); return { ok: false, message: m }; }
-      // 正常情况下这里不会执行——页面已经被重定向到微信；返回这条仅作兜底提示。
-      return { ok: true, message: tl('正在跳转到微信授权…', 'Redirecting to WeChat authorisation…') };
+        signInWithOAuth(p: { provider: string; redirectTo?: string }): Promise<{ data?: { url?: string } | null; error?: { message?: string } | null }>;
+      }).signInWithOAuth({ provider, redirectTo });
+      if (r?.error) {
+        const m = r.error?.message || tl(`${labelZh}发起失败`, `Could not start ${labelEn}`);
+        setError(m); return { ok: false, message: m };
+      }
+      // 新版 SDK 只返回授权地址，需要我们自己跳；老版本会自己跳，此时这段不会执行
+      const url = r?.data?.url;
+      if (url) window.location.assign(url);
+      return { ok: true, message: tl(`正在跳转到${labelZh}授权…`, `Redirecting to ${labelEn}…`) };
     } catch (e) {
-      const m = errorMessage(e, tl('微信登录发起失败，请确认已在 CloudBase 控制台启用微信登录', 'Could not start WeChat sign-in — make sure it is enabled in the CloudBase console')); setError(m); return { ok: false, message: m };
+      const m = errorMessage(e, tl(`${labelZh}发起失败，请确认已在 CloudBase 控制台启用该登录方式`, `Could not start ${labelEn} — make sure it is enabled in the CloudBase console`));
+      setError(m); return { ok: false, message: m };
     } finally { setBusy(false); }
   }, []);
+
+  const signInWithWechat = useCallback(() => startOAuth('wechat', '微信登录', 'WeChat sign-in'), [startOAuth]);
+  const signInWithGoogle = useCallback(() => startOAuth('google', '谷歌登录', 'Google sign-in'), [startOAuth]);
 
   const signOut = useCallback(async (): Promise<ActionResult> => {
     const auth = await authApi();
@@ -402,10 +418,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AuthCtx>(() => ({
     ready, configured, originOk, user, session, pending, busy, error: visibleError, linkPending, reauthPending,
-    signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut,
+    signInWithPassword, startSignup, startCodeLogin, signInWithWechat, signInWithGoogle, verifyCode, cancelCode, signOut,
     updateProfile, startPasswordChange, confirmPasswordChange, cancelPasswordChange, startLink, verifyLink, cancelLink, refreshUser,
     clearError: () => setError(null),
-  }), [ready, configured, originOk, user, session, pending, busy, visibleError, linkPending, reauthPending, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, verifyCode, cancelCode, signOut, updateProfile, startPasswordChange, confirmPasswordChange, cancelPasswordChange, startLink, verifyLink, cancelLink, refreshUser]);
+  }), [ready, configured, originOk, user, session, pending, busy, visibleError, linkPending, reauthPending, signInWithPassword, startSignup, startCodeLogin, signInWithWechat, signInWithGoogle, verifyCode, cancelCode, signOut, updateProfile, startPasswordChange, confirmPasswordChange, cancelPasswordChange, startLink, verifyLink, cancelLink, refreshUser]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -33,6 +33,16 @@ const TABS: { id: Tab; zh: string; en: string }[] = [
 /** 云端返回「邮箱还没账号」时的兜底：自动把注册表单展开，避免新用户被堵死。 */
 const NEED_SIGNUP = /不存在|未注册|尚未注册|没有账号|not\s*found|not\s*exist|no\s*user|signup/i;
 
+/** Google 官方四色 G：登录按钮上必须用这个，不要用单色占位图标 */
+function GoogleMark({ size = 16 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden focusable="false">
+    <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2.1 5-4.4 6.6v5.5h7.1c4.2-3.8 6.6-9.5 6.6-16.1z" />
+    <path fill="#34A853" d="M24 46c6 0 11-2 14.5-5.4l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.5-3.8-12.2-9H4.5v5.7C8 41.1 15.4 46 24 46z" />
+    <path fill="#FBBC05" d="M11.8 28.2c-.5-1.3-.7-2.7-.7-4.2s.3-2.9.7-4.2v-5.7H4.5C3 17.1 2.1 20.4 2.1 24s.9 6.9 2.4 9.9l7.3-5.7z" />
+    <path fill="#EA4335" d="M24 10.8c3.3 0 6.2 1.1 8.5 3.4l6.3-6.3C35 4.3 30 2 24 2 15.4 2 8 6.9 4.5 14.1l7.3 5.7c1.7-5.2 6.5-9 12.2-9z" />
+  </svg>;
+}
+
 export function LoginDialog({ open, onClose, onDone }: {
   open: boolean;
   onClose: () => void;
@@ -181,6 +191,16 @@ export function LoginDialog({ open, onClose, onDone }: {
               ? <Button disabled={a.busy} onClick={submitPassword}>{a.busy ? t('登录中…', 'Signing in…') : t('登录', 'Sign in')}</Button>
               : <Button disabled={a.busy} onClick={sendCode}>{a.busy ? t('发送中…', 'Sending…') : t('发送邮箱验证码', 'Send email code')}</Button>}
         </div>
+
+        {/* 社交登录：控制台「Google Web 端」已启用，跳转授权后由 SDK 用回跳的 code 建会话 */}
+        {LOGIN_CONFIG.methods.google && <>
+          <div className="login-or"><span>{t('或', 'or')}</span></div>
+          <button type="button" className="login-oauth" disabled={a.busy}
+            onClick={async () => { const r = await a.signInWithGoogle(); if (!r.ok) setMsg({ ok: false, text: r.message }); }}>
+            <GoogleMark />
+            <span>{t('使用 Google 账号登录', 'Continue with Google')}</span>
+          </button>
+        </>}
 
         {!showSignup && LOGIN_CONFIG.register.enabled && LOGIN_CONFIG.register.mode === 'auto' &&
           <p className="login-secondary">{t('想用密码登录？', 'Prefer a password?')}<button onClick={() => { setTab('code'); setShowSignup(true); setMsg(null); }}>{t('设置密码 / 注册账号', 'Set a password / sign up')}</button></p>}
