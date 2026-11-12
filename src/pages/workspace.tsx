@@ -7,7 +7,7 @@
  * 封面只用真实设计稿渲染；没有设计稿时给统一的空白占位，不用随机图片凑数。
  * 能力：状态筛选 + 包装结构分类 + 搜索排序 + 批量管理（全选 / 批量删除，本地与云端同步）。
  * ============================================================ */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Empty, Modal, go, useHash } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
@@ -75,7 +75,17 @@ export default function Workspace() {
   const { lang, t } = useLang();
   const tab = new URLSearchParams(hash.split('?')[1] || '').get('tab');
 
-  const [filter, setFilter] = useState<FilterId>('all');
+  /* 侧栏「项目」底下点草稿 / 设计中 / 已完成 时带 ?tab= 进来，直接落到对应筛选 */
+  const initialFilter = ((): FilterId => {
+    const v = new URLSearchParams(hash.split('?')[1] || '').get('tab');
+    return v === 'draft' || v === 'designing' || v === 'done' ? v : 'all';
+  })();
+  const [filter, setFilter] = useState<FilterId>(initialFilter);
+  useEffect(() => {
+    const v = new URLSearchParams(hash.split('?')[1] || '').get('tab');
+    if (v === 'draft' || v === 'designing' || v === 'done') setFilter(v);
+    else if (v === 'all') setFilter('all');
+  }, [hash]);
   const [sort, setSort] = useState<SortId>('updated');
   const [q, setQ] = useState('');
   const [structGroup, setStructGroup] = useState<string>('all');

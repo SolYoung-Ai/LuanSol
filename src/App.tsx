@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, toastTone } from './store';
 import { Button, Logo, Nav, Notice, PageHead, go, useHash } from './ui';
 import Home from './pages/home';
@@ -33,6 +33,7 @@ const Start = lazy(() => import('./pages/start'));
 const Studio = lazy(() => import('./pages/studio'));
 const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
+const Replicate = lazy(() => import('./pages/replicate'));
 
 function Footer() {
   const { t } = useLang();
@@ -84,6 +85,33 @@ export default function App() {
 
   const path = hash.split('?')[0];
 
+  /* 主入口按固定顺序排列，切换时按「从上往下 / 从下往上」决定滑入方向 */
+  const prevNav = useRef<number>(-1);
+  useEffect(() => {
+    const order = ['/start', '/home', '/luna', '/workspace', '/projects', '/market'];
+    const idxOf = (p: string) => {
+      if (p === '/start' || p === '/home') return 0;
+      if (p.startsWith('/luna')) return 1;
+      if (p.startsWith('/workspace') || p.startsWith('/projects')) return 2;
+      if (p.startsWith('/market')) return 3;
+      return -1;
+    };
+    const cur = idxOf(path);
+    const prev = prevNav.current;
+    prevNav.current = cur;
+    if (cur === -1 || prev === -1 || cur === prev) return;
+    const main = document.querySelector<HTMLElement>('.main');
+    if (!main) return;
+    const cls = cur > prev ? 'nav-in-down' : 'nav-in-up';
+    main.classList.remove('nav-in-down', 'nav-in-up');
+    void main.offsetWidth;
+    main.classList.add(cls);
+    const timer = window.setTimeout(() => main.classList.remove(cls), 420);
+    return () => window.clearTimeout(timer);
+    // order 只用于判定顺序，不参与依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path]);
+
   // 法务页已迁到真正的静态地址（/terms/、/privacy/、/aup/），旧书签里的 #/terms 直接跳过去，
   // 不能让老链接停在「页面不存在」。
   useEffect(() => {
@@ -123,6 +151,8 @@ export default function App() {
   else if (path === '/structures') page = <Structures />;
   /* 工作台：/workspace 与历史路径 /projects 指向同一个新页面，旧链接不 404 */
   else if (path === '/workspace' || path === '/projects') page = <Workspace />;
+  /* 复制：上传参考图 → 三种风格方案 */
+  else if (path === '/replicate') page = <Replicate />;
   /* 审美市场：列表 + 站点详情 + 作品详情 */
   else if (path === '/market') page = <Market />;
   else if (path.startsWith('/market/site/')) page = <MarketSite />;

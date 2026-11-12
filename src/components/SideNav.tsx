@@ -33,10 +33,10 @@ import type { WorkflowStage } from '../types';
 const SIDE_LINKS: { zh: string; en: string; path: string; icon: IconName; match: string[] }[] = [
   // 「开始」放在最上面：两张创作入口卡都在这页，点进去就是工作台流程
   { zh: '开始', en: 'Start', path: '/start', icon: 'home', match: ['/start', '/home'] },
-  { zh: 'Luna', en: 'Luna', path: '/luna', icon: 'spark', match: ['/luna'] },
+  { zh: 'Luna Ai', en: 'Luna AI', path: '/luna', icon: 'spark', match: ['/luna'] },
   {
     zh: '工作台', en: 'Workspace', path: '/workspace', icon: 'folder',
-    match: ['/workspace', '/projects', '/studio', '/new', '/project', '/structures',
+    match: ['/workspace', '/projects', '/replicate', '/studio', '/new', '/project', '/structures',
       '/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'],
   },
   { zh: '审美市场', en: 'Aesthetic Index', path: '/market', icon: 'grid', match: ['/market', '/inspiration'] },
@@ -112,48 +112,70 @@ function flowStageOf(project: { workflow?: { stage?: WorkflowStage }; design?: u
   return raw;
 }
 
-/** 分界线下的场景区：当前在「工作台」时，列出四步流程，点一下直接跳到该阶段。
- *  这就是「在侧边预览每一步」——不用先进项目、不用记路由。 */
-export function SideFlow({ onNavigate }: { onNavigate?: () => void }) {
-  const { s, patchWorkflow, setToast } = useApp();
+/** 分界线下的工作台功能：新建设计 / 项目（含状态筛选）/ 复制。
+ *  这三项替代了原来的四步流程——流程是「进去以后的事」，这里是「从哪儿开始」。 */
+const PROJECT_TABS: { id: string; zh: string; en: string }[] = [
+  { id: 'all', zh: '全部', en: 'All' },
+  { id: 'draft', zh: '草稿', en: 'Drafts' },
+  { id: 'designing', zh: '设计中', en: 'In progress' },
+  { id: 'done', zh: '已完成', en: 'Finished' },
+  { id: 'cloud', zh: '云端', en: 'Cloud' },
+];
+
+export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
+  const { s, setToast } = useApp();
   const { lang, t } = useLang();
   const hash = useHash();
-  const project = s.projects.find((p) => p.id === s.activeId);
-  const current = flowStageOf(project);
+  const path = hash.split('?')[0];
+  const query = new URLSearchParams(hash.split('?')[1] || '');
+  const tab = query.get('tab') || 'all';
+  const inProjects = path === '/workspace' || path === '/projects';
+  const inReplicate = path === '/replicate';
+  const inNew = path === '/new';
 
-  const jump = (stage: WorkflowStage) => {
-    onNavigate?.();
-    // 还没有草稿时不能假装跳过去：如实提示，并把用户带到创作入口
-    if (!project || !project.workflow) {
-      if (stage !== 'entry') {
-        setToast(t('还没有进行中的草稿，先从「创作入口」开始',
-          'No draft in progress yet — start from “Start” first.'));
-      }
-      go('/new');
-      return;
-    }
-    if (stage === 'editor' && !project.design) {
-      setToast(t('请先在「设计方案」里选一张，再进编辑器',
-        'Pick one concept under “Concepts” before opening the editor.'));
-      return;
-    }
-    patchWorkflow(project.id, { stage });
-    go('/new');
+  const counts: Record<string, number> = {
+    all: s.projects.length,
+    draft: s.projects.filter((p) => p.status === 'draft').length,
+    designing: s.projects.filter((p) => p.status === 'designing').length,
+    done: s.projects.filter((p) => p.status === 'checked' || p.status === 'exported').length,
+    cloud: 0,
   };
 
-  return <div className="sd-panel">
-    <div className="sd-panel-label">{lang === 'en' ? 'Workflow' : '设计流程'}</div>
-    {FLOW_STEPS.map((st) => {
-      const on = hash.split('?')[0] === '/new' && current === st.stage;
-      return <button key={st.n} className={`sd-step ${on ? 'on' : ''}`} onClick={() => jump(st.stage)}
-        aria-current={on ? 'step' : undefined}>
-        <span className="sd-step-n">{st.n}</span>
-        <span className="sd-step-t">
-          <strong>{lang === 'en' ? st.en : st.zh}</strong>
-          <em>{lang === 'en' ? st.den : st.dzh}</em>
-        </span>
-      </button>;
-    })}
+  const goTab = (id: string) => {
+    onNavigate?.();
+    go(`/workspace?tab=${id}`);
+  };
+
+  return <div className="sd-panel sd-wb">
+    <div className="sd-panel-label">{lang === 'en' ? 'Workspace' : '工作台'}</div>
+
+    <button className={`sd-act ${inNew ? 'on' : ''}`} onClick={() => { onNavigate?.(); go('/new?fresh=1'); }}>
+      <span className="sd-ic"><Icon name="plus" size={16} /></span>
+      <span>{t('新建设计', 'New design')}</span>
+    </button>
+
+    <button className={`sd-act ${inProjects ? 'on' : ''}`} onClick={() => { onNavigate?.(); if (!inProjects) go('/workspace?tab=all'); }}>
+      <span className="sd-ic"><Icon name="folder" size={16} /></span>
+      <span>{t('项目', 'Projects')}</span>
+      <em className="sd-act-n">{counts.all}</em>
+    </button>
+
+    {inProjects && <div className="sd-sub">
+      {PROJECT_TABS.map((x) => {
+        const n = counts[x.id] || 0;
+        const on = tab === x.id;
+        return <button key={x.id} className={`sd-sub-item ${on ? 'on' : ''}`}
+          onClick={() => (x.id === 'cloud' ? (setToast(t('云端项目在会员开通后可跨设备取回', 'Cloud projects are available with membership')), onNavigate?.(), go('/workspace?tab=all')) : goTab(x.id))}>
+          <span>{lang === 'en' ? x.en : x.zh}</span>
+          {x.id !== 'cloud' && <em>{n}</em>}
+        </button>;
+      })}
+    </div>}
+
+    <button className={`sd-act ${inReplicate ? 'on' : ''}`} onClick={() => { onNavigate?.(); go('/replicate'); }}>
+      <span className="sd-ic"><Icon name="copy" size={16} /></span>
+      <span>{t('复制', 'Replicate')}</span>
+    </button>
   </div>;
 }
 
@@ -297,14 +319,14 @@ export default function SideNav({ onLogin }: { onLogin?: () => void }) {
   //   /luna   —— 会话侧栏里已内嵌导航与账号卡
   //   /studio —— 设计流程 + 编辑器，需要整屏宽度
   if (path.startsWith('/luna') || path.startsWith('/studio')) return null;
-  // 分界线下方的场景区：工作台显示四步流程；其他页面（账户/积分/帮助）留空
+  // 分界线下方的场景区：工作台相关页面显示「新建设计 / 项目 / 复制」
   const showFlow = SIDE_LINKS[2].match.some((p) => path.startsWith(p));
   return <aside className="sd-nav">
     <SideBrand />
     <SideNavLinks />
     {showFlow && <>
       <div className="sd-divider" />
-      <SideFlow />
+      <SideWorkbench />
     </>}
     <div className="sd-spacer" />
     <SideAccount onLogin={onLogin} compact={folded} />
