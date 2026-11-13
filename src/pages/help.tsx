@@ -39,8 +39,8 @@ function buildGroups(t: TFn): Group[] {
         {
           q: t('第一次用，怎么开始？', 'First time here — how do I start?'),
           a: <>
-            {t('登录后从首页点「开始设计」，或在工作台点「新建设计」。整条流程只有四步：',
-              'Sign in, then hit “Start” on the home page, or “New design” in the workspace. The whole flow is four steps: ')}
+            {t('登录后从首页点「开始设计」，或在包装设计点「新建设计」。整条流程只有四步：',
+              'Sign in, then hit “Start” on the home page, or “New design” under Packaging. The whole flow is four steps: ')}
             <strong>{t('创作入口 → 确认需求 → 设计方案 → 编辑器', 'Start → Requirements → Concepts → Editor')}</strong>
             {t('。前两步是填信息，第三步 AI 出图，第四步在编辑器里改（含 3D 预览与刀模印前）。',
               '. The first two collect information, the third renders images, and the fourth is where you refine them (with 3D preview and dieline prepress).')}
@@ -137,8 +137,8 @@ function buildGroups(t: TFn): Group[] {
         {
           q: t('我的设计存在哪里？换设备还在吗？', 'Where are my designs stored? Do they follow me across devices?'),
           a: <>
-            {t('本机浏览器会自动保存（IndexedDB），不登录也不会丢。登录后云端同步自动开启：作品自动上传并合并，换设备在工作台点「取回云端项目」即可继续编辑。云端同步不额外收费，也不扣积分。清空浏览器数据会连同本地草稿一起清掉，重要项目建议先备份。',
-              'Everything is saved in your browser (IndexedDB), so nothing is lost even without signing in. Once you sign in, cloud sync turns on automatically: work uploads and merges, and on another device you click “Restore cloud projects” in the workspace. Cloud sync costs nothing and spends no credits. Clearing browser data wipes local drafts too, so back up anything important.')}
+            {t('本机浏览器会自动保存（IndexedDB），不登录也不会丢。登录后云端同步自动开启：作品自动上传并合并，换设备在包装设计点「取回云端项目」即可继续编辑。云端同步不额外收费，也不扣积分。复刻草稿只存在本机浏览器，不参与云端同步。清空浏览器数据会连同本地草稿一起清掉，重要项目建议先备份。',
+              'Everything is saved in your browser (IndexedDB), so nothing is lost even without signing in. Once you sign in, cloud sync turns on automatically: work uploads and merges, and on another device you click “Restore cloud projects” under Packaging. Cloud sync costs nothing and spends no credits. Recreations stay in this browser and are not synced. Clearing browser data wipes local drafts too, so back up anything important.')}
           </>,
         },
         {
@@ -300,7 +300,7 @@ export default function Help() {
           <Icon name="mail" size={15} /> soyoung@outlook.com
         </a>
         <button className="gl-btn gl-btn-soft" onClick={() => go('/workspace')}>
-          {t('回工作台', 'Back to workspace')}
+          {t('回包装设计', 'Back to Packaging')}
         </button>
       </div>
       <p className="gl-note">

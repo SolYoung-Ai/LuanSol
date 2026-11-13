@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from './cloud/auth';
 import { useSubscription } from './cloud/subscription';
 import { useProfile } from './cloud/profile';
-import { useApp, visibleProjects } from './store';
+import { useApp, visibleProjects, visibleReplicas } from './store';
 import { useLang } from './i18n';
 import { applyTheme, readTheme, saveTheme, type Theme } from './theme';
 
@@ -32,7 +32,8 @@ const NAV_ITEMS = [
   { zh: '开始', en: 'Start', enShort: 'Start', path: '/' },
   /* 与桌面左栏保持同名；窄屏用短标签，避免入口挤成省略号 */
   { zh: 'Luna Ai', en: 'Luna AI', enShort: 'Luna', path: '/luna' },
-  { zh: '工作台', en: 'Workspace', enShort: 'Work', path: '/workspace' },
+  { zh: '包装设计', en: 'Packaging', enShort: 'Pack', path: '/workspace' },
+  { zh: '复刻设计', en: 'Recreate', enShort: 'Copy', path: '/replicate' },
 ];
 
 export function Nav({ onLogin }: { onLogin: () => void }) {
@@ -94,15 +95,29 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   ];
   const isAdmin = auth.user?.email === 'solyoungwork@gmail.com';
 
-  /* 桌面左栏「新建设计 / 项目 / 复刻」的移动端对应入口。
-     手机没有常驻左栏，全部收进汉堡抽屉，功能不缺项。 */
-  const mobileWork: { label: string; path: string; on: boolean; count?: number }[] = [
-    { label: t('新建设计', 'New design'), path: '/new?fresh=1', on: path.startsWith('/new') },
+  /* 桌面左栏两个场景区的移动端对应入口。手机没有常驻左栏，
+     全部收进汉堡抽屉，功能不缺项；两组分开列，避免「新建」出现两次分不清。 */
+  const mobileGroups: { label: string; items: { label: string; path: string; on: boolean; count?: number }[] }[] = [
     {
-      label: t('项目', 'Projects'), path: '/workspace?tab=all',
-      on: path === '/workspace' || path === '/projects', count: visibleProjects(s.projects).length,
+      label: t('包装设计', 'Packaging'),
+      items: [
+        { label: t('新建设计', 'New design'), path: '/new?fresh=1', on: path.startsWith('/new') },
+        {
+          label: t('项目', 'Projects'), path: '/workspace?tab=all',
+          on: path === '/workspace' || path === '/projects', count: visibleProjects(s.projects).length,
+        },
+      ],
     },
-    { label: t('复刻', 'Recreate'), path: '/replicate', on: path === '/replicate' },
+    {
+      label: t('复刻设计', 'Recreate'),
+      items: [
+        { label: t('新建复刻', 'New recreation'), path: '/replicate/new', on: path.startsWith('/replicate/') },
+        {
+          label: t('复刻记录', 'My recreations'), path: '/replicate',
+          on: path === '/replicate', count: visibleReplicas(s.replicates).length,
+        },
+      ],
+    },
   ];
 
   return <header className="v4-nav">
@@ -134,13 +149,15 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
               <span>{lang === 'en' ? n.en : n.zh}</span>
             </button>
           ))}
-          <div className="v4-mobile-nav-label">{t('工作台', 'Workspace')}</div>
-          {mobileWork.map((n) => (
-            <button key={n.path} className={`v4-mobile-nav-item ${n.on ? 'active' : ''}`} onClick={() => { setMobileNavOpen(false); go(n.path); }}>
-              <span>{n.label}</span>
-              {n.count !== undefined && <em className="v4-mobile-nav-count">{n.count}</em>}
-            </button>
-          ))}
+          {mobileGroups.map((g) => <div key={g.label}>
+            <div className="v4-mobile-nav-label">{g.label}</div>
+            {g.items.map((n) => (
+              <button key={n.path} className={`v4-mobile-nav-item ${n.on ? 'active' : ''}`} onClick={() => { setMobileNavOpen(false); go(n.path); }}>
+                <span>{n.label}</span>
+                {n.count !== undefined && <em className="v4-mobile-nav-count">{n.count}</em>}
+              </button>
+            ))}
+          </div>)}
         </div>
       )}
 

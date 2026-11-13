@@ -1,5 +1,5 @@
 /* ============================================================
- * 复刻（Recreate / #/replicate）
+ * 复刻设计 · 工作区（/replicate/new、/replicate/edit?id=）
  * ------------------------------------------------------------
  * 为什么不是一个上传框加一个下拉，而是「先选类型」：
  * 主图、详情页、海报、视频封面、包装、周边，这六种东西的
@@ -12,15 +12,14 @@
  *   2. 补充提示词、选模型、选尺寸、拖「复刻度」；
  *   3. 一次出三张，可单张重来、可改提示词换模型重来、可整组重来。
  *
- * 多图是真的多图，不是摆几个上传框只发第一张：
- *   · 前端同时发 `images: [参考…, 素材…]` 与 `image: 拼贴参考板`；
- *   · 云函数把 images 透传给方舟 Seedream / B.AI edits，4xx 时降到拼贴板重试；
- *   · 拼贴板按同一顺序编号，降级了信息也不会串位。
- * 上游单次最多读 4 张参考图，所以这里两栏合计上限就是 4 张，界面明写，
- * 不做「传了 6 张只发 4 张」这种悄悄丢图的事。
+ * 草稿：复刻设计与包装设计各有各的草稿箱（store 里的 replicates 一列）。
+ * 这里每改一次（传图 / 改提示词 / 出图）都自动写回那条记录，
+ * 地址栏同步成 /replicate/edit?id=…，刷新还能回到同一份草稿。
+ * 用 replaceState 而不是改 hash：改 hash 会触发 hashchange，
+ * App 会按 key 重挂编辑器，刚输入的内容就被清空了。
  * ============================================================ */
-import React, { useRef, useState } from 'react';
-import { go } from '../ui';
+import React, { useEffect, useRef, useState } from 'react';
+import { go, useHash } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
@@ -29,98 +28,16 @@ import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageModel, resolveTier } fro
 import { compressImageForUpload } from '../workflow/imageUtils';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { Icon } from '../components/icons';
-import type { IconName } from '../components/icons';
 import { useLang } from '../i18n';
 import { emptyProductInfo } from '../types';
-import type { ConceptImage, ImageTier, ReferenceImage, ReferenceRole } from '../types';
+import type { ConceptImage, ImageTier, ReferenceImage, ReferenceRole, ReplicateImage, ReplicateProject, ReplicateResult } from '../types';
+import { BATCH, KINDS, MAX_IMAGES, RATIOS, kindById, kindDesc, kindName, type KindDef } from '../replicate/kinds';
 import '../replicate.css';
 
-type L = { zh: string; en: string };
-type Uploaded = { id: string; src: string; w: number; h: number; name: string };
 type Slot = 'ref' | 'mat';
-
-/** 上游（方舟 / B.AI）单次最多接收 4 张参考图，两栏共用这个额度 */
-const MAX_IMAGES = 4;
-/** 一次出几张 */
-const BATCH = 3;
-
-const RATIOS: { id: string; label: string; size: string }[] = [
-  { id: '1:1', label: '1:1', size: '1024x1024' },
-  { id: '3:4', label: '3:4', size: '864x1152' },
-  { id: '4:3', label: '4:3', size: '1152x864' },
-  { id: '16:9', label: '16:9', size: '1280x720' },
-  { id: '9:16', label: '9:16', size: '720x1280' },
-];
-
-interface KindDef {
-  id: string;
-  name: L;
-  desc: L;
-  icon: IconName;
-  /** 默认比例：详情页/海报竖版，视频封面 16:9，其余方图 */
-  ratio: string;
-  /** 该类型的画面规则，会被拼进提示词（生图提示词保持中文，不随界面语言走） */
-  scene: string;
-  /** 素材图的默认角色，写进项目草稿的 referenceImages */
-  role: ReferenceRole;
-}
-
-export const KINDS: KindDef[] = [
-  {
-    id: 'main',
-    name: { zh: '主图', en: 'Main image' },
-    desc: { zh: '电商首图，白底或极简场景', en: 'Storefront hero on a clean backdrop' },
-    icon: 'image',
-    ratio: '1:1',
-    role: 'product',
-    scene: '输出电商主图：单个主体居中，占画面 70%–85%，背景为纯白或极简浅色场景，光线均匀，四周留安全边距，不出现多余文字、水印、多件产品或拼贴',
-  },
-  {
-    id: 'detail',
-    name: { zh: '详情页', en: 'Detail page' },
-    desc: { zh: '竖版单屏信息图，标题 + 卖点 + 细节', en: 'Vertical info panel: headline, selling points, detail' },
-    icon: 'layers',
-    ratio: '3:4',
-    role: 'product',
-    scene: '输出竖版详情页的单屏画面：清晰的上下信息层级，可包含一句主标题、两到三条卖点短语与一处产品细节特写，排版留白充足，中文文字清晰可读、不糊字',
-  },
-  {
-    id: 'poster',
-    name: { zh: '海报', en: 'Poster' },
-    desc: { zh: '强对比、大标题留白，可独立张贴', en: 'High contrast with room for a headline' },
-    icon: 'text',
-    ratio: '3:4',
-    role: 'product',
-    scene: '输出商业海报：单一视觉中心、强对比、明确的大标题留白区，构图完整可独立张贴，画面内文字精简且中文字形正确',
-  },
-  {
-    id: 'cover',
-    name: { zh: '视频封面', en: 'Video cover' },
-    desc: { zh: '16:9 横版，缩略图里也看得清', en: '16:9, legible as a thumbnail' },
-    icon: 'fullscreen',
-    ratio: '16:9',
-    role: 'product',
-    scene: '输出 16:9 视频封面：主体偏一侧，另一侧留出大标题文字区，强对比高饱和，在缩略图尺寸下仍然可辨识',
-  },
-  {
-    id: 'packaging',
-    name: { zh: '包装', en: 'Packaging' },
-    desc: { zh: '保留容器形状与标签文字的正面效果图', en: 'Front mockup that keeps shape and label copy' },
-    icon: 'shape',
-    ratio: '1:1',
-    role: 'packaging',
-    scene: '输出包装正面商业效果图：保留素材图的容器形状、标签排版、品牌文字与净含量信息，纯色或极简背景，单个产品居中，材质与光泽真实',
-  },
-  {
-    id: 'merch',
-    name: { zh: '周边', en: 'Merch' },
-    desc: { zh: '帆布袋 / 杯子 / 贴纸 / T恤 等物料图', en: 'Tote, mug, sticker or tee mockup' },
-    icon: 'grid',
-    ratio: '1:1',
-    role: 'material',
-    scene: '输出周边物料效果图：从帆布袋、马克杯、贴纸、T恤、徽章中选最贴合素材的一种，主体居中，背景干净，织物或陶瓷质感真实，阴影自然',
-  },
-];
+/** 上传的图与存档的图是同一个结构（id / src / 宽高 / 文件名） */
+type Uploaded = ReplicateImage;
+type Item = ReplicateResult;
 
 const TAIL = '高分辨率商业级出图，画面干净，无拼贴、无分栏、无水印、无多余产品，中文文字排版正确';
 
@@ -253,26 +170,49 @@ function ModelPicker({ value, onChange, disabled }: {
 
 let seq = 0;
 
+/** 一份草稿的状态快照：自动保存和「立即保存」都按它写库，
+ *  signature 用来判断「有没有真的变过」，避免打开一下就刷新 updatedAt。 */
+interface Snapshot {
+  kind: KindDef;
+  refs: Uploaded[];
+  mats: Uploaded[];
+  items: Item[];
+  extra: string;
+  fidelity: number;
+  tier: ImageTier;
+  ratioId: string;
+}
+
+const sigOf = (x: Snapshot): string => JSON.stringify([
+  x.kind.id, x.refs.map((r) => r.id), x.mats.map((m) => m.id), x.items.map((i) => i.id),
+  x.extra, x.fidelity, x.tier, x.ratioId,
+]);
+
 export default function Replicate() {
   const { t, lang } = useLang();
   const auth = useAuth();
   const sub = useSubscription();
-  const { setToast, createWorkflowProject, patchWorkflow } = useApp();
+  const { s, setToast, createWorkflowProject, patchWorkflow, saveReplicate } = useApp();
+  const hash = useHash();
 
-  const [kind, setKind] = useState<KindDef | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(true);
+  /* 从地址栏取要编辑的草稿；没有 id 就是新建 */
+  const editId = new URLSearchParams(hash.split('?')[1] || '').get('id');
+  const [opened] = useState(() => (editId ? s.replicates.find((r) => r.id === editId) ?? null : null));
 
-  const [refs, setRefs] = useState<Uploaded[]>([]);
-  const [mats, setMats] = useState<Uploaded[]>([]);
+  const [kind, setKind] = useState<KindDef | null>(() => kindById(opened?.kind));
+  const [pickerOpen, setPickerOpen] = useState(!opened);
+
+  const [refs, setRefs] = useState<Uploaded[]>(opened?.refs ?? []);
+  const [mats, setMats] = useState<Uploaded[]>(opened?.mats ?? []);
   const [dragSlot, setDragSlot] = useState<Slot | null>(null);
-  const [extra, setExtra] = useState('');
-  const [tier, setTier] = useState<ImageTier>('flash');
-  const [ratioId, setRatioId] = useState('1:1');
-  const [fidelity, setFidelity] = useState(80);
+  const [extra, setExtra] = useState(opened?.extra ?? '');
+  const [tier, setTier] = useState<ImageTier>(opened?.tier ?? 'flash');
+  const [ratioId, setRatioId] = useState(opened?.ratio ?? '1:1');
+  const [fidelity, setFidelity] = useState(opened?.fidelity ?? 80);
   const [busy, setBusy] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
 
-  const [items, setItems] = useState<{ id: string; src: string; extra: string; prompt: string; tier: ImageTier; fid: number; w: number; h: number }[]>([]);
+  const [items, setItems] = useState<Item[]>(opened?.items ?? []);
   const [regenId, setRegenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftExtra, setDraftExtra] = useState('');
@@ -280,6 +220,12 @@ export default function Replicate() {
 
   const refInput = useRef<HTMLInputElement>(null);
   const matInput = useRef<HTMLInputElement>(null);
+
+  /** 已经落库的草稿 id：放 ref 里，保存函数里读到的永远是最新值 */
+  const draftIdRef = useRef<string | null>(opened?.id ?? null);
+  const createdRef = useRef<number>(opened?.createdAt ?? 0);
+  /** 首帧的签名算「已保存」，否则打开旧草稿会立刻把它顶到列表最上面 */
+  const savedSigRef = useRef<string | null>(null);
 
   const safeTier = resolveTier(tier, sub.isPro);
   /** 与「设计方案」同口径：三张按一张档位的价扣，不收三倍 */
@@ -289,8 +235,61 @@ export default function Replicate() {
   const cssRatio = ratio.id.replace(':', ' / ');
   const total = refs.length + mats.length;
   const ready = refs.length > 0 && mats.length > 0;
-  const nm = (k: KindDef) => (lang === 'en' ? k.name.en : k.name.zh);
-  const kd = (k: KindDef) => (lang === 'en' ? k.desc.en : k.desc.zh);
+  const nm = (k: KindDef) => kindName(k, lang);
+  const kd = (k: KindDef) => kindDesc(k, lang);
+
+  const snapshot = (patch?: Partial<Snapshot>): Snapshot | null => {
+    if (!kind) return null;
+    return { kind, refs, mats, items, extra, fidelity, tier, ratioId, ...patch };
+  };
+
+  /** 整条覆盖写入草稿箱。有 id 就更新，没有就新建并把 id 写进地址栏。 */
+  const saveDraft = (snap: Snapshot | null) => {
+    if (!snap) return;
+    const now = Date.now();
+    const id = draftIdRef.current
+      || `rep_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const existingName = s.replicates.find((r) => r.id === id)?.name;
+    const rec: ReplicateProject = {
+      id,
+      name: existingName || t(`${kindName(snap.kind, 'zh')}复刻`, `${kindName(snap.kind, 'en')} recreation`),
+      kind: snap.kind.id,
+      ratio: snap.ratioId,
+      fidelity: snap.fidelity,
+      extra: snap.extra,
+      tier: snap.tier,
+      refs: snap.refs,
+      mats: snap.mats,
+      items: snap.items,
+      createdAt: createdRef.current || now,
+      updatedAt: now,
+    };
+    saveReplicate(rec);
+    createdRef.current = rec.createdAt;
+    savedSigRef.current = sigOf(snap);
+    if (!draftIdRef.current) {
+      draftIdRef.current = id;
+      // 用 replaceState：改成 location.hash 会触发 hashchange，App 按 key 重挂，
+      // 编辑器状态全被清掉（刚传的图会没）
+      window.history.replaceState(null, '', `#/replicate/edit?id=${id}`);
+    }
+  };
+
+  /* 首帧记下签名：打开旧草稿时一次都不写，只有真的改过才保存 */
+  const cur = snapshot();
+  if (savedSigRef.current === null && cur) savedSigRef.current = sigOf(cur);
+
+  /* 自动保存：传图 / 改提示词 / 换模型 / 换尺寸 / 复刻度变化，700ms 后落库。
+     完全空白（没图没结果没提示词）不落库，否则列表里全是空记录。 */
+  useEffect(() => {
+    const snap = snapshot();
+    if (!snap) return;
+    if (!snap.refs.length && !snap.mats.length && !snap.items.length && !snap.extra.trim()) return;
+    if (savedSigRef.current === sigOf(snap)) return;
+    const timer = window.setTimeout(() => saveDraft(snap), 700);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, refs, mats, items, extra, fidelity, tier, ratioId]);
 
   const reset = () => { setItems([]); setEditingId(null); };
 
@@ -370,6 +369,8 @@ export default function Replicate() {
     if (!ensureQuota(batchCost)) return;
     setBusy(true);
     setItems([]);
+    // 生成期间先落一次库：中途关掉页面，回来还能看到已上传的图与设置
+    saveDraft(snapshot({ items: [] }));
     try {
       const uid = auth.user?.id;
       const inputs = await imageInputs();
@@ -379,12 +380,14 @@ export default function Replicate() {
         const size = await naturalSize(src);
         return { id: `rec_${Date.now()}_${seq++}`, src, extra, prompt, tier: safeTier, fid: fidelity, w: size.w, h: size.h };
       }));
-      const ok = settled.filter((r): r is PromiseFulfilledResult<(typeof items)[number]> => r.status === 'fulfilled').map((r) => r.value);
+      const ok = settled.filter((r): r is PromiseFulfilledResult<Item> => r.status === 'fulfilled').map((r) => r.value);
       if (!ok.length) {
         const fail = settled.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
         throw new Error(fail?.reason?.message || t('生成失败，请稍后重试', 'Generation failed, try again'));
       }
       setItems(ok);
+      // 三张出完立刻写库：用户接着点「用它开始」会跳到包装设计，这一步不能等防抖
+      saveDraft(snapshot({ items: ok }));
       await charge(batchCost);
     } catch (e) {
       setToast(readableError(e, t('生成失败', 'Generation failed'), t('网络不通，检查网络后再试一次', 'Network request failed — check your connection and try again')));
@@ -408,9 +411,11 @@ export default function Replicate() {
       const nextSafe = resolveTier(nextTier, sub.isPro);
       const src = await callImage(p, { tier: nextSafe, size: sizeForTier(nextSafe, ratio), ...inputs, uid });
       const size = await naturalSize(src);
-      setItems((prev) => prev.map((x) => (x.id === id
+      const nextItems = items.map((x) => (x.id === id
         ? { ...x, src, extra: nextExtra, prompt: p, tier: nextSafe, fid: fidelity, w: size.w, h: size.h }
-        : x)));
+        : x));
+      setItems(nextItems);
+      saveDraft(snapshot({ items: nextItems }));
       setEditingId(null);
       await charge(cost);
     } catch (e) {
@@ -420,10 +425,12 @@ export default function Replicate() {
     }
   };
 
-  /** 把这张图带走：建项目 → 所有参考图与选中方案都写进草稿，进流程 */
-  const useResult = (item: (typeof items)[number]) => {
+  /** 把这张图带走：建包装设计项目 → 所有参考图与选中方案都写进草稿，进流程 */
+  const useResult = (item: Item) => {
     if (!kind) return;
     if (!auth.user) { setLoginOpen(true); return; }
+    // 先保存复刻草稿，再跳走：跳转后本组件卸载，没落库的改动会丢
+    saveDraft(snapshot());
     const toRef = (img: Uploaded, role: ReferenceRole, note: string): ReferenceImage => ({
       id: `ref_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
       src: img.src,
@@ -505,17 +512,30 @@ export default function Replicate() {
   };
 
   return <div className="page rep-page">
+    <div className="rep-crumb">
+      <button onClick={() => go('/replicate')}>
+        <Icon name="chevronLeft" size={12} />{t('复刻记录', 'My recreations')}
+      </button>
+      <span className="rep-kicker">RECREATE</span>
+    </div>
+
     <div className="rep-head">
-      <div className="rep-kicker">RECREATE</div>
       <h1>{kind ? t(`复刻 · ${nm(kind)}`, `Recreate · ${nm(kind)}`) : t('把喜欢的风格复刻成自己的作品', 'Recreate a look as your own work')}</h1>
       <p>{kind
         ? t('上传参考图与自己的素材图，定好复刻度、尺寸和模型，一次给你三张。挑一张进编辑器，或者改完提示词再来一组。',
           'Add references and your own assets, set how closely to follow them plus size and model, and get three takes. Keep one in the editor, or adjust the prompt and run again.')
         : t('先选要做什么：主图、详情页、海报、视频封面、包装、周边。每种类型的画面规则和默认尺寸不同，选好以后还能改。',
           'Pick a format first — main image, detail page, poster, video cover, packaging or merch. Each has its own layout rules and default size, and you can change them later.')}</p>
-      {kind && <button className="rep-switch" onClick={() => setPickerOpen(true)}>
-        <Icon name="grid" size={13} />{t('换个类型', 'Change format')}
-      </button>}
+      {kind && <div className="rep-head-actions">
+        <button className="rep-switch" onClick={() => setPickerOpen(true)}>
+          <Icon name="grid" size={13} />{t('换个类型', 'Change format')}
+        </button>
+        {/* 如实说明存到哪儿了：复刻草稿存在本机浏览器，不进云端项目表 */}
+        <span className="rep-savehint">
+          <Icon name="check" size={12} />
+          {draftIdRef.current ? t('已自动存到复刻记录', 'Saved to your recreations') : t('改动会自动存成复刻记录', 'Changes are saved as a recreation')}
+        </span>
+      </div>}
     </div>
 
     {kind && <div className="rep-grid">
@@ -578,7 +598,7 @@ export default function Replicate() {
             const isEditing = editingId === it.id;
             return <article className="rep-card" key={it.id}>
               <div className="rep-card-img" style={{ '--rep-ar': cssRatio } as React.CSSProperties}>
-                <img src={it.src} alt={`${nm(kind)} ${i + 1}`} />
+                <img src={it.src} alt={`${kind ? nm(kind) : ''} ${i + 1}`} />
                 <span className="rep-tag">{t('方案', 'Take')} {String.fromCharCode(65 + i)}</span>
                 {regenId === it.id && <div className="rep-loading"><i />{t('重新生成中…', 'Regenerating…')}</div>}
               </div>
@@ -609,7 +629,7 @@ export default function Replicate() {
                     <Icon name="edit" size={13} />{t('改提示词', 'Edit prompt')}
                   </button>
                   <button className="primary" onClick={() => useResult(it)}>
-                    {t('用它开始', 'Use this')} <Icon name="chevronRight" size={13} />
+                    {t('用它做包装', 'Use in packaging')} <Icon name="chevronRight" size={13} />
                   </button>
                 </div>}
               </div>

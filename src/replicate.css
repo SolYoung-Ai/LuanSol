@@ -7,6 +7,38 @@
 
 .rep-page { max-width: 1240px; margin: 0 auto; padding: 36px 28px 120px; }
 
+/* 顶部面包屑：回「复刻记录」+ 英文小标。放最上面一排，
+   和页面右下角的全局返回按钮分工不同：这个明确回的是复刻记录，不是上一页。 */
+.rep-crumb { display: flex; align-items: center; gap: 12px; }
+.rep-crumb button {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 4px 10px 4px 6px; border: 1px solid var(--v4-line); border-radius: var(--v4-r-pill, 999px);
+  background: var(--v4-surface); color: var(--v4-ink-2); font: inherit; font-size: 11.5px; cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+.rep-crumb button:hover { color: var(--v4-ink); border-color: var(--v4-ink-3); }
+
+.rep-head-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.rep-head-actions .rep-switch { margin-top: 0; }
+.rep-savehint {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--v4-ink-3);
+}
+.rep-savehint svg { color: var(--v4-orange, #d9602c); }
+
+/* 复刻记录卡：右下角标「已出几张」，代替包装设计的「草稿/设计中」状态——
+   复刻没有阶段，只有一个「出了几张」的事实。 */
+.rep-work-n {
+  position: absolute; right: 10px; bottom: 10px;
+  padding: 2px 8px; border-radius: var(--v4-r-sm);
+  background: rgba(20, 20, 20, 0.72); color: #fff;
+  font-size: 10.5px; letter-spacing: 0.06em;
+}
+
+/* 封面用 cover 而不是包装设计的 contain：这里是照片/效果图，
+   留白边只会变成一块发灰的信箱板（刀模图才需要完整可见） */
+.v4-work-cover img.rep-cover { object-fit: cover; }
+
 .rep-head { max-width: 74ch; }
 .rep-kicker {
   font-size: 10.5px;

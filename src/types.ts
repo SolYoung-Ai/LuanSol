@@ -408,6 +408,51 @@ export interface ConceptImage {
   hint: string;
 }
 
+/* ---------------------------- 复刻设计（独立于包装设计的一套记录） ---------------------------- */
+
+/** 复刻里上传的一张图（已经在本机压缩过，存的是 data URL） */
+export interface ReplicateImage {
+  id: string;
+  src: string;
+  w: number;
+  h: number;
+  name: string;
+}
+
+/** 复刻生成的一张结果 */
+export interface ReplicateResult {
+  id: string;
+  src: string;
+  /** 用户当时填的补充提示词（结果卡上直接展示这句，不是完整拼装后的长提示词） */
+  extra: string;
+  /** 实际发给模型的完整提示词，重新生成 / 追溯时用 */
+  prompt: string;
+  tier: ImageTier;
+  /** 生成时的复刻度 */
+  fid: number;
+  w: number;
+  h: number;
+}
+
+/** 一份复刻草稿：类型 + 两栏上传 + 设置 + 三条结果，整条覆盖保存。
+ *  与 Project 完全分开存（replicates 字段），这样「包装设计」与「复刻设计」
+ *  各有各的草稿箱，互不污染。 */
+export interface ReplicateProject {
+  id: string;
+  name: string;
+  /** 类型 id（main / detail / poster / cover / packaging / merch），渲染时走 KINDS 对照表 */
+  kind: string;
+  ratio: string;
+  fidelity: number;
+  extra: string;
+  tier: ImageTier;
+  refs: ReplicateImage[];
+  mats: ReplicateImage[];
+  items: ReplicateResult[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** 色彩规范条目 */
 export interface ColorSpec {
   hex: string;

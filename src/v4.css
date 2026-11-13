@@ -409,6 +409,12 @@ input, textarea, select { border-radius: var(--v4-r-md); transition: border-colo
   border: 1px solid var(--v4-line); border-radius: var(--v4-r-sm);
   font-size: 10px; letter-spacing: .1em; color: var(--v4-ink-2);
 }
+/* 上面的 `.v4-work-cover > *` 本来是给封面图（img / svg / 占位块）铺满用的，
+   但它对绝对定位的角标同样生效：角标被撑成 100% 宽高、
+   92% 不透明的白底就会把整张封面盖住，只剩「白板 + 一圈边」。
+   角标必须按内容自适应尺寸。 */
+.v4-work-cover > .v4-work-status,
+.v4-work-cover > .rep-work-n { width: auto; height: auto; }
 .v4-work-body { padding-top: 14px; display: flex; flex-direction: column; gap: 6px; }
 .v4-work-name { font-size: 14.5px; font-weight: 500; letter-spacing: .01em; }
 .v4-work-meta { font-size: 11.5px; color: var(--v4-ink-3); letter-spacing: .04em; display: flex; gap: 8px; flex-wrap: wrap; }

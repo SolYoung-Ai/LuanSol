@@ -7,10 +7,11 @@
  *
  * 结构与 Luna 页自己的侧栏完全一致（同一套圆角玻璃卡 + 同一套内边距）：
  *   brand  —— 品牌头（logo + 名称 + 副标题）
- *   links  —— 开始 / Luna Ai / 工作台
+ *   links  —— 开始 / Luna Ai / 包装设计 / 复刻设计
  *   slot   —— 分界线下的「场景区」，随当前导航变化：
- *              · 工作台 → 新建设计 / 项目 / 复刻
- *              · Luna   → 会话列表（新建对话 / 搜索 / 历史）
+ *              · 包装设计 → 新建设计 / 项目
+ *              · 复刻设计 → 新建复刻 / 复刻记录
+ *              · Luna     → 会话列表（新建对话 / 搜索 / 历史）
  *   account—— 头像 + 昵称 + 积分 + 使用进度 + 查看计划，点开是账户菜单
  *
  * 手机端（≤860px）完全不用这套：.v4-nav 顶部条 + 抽屉保持原样，
@@ -25,26 +26,30 @@ import { useAuth } from '../cloud/auth';
 import { useSubscription } from '../cloud/subscription';
 import { useProfile } from '../cloud/profile';
 import { useLang } from '../i18n';
-import { useApp, visibleProjects } from '../store';
+import { useApp, visibleProjects, visibleReplicas } from '../store';
 import { useChatStore } from '../cloud/useChatStore';
 import { applyTheme, readTheme, saveTheme, type Theme } from '../theme';
 
-/** 三个主入口。工作台包含设计流程的全部子路由，都算「在工作台里」。 */
+/** 四个主入口。包装设计与复刻设计是两条独立的产品线，各自一套草稿箱，
+ *  所以在这里是平级的两项，而不是塞在同一个「工作台」下面。 */
 const SIDE_LINKS: { zh: string; en: string; path: string; icon: IconName; match: string[] }[] = [
-  // 「开始」放在最上面：两张创作入口卡都在这页，点进去就是工作台流程
+  // 「开始」放在最上面：两张创作入口卡都在这页，点进去就是包装设计流程
   { zh: '开始', en: 'Start', path: '/start', icon: 'home', match: ['/start', '/home'] },
   { zh: 'Luna Ai', en: 'Luna AI', path: '/luna', icon: 'spark', match: ['/luna'] },
   {
-    zh: '工作台', en: 'Workspace', path: '/workspace', icon: 'folder',
-    match: ['/workspace', '/projects', '/replicate', '/studio', '/new', '/project', '/structures',
+    zh: '包装设计', en: 'Packaging', path: '/workspace', icon: 'folder',
+    match: ['/workspace', '/projects', '/studio', '/new', '/project', '/structures',
       '/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'],
   },
+  // 复刻设计：列表页 /replicate，工作区 /replicate/new、/replicate/edit。
+  // 注意不能把 '/replicate' 写进上面那条，否则点进复刻时高亮会落在「包装设计」上。
+  { zh: '复刻设计', en: 'Recreate', path: '/replicate', icon: 'copy', match: ['/replicate'] },
 ];
 
-/** 哪些路由算「在工作台里」，分界线下方就展开场景区。
- *  以前用 SIDE_LINKS[2].match 取下标，入口一增一减就会指到别的项上，这里改成按路径查。 */
-const WORKBENCH_MATCH = SIDE_LINKS.find((l) => l.path === '/workspace')!.match;
-const inWorkbench = (path: string) => WORKBENCH_MATCH.some((p) => path.startsWith(p));
+/** 哪些路由算「在某个入口里」，分界线下方就展开对应场景区。 */
+const matchOf = (path: string) => SIDE_LINKS.find((l) => l.path === path)!.match;
+const inWorkbench = (path: string) => matchOf('/workspace').some((p) => path.startsWith(p));
+const inReplicate = (path: string) => matchOf('/replicate').some((p) => path.startsWith(p));
 
 export function SideNavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const hash = useHash();
@@ -99,21 +104,21 @@ export function SideBrand() {
   </div>;
 }
 
-/** 分界线下的工作台功能：新建设计 / 项目 / 复刻。
- *  这三项替代了原来的四步流程——流程是「进去以后的事」，这里是「从哪儿开始」。 */
-export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
-  const { s, setToast } = useApp();
+/** 分界线下的「包装设计」场景区：新建设计 / 项目。
+ *  包装设计与复刻设计各有各的一套动作，所以拆成两个组件而不是一个带 if 的组件：
+ *  两边的按钮、计数、目标路径全都不一样，混在一起最容易点错。 */
+export function SidePackaging({ onNavigate }: { onNavigate?: () => void }) {
+  const { s } = useApp();
   const { lang, t } = useLang();
   const hash = useHash();
   const path = hash.split('?')[0];
   const inProjects = path === '/workspace' || path === '/projects';
-  const inReplicate = path === '/replicate';
   const inNew = path === '/new';
 
   const total = visibleProjects(s.projects).length;
 
   return <div className="sd-panel sd-wb">
-    <div className="sd-panel-label">{lang === 'en' ? 'Workspace' : '工作台'}</div>
+    <div className="sd-panel-label">{lang === 'en' ? 'Packaging' : '包装设计'}</div>
 
     <button className={`sd-act ${inNew ? 'on' : ''}`} onClick={() => { onNavigate?.(); go('/new?fresh=1'); }}>
       <span className="sd-ic"><Icon name="plus" size={16} /></span>
@@ -125,10 +130,34 @@ export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
       <span>{t('项目', 'Projects')}</span>
       <em className="sd-act-n">{total}</em>
     </button>
+  </div>;
+}
 
-    <button className={`sd-act ${inReplicate ? 'on' : ''}`} onClick={() => { onNavigate?.(); go('/replicate'); }}>
-      <span className="sd-ic"><Icon name="copy" size={16} /></span>
-      <span>{t('复刻', 'Recreate')}</span>
+/** 分界线下的「复刻设计」场景区：新建复刻 / 复刻记录。
+ *  和包装设计一样有独立的草稿位置——复刻也是会做一半停下来的活，
+ *  没有草稿箱就只能一次做完，实际用起来做不了。 */
+export function SideRecreate({ onNavigate }: { onNavigate?: () => void }) {
+  const { s } = useApp();
+  const { lang, t } = useLang();
+  const hash = useHash();
+  const path = hash.split('?')[0];
+  const inList = path === '/replicate';
+  const inNew = path.startsWith('/replicate/');
+
+  const total = visibleReplicas(s.replicates).length;
+
+  return <div className="sd-panel sd-wb">
+    <div className="sd-panel-label">{lang === 'en' ? 'Recreate' : '复刻设计'}</div>
+
+    <button className={`sd-act ${inNew ? 'on' : ''}`} onClick={() => { onNavigate?.(); go('/replicate/new'); }}>
+      <span className="sd-ic"><Icon name="plus" size={16} /></span>
+      <span>{t('新建复刻', 'New recreation')}</span>
+    </button>
+
+    <button className={`sd-act ${inList ? 'on' : ''}`} onClick={() => { onNavigate?.(); if (!inList) go('/replicate'); }}>
+      <span className="sd-ic"><Icon name="layers" size={16} /></span>
+      <span>{t('复刻记录', 'My recreations')}</span>
+      <em className="sd-act-n">{total}</em>
     </button>
   </div>;
 }
@@ -353,14 +382,19 @@ export default function SideNav({ onLogin }: { onLogin?: () => void }) {
   // 只是分界线下方的场景区换成会话列表（见 LunaChats）。
   if (path.startsWith('/studio')) return null;
   const isLuna = path.startsWith('/luna');
-  // 分界线下方的场景区：工作台相关页面显示「新建设计 / 项目 / 复刻」
-  const showFlow = inWorkbench(path);
+  // 分界线下方的场景区随入口切换：Luna → 会话列表；包装设计 → 新建/项目；复刻设计 → 新建/记录
+  const isPackaging = inWorkbench(path);
+  const isRecreate = inReplicate(path);
   return <aside className="sd-nav">
     <SideBrand />
     <SideNavLinks />
     {isLuna
       ? <><div className="sd-divider" /><LunaChats /></>
-      : showFlow && <><div className="sd-divider" /><SideWorkbench /></>}
+      : isPackaging
+        ? <><div className="sd-divider" /><SidePackaging /></>
+        : isRecreate
+          ? <><div className="sd-divider" /><SideRecreate /></>
+          : null}
     {!isLuna && <div className="sd-spacer" />}
     <SideAccount onLogin={onLogin} compact={folded} />
     <SideFold folded={folded} onClick={() => setFolded((f) => !f)} />

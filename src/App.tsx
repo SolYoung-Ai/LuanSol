@@ -31,6 +31,7 @@ const Studio = lazy(() => import('./pages/studio'));
 const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
 const Replicate = lazy(() => import('./pages/replicate'));
+const ReplicateList = lazy(() => import('./pages/replicate-list'));
 
 function Footer() {
   const { t } = useLang();
@@ -38,7 +39,8 @@ function Footer() {
     <div className="footer-min-brand"><Logo compact /><span>AI PACKAGING DESIGN STUDIO</span></div>
     <div className="footer-min-links">
       <a href="#/studio">{t('开始设计', 'Start designing')}</a>
-      <a href="#/workspace">{t('工作台', 'Workspace')}</a>
+      <a href="#/workspace">{t('包装设计', 'Packaging')}</a>
+      <a href="#/replicate">{t('复刻设计', 'Recreate')}</a>
       <a href="#/credits">{t('积分说明', 'Credits')}</a>
     </div>
     {/* 法务与价格必须是真实可抓取的静态地址：支付通道审核会直接请求 /terms 这类路径，
@@ -94,6 +96,7 @@ export default function App() {
       void import('./pages/start');
       void import('./pages/workspace');
       void import('./pages/replicate');
+      void import('./pages/replicate-list');
     }, 1400);
     return () => window.clearTimeout(timer);
   }, []);
@@ -101,11 +104,12 @@ export default function App() {
   /* 主入口按固定顺序排列，切换时按「从上往下 / 从下往上」决定滑入方向 */
   const prevNav = useRef<number>(-1);
   useEffect(() => {
-    const order = ['/start', '/home', '/luna', '/workspace', '/projects'];
+    const order = ['/start', '/home', '/luna', '/workspace', '/projects', '/replicate'];
     const idxOf = (p: string) => {
       if (p === '/start' || p === '/home') return 0;
       if (p.startsWith('/luna')) return 1;
       if (p.startsWith('/workspace') || p.startsWith('/projects')) return 2;
+      if (p.startsWith('/replicate')) return 3;
       return -1;
     };
     const cur = idxOf(path);
@@ -159,10 +163,14 @@ export default function App() {
   else if (path === '/studio') page = <Studio />;
   else if (path === '/new') page = <NewDesign />;
   else if (path === '/structures') page = <Structures />;
-  /* 工作台：/workspace 与历史路径 /projects 指向同一个新页面，旧链接不 404 */
+  /* 包装设计：/workspace 与历史路径 /projects 指向同一个页面，旧链接不 404 */
   else if (path === '/workspace' || path === '/projects') page = <Workspace />;
-  /* 复刻：选类型 → 多图参考 + 多图素材 → 三张方案 */
-  else if (path === '/replicate') page = <Replicate />;
+  /* 复刻设计：/replicate 是复刻记录（独立草稿箱），
+     /replicate/new 与 /replicate/edit?id= 是工作区。
+     key 用 hash：从「新建」切到「编辑某条记录」时组件必须重挂，
+     否则会沿用上一条记录已输入的状态。 */
+  else if (path === '/replicate') page = <ReplicateList />;
+  else if (path.startsWith('/replicate/')) page = <Replicate key={hash} />;
   /* 审美市场已永久下线：老书签（/market、/market/site/*、/inspiration）统一送回工作台，
      不做 404，也不再保留任何入口与数据。 */
   else if (path.startsWith('/market') || path === '/inspiration') page = <OldRouteRedirect to="/workspace" />;

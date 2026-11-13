@@ -1,7 +1,9 @@
 /* ============================================================
- * 工作台（WORKSPACE）
+ * 包装设计（PACKAGING DESIGN，路由仍是 /workspace）
  * ------------------------------------------------------------
  * 不是文件管理器，是「你的包装作品集」：所有草稿、设计中、已完成都在这里。
+ * 与「复刻设计」是两条独立的产品线，各有各的草稿箱（store 里是两列数据），
+ * 这里只列包装设计的项目，不要把复刻草稿混进来。
  * 数据来源：IndexedDB（未登录可用）＋ CloudBase 云同步（登录后合并，见 useCloudSync）。
  * 状态口径：draft=草稿，designing=设计中，checked/exported=已完成（已过印前 / 已导出）。
  * 封面只用真实设计稿渲染；没有设计稿时给统一的空白占位，不用随机图片凑数。
@@ -181,9 +183,9 @@ export default function Workspace() {
   return <div className="v4-page">
     <div className="v4-page-head">
       <div>
-        <div className="v4-kicker">WORKSPACE</div>
-        <h1 className="v4-h1">{t('工作台', 'Workspace')}</h1>
-        <p className="v4-sub">{t('你的每一个想法，都在这里留下作品。', 'Every idea of yours leaves a piece of work here.')}</p>
+        <div className="v4-kicker">PACKAGING DESIGN</div>
+        <h1 className="v4-h1">{t('包装设计', 'Packaging design')}</h1>
+        <p className="v4-sub">{t('你的每一个包装作品，都在这里留下记录。', 'Every package you make is kept here.')}</p>
       </div>
       <div className="v4-tools">
         <button className="v4-btn-dark" onClick={() => go('/new?fresh=1')}>{t('新建设计', 'New design')}</button>

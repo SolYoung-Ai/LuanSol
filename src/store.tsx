@@ -1,6 +1,6 @@
 /* 全局项目仓库：IndexedDB 优先，localStorage 兜底；所有智能体共享同一份项目数据。 */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { AISettings, Asset, ChatMessage, CreationMode, DesignBrief, DesignDoc, Dieline, PrepressReport, ProductInfo, Project, ProjectWorkflow, ReferenceImage, UserSettings, Version } from './types';
+import type { AISettings, Asset, ChatMessage, CreationMode, DesignBrief, DesignDoc, Dieline, PrepressReport, ProductInfo, Project, ProjectWorkflow, ReferenceImage, ReplicateProject, UserSettings, Version } from './types';
 import { createEmptyBrief } from './engine/brief';
 import { buildDieline } from './engine/structure';
 import { DEFAULT_AI, migrateAI } from './engine/llm';
@@ -66,6 +66,15 @@ export function isBlankDraft(p: Project): boolean {
 /** 工作台 / 侧栏计数统一走这里，口径必须一致（否则「项目 5」点进去只有 2 张卡） */
 export const visibleProjects = (list: Project[]): Project[] => list.filter((p) => !isBlankDraft(p));
 
+/** 复刻草稿的有效性：只有真正传过图或出过图才算一条记录。
+ *  只点了「新建复刻」又退出去的不该占列表位置（和包装设计的空草稿同一口径）。 */
+export const isBlankReplica = (r: ReplicateProject): boolean =>
+  !r.refs.length && !r.mats.length && !r.items.length && !r.extra.trim();
+
+/** 复刻列表与侧栏计数共用 */
+export const visibleReplicas = (list: ReplicateProject[]): ReplicateProject[] =>
+  list.filter((r) => !isBlankReplica(r));
+
 interface Persisted {
   projects: Project[];
   activeId: string | null;
@@ -81,12 +90,16 @@ interface Persisted {
   draft: ProjectDraft;
   /** 独立素材库（持久化，可跨项目复用） */
   assets: Asset[];
+  /** 复刻设计的草稿箱：与 projects 完全分开的一列，不复用 Project（字段语义不同） */
+  replicates: ReplicateProject[];
+  /** 复刻编辑器当前打开的草稿 id（新建时为 null） */
+  activeReplicateId: string | null;
 }
 
 const initial = (): Persisted => ({
   projects: [], activeId: null, brief: createEmptyBrief(), chat: [], schemes: [], design: null,
   report: null, settings: { ...DEFAULT_SETTINGS }, ai: { ...DEFAULT_AI }, storage: '—',
-  draft: createEmptyDraft(), assets: [],
+  draft: createEmptyDraft(), assets: [], replicates: [], activeReplicateId: null,
 });
 
 interface AppCtx {
@@ -129,6 +142,12 @@ interface AppCtx {
   addAsset: (asset: Asset) => void;
   removeAsset: (id: string) => void;
   toggleFavoriteAsset: (id: string) => void;
+  /* ---------- 复刻设计：独立的一套草稿 ---------- */
+  /** 整条覆盖写入（编辑器自动保存走这里，有则更新、无则新增） */
+  saveReplicate: (p: ReplicateProject) => void;
+  deleteReplicate: (id: string) => void;
+  renameReplicate: (id: string, name: string) => void;
+  duplicateReplicate: (id: string) => void;
 }
 
 const Ctx = createContext<AppCtx | null>(null);
@@ -164,6 +183,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           settings: { ...DEFAULT_SETTINGS, ...loaded.settings },
           ai: migrateAI({ ...DEFAULT_AI, ...loaded.ai }),
           draft: normalizeDraft(loaded.draft),
+          // 复刻草稿是后加的字段：老用户磁盘里没有，兜底成空数组而不是 undefined，
+          // 否则列表页 .filter 会直接炸在首屏
+          replicates: Array.isArray(loaded.replicates) ? loaded.replicates : [],
+          activeReplicateId: loaded.activeReplicateId ?? null,
         };
       });
       setReady(true);
@@ -395,6 +418,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ...prev, assets: prev.assets.map((a) => a.id === id ? { ...a, favorite: !a.favorite } : a),
   })), []);
 
+  // —— 复刻设计：整套草稿的读写 ——
+  const saveReplicate = useCallback((p: ReplicateProject) => setS((prev) => {
+    const exists = prev.replicates.some((r) => r.id === p.id);
+    return {
+      ...prev,
+      activeReplicateId: p.id,
+      replicates: exists
+        ? prev.replicates.map((r) => (r.id === p.id ? p : r))
+        : [p, ...prev.replicates],
+    };
+  }), []);
+
+  const deleteReplicate = useCallback((id: string) => setS((prev) => ({
+    ...prev,
+    replicates: prev.replicates.filter((r) => r.id !== id),
+    activeReplicateId: prev.activeReplicateId === id ? null : prev.activeReplicateId,
+  })), []);
+
+  const renameReplicate = useCallback((id: string, name: string) => setS((prev) => ({
+    ...prev,
+    replicates: prev.replicates.map((r) => (r.id === id ? { ...r, name, updatedAt: Date.now() } : r)),
+  })), []);
+
+  const duplicateReplicate = useCallback((id: string) => setS((prev) => {
+    const r = prev.replicates.find((x) => x.id === id);
+    if (!r) return prev;
+    const now = Date.now();
+    const copy: ReplicateProject = {
+      ...r,
+      id: `rep_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      name: tl(`${r.name}（副本）`, `${r.name} (copy)`),
+      createdAt: now,
+      updatedAt: now,
+    };
+    return { ...prev, replicates: [copy, ...prev.replicates] };
+  }), []);
+
   const addVersion = useCallback((label: string) => setS((prev) => {
     if (!prev.design || !prev.activeId) return prev;
     const projects = prev.projects.map((p) => p.id === prev.activeId ? {
@@ -417,6 +477,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     createWorkflowProject, patchWorkflow, updateProject,
     addVersion, restoreVersion,
     addAsset, removeAsset, toggleFavoriteAsset,
+    saveReplicate, deleteReplicate, renameReplicate, duplicateReplicate,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
