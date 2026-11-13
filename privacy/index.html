@@ -30,7 +30,7 @@
   <div class="summary">
     <h2>Summary (English)</h2>
     <ul>
-      <li><strong>What we collect:</strong> your email address (account), optional profile fields (nickname, birthday, bio), credit balance and usage records, membership status, and the design content you create or upload.</li>
+      <li><strong>What we collect:</strong> your email address (account), optional profile fields (nickname, birthday, bio), credit balance and usage records, order history, and the design content you create or upload.</li>
       <li><strong>Where it is stored:</strong> account and project data live in Tencent CloudBase (Shanghai region); before you sign in, drafts stay in your own browser (IndexedDB) and are never uploaded.</li>
       <li><strong>Who processes it:</strong> Tencent CloudBase (hosting, database, sign-in), Creem (payments and billing as merchant of record, including card data — <strong>we never see or store your card number</strong>), and AI model providers (DeepSeek, Volcano Engine/ByteDance, B.AI) which receive only the prompt and reference image for the request, never your email or account id.</li>
       <li><strong>Prompt screening:</strong> image prompts are sent to the Creem Moderation API before generation to check them against content policy.</li>
@@ -43,7 +43,7 @@
   <ul>
     <li><strong>账号信息</strong>：邮箱；如你设置了密码，密码由腾讯云 CloudBase 身份服务加密存储，我们看不到明文。</li>
     <li><strong>资料信息</strong>：昵称、头像、生日、简介——都是可选的，不填不影响使用。</li>
-    <li><strong>使用数据</strong>：积分余额与每笔消耗记录、会员有效期与开通记录、订单号与支付状态。</li>
+    <li><strong>使用数据</strong>：积分余额与每笔消耗记录、订单号与支付状态（本服务没有会员或订阅，因此不保存有效期）。</li>
     <li><strong>设计数据</strong>：你输入的产品信息、提示词、参考图、生成结果与编辑稿。</li>
     <li><strong>技术日志</strong>：调用时间、接口的错误码与耗时，用于排查故障与防止滥用；不包含你的提示词正文。</li>
   </ul>
@@ -51,13 +51,13 @@
   <h2><em>2</em>数据存在哪里</h2>
   <p>
     未登录时，设计数据只保存在你自己浏览器的 IndexedDB 里，不上传。
-    登录并开启云端同步后，项目、积分记录与会员状态保存在腾讯云 CloudBase（中国上海地域）的数据库中，
+    登录并开启云端同步后，项目与积分记录保存在腾讯云 CloudBase（中国上海地域）的数据库中，
     按账号隔离，其他用户无法读取。
   </p>
 
   <h2><em>3</em>用来做什么</h2>
   <p>
-    识别账号身份、保存与恢复你的项目、计算并扣减积分、处理付款与开通会员、排查故障与防止滥用。
+    识别账号身份、保存与恢复你的项目、计算并扣减积分、处理付款与发放积分包、排查故障与防止滥用。
     我们不会把你的邮箱或设计内容用于广告投放，也不会出售给第三方。
   </p>
 
@@ -87,7 +87,7 @@
 
   <h2><em>7</em>你的权利</h2>
   <ul>
-    <li>在工作台删除任意项目，云端副本会一并删除（会员的云端同步）。</li>
+    <li>在工作台删除任意项目，云端副本会一并删除。</li>
     <li>清空浏览器数据可删除本机全部草稿。</li>
     <li>需要导出全部数据或注销账号，请邮件联系我们，我们会在 7 个工作日内处理。</li>
     <li>如你位于欧洲经济区或英国，你还可以向当地数据保护机构投诉。</li>
