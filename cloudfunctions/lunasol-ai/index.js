@@ -235,20 +235,29 @@ function withDeadline(promise, ms, message) {
  *  GPT Image 2 的「输入 8」档位只在这条路径上生效——generations 不认 image 参数。 */
 function callBaiImageEdit(route, opts) {
   return withDeadline(new Promise((resolve, reject) => {
-    const m = /^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i.exec(opts.dataUrl || '');
-    if (!m) { reject(new Error('参考图格式不正确')); return; }
-    const mime = m[1];
-    const buf = Buffer.from(m[2], 'base64');
-    const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const list = (Array.isArray(opts.dataUrls) && opts.dataUrls.length ? opts.dataUrls : [opts.dataUrl]).slice(0, 4);
+    const parts = [];
+    for (const url of list) {
+      const m = /^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i.exec(url || '');
+      if (!m) { reject(new Error('参考图格式不正确')); return; }
+      const mime = m[1];
+      parts.push({ mime, buf: Buffer.from(m[2], 'base64'), ext: (mime.split('/')[1] || 'png').replace('jpeg', 'jpg') });
+    }
     const boundary = `----lunasol${Date.now().toString(16)}`;
     const chunks = [];
     const pushText = (s) => chunks.push(Buffer.from(s, 'utf8'));
     pushText(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\n${route.model}\r\n`);
     pushText(`--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${opts.prompt}\r\n`);
     pushText(`--${boundary}\r\nContent-Disposition: form-data; name="size"\r\n\r\n${opts.size || '1024x1024'}\r\n`);
-    pushText(`--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="ref.${ext}"\r\nContent-Type: ${mime}\r\n\r\n`);
-    chunks.push(buf);
-    pushText(`\r\n--${boundary}--\r\n`);
+    // 单图沿用 OpenAI 兼容的 image 字段；多图用 image[] 重复 part。
+    // 上游若只认单图，handleImage 会拿拼接参考板降级重试一次。
+    const field = parts.length > 1 ? 'image[]' : 'image';
+    parts.forEach((p, i) => {
+      pushText(`--${boundary}\r\nContent-Disposition: form-data; name="${field}"; filename="ref-${i}.${p.ext}"\r\nContent-Type: ${p.mime}\r\n\r\n`);
+      chunks.push(p.buf);
+      pushText('\r\n');
+    });
+    pushText(`--${boundary}--\r\n`);
     const data = Buffer.concat(chunks);
     const req = https.request(new URL(route.base + '/images/edits'), {
       method: 'POST',
@@ -587,7 +596,18 @@ async function handleImage(req, res, body) {
     return sendJson(res, 503, { error: { message: `${route.provider === 'bai' ? 'B.AI' : '方舟'} 密钥未配置，该档位暂不可用` } });
   }
 
-  const hasRef = typeof body.image === 'string' && body.image.startsWith('data:image/');
+  // 参考图支持两种写法：
+  //   body.image   —— 单张（旧客户端），多图客户端传的是「拼接参考板」，用于降级；
+  //   body.images  —— 真·多图数组，按 [风格参考, 产品图] 顺序。
+  // 两个字段都发，服务端新旧版本都能工作：新版用 images，旧版用 image。
+  const legacyRef = typeof body.image === 'string' && body.image.startsWith('data:image/') ? body.image : '';
+  const refList = (Array.isArray(body.images)
+    ? body.images.filter((s) => typeof s === 'string' && s.startsWith('data:image/')).slice(0, 4)
+    : []);
+  const allRefs = refList.length ? refList : (legacyRef ? [legacyRef] : []);
+  const fallbackRef = legacyRef || allRefs[0] || '';
+  const hasRef = allRefs.length > 0;
+  const multiRef = allRefs.length > 1;
   // GPT Image 2 的两个价格档位对应两种输入，走错接口就白扣分：
   //   文字输入(5) → /images/generations（无参考图）
   //   图片输入(8) → /images/edits（带参考图，multipart）
@@ -610,18 +630,29 @@ async function handleImage(req, res, body) {
       prompt,
       size,
       response_format: 'url',
-      ...(hasRef ? { image: body.image } : {}),
+      // 方舟 Seedream 的 image 既收字符串也收数组；数组就是多图参考
+      ...(hasRef ? { image: multiRef ? allRefs : fallbackRef } : {}),
     };
 
   try {
     dayUsed += 1;
     let r;
     if (route.provider === 'bai') {
-      r = tier === 'gpt2-ref'
-        ? await callBaiImageEdit(route, { prompt, dataUrl: body.image, size })
-        : await callBaiImage(route, payload);
+      if (tier === 'gpt2-ref') {
+        r = await callBaiImageEdit(route, { prompt, dataUrls: allRefs, size });
+        // 上游不认 image[] 时退回单张拼接板，不让「双图复刻」整体失败
+        if (r.status >= 400 && r.status < 500 && multiRef) {
+          r = await callBaiImageEdit(route, { prompt, dataUrls: [fallbackRef], size });
+        }
+      } else {
+        r = await callBaiImage(route, payload);
+      }
     } else {
       r = await callSeedream(payload);
+      // 模型版本不认 image 数组时（4xx）自动降级到拼接参考板重试一次
+      if (r.status >= 400 && r.status < 500 && multiRef) {
+        r = await callSeedream({ ...payload, image: fallbackRef });
+      }
     }
     if (r.status < 200 || r.status >= 300) {
       return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, {

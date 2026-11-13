@@ -14,6 +14,7 @@ import { useLang } from '../i18n';
 import ReferenceUploader from './components/ReferenceUploader';
 import { Icon } from '../components/icons';
 import { imageCost } from '../cloud/models';
+import { compressImageForUpload } from './imageUtils';
 
 /** 主题色预设：覆盖常见包装调性，用户也可自定义取色 */
 const PRESET_COLORS = [
@@ -58,14 +59,19 @@ export default function RequirementsStage() {
     set({ themeColors: has ? colors.filter((c) => c !== hex) : [...colors, hex] });
   };
 
-  const onLogoFile = (file?: File) => {
+  const onLogoFile = async (file?: File) => {
     if (!file) return;
     if (!/^image\//.test(file.type)) { setToast(t('请上传图片格式的 LOGO', 'Please upload an image file for the logo.')); return; }
-    if (file.size > 4 * 1024 * 1024) { setToast(t('LOGO 图片请小于 4MB', 'The logo image must be smaller than 4 MB.')); return; }
-    const reader = new FileReader();
-    reader.onload = () => set({ logoImage: String(reader.result || ''), logoMode: 'upload' });
-    reader.onerror = () => setToast(t('LOGO 读取失败，请重试', 'Could not read the logo file. Please try again.'));
-    reader.readAsDataURL(file);
+    // 与 Luna 输入框同一套上限：本机压缩代替 4MB 硬拒，原图再大也能传
+    try {
+      const compressed = await compressImageForUpload(file, { maxEdge: 1600 });
+      set({ logoImage: compressed.dataUrl, logoMode: 'upload' });
+    } catch (err) {
+      const tooLarge = err instanceof Error && err.message === 'TOO_LARGE';
+      setToast(tooLarge
+        ? t('LOGO 图片超过 30MB，请先压缩或换一张', 'The logo is over 30 MB — compress it or pick another one')
+        : t('LOGO 读取失败，请重试', 'Could not read the logo file. Please try again.'));
+    }
   };
 
   const canSubmit = (info.productName.trim() || info.brandName.trim() || info.description.trim()).length > 0;
@@ -237,7 +243,7 @@ export default function RequirementsStage() {
 
         {info.logoMode === 'upload' && <div className="wf-logo-upload">
           <input ref={logoRef} type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={(e) => { onLogoFile(e.target.files?.[0]); e.target.value = ''; }} />
+            onChange={(e) => { void onLogoFile(e.target.files?.[0]); e.target.value = ''; }} />
           <button className="wf-logo-box" onClick={() => logoRef.current?.click()}>
             {info.logoImage
               ? <img src={info.logoImage} alt="LOGO" />

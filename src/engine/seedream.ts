@@ -15,7 +15,11 @@ import type { ImageTier } from '../types';
 
 export async function callImage(prompt: string, opts: {
   tier: ImageTier;
+  /** 单张兼容字段。多图场景请传「拼接参考板」：旧版云函数只认这个字段，
+   *  这样即使服务端还没更新，两张图的信息也不会丢。 */
   referenceImage?: string;
+  /** 真·多图输入（新版云函数）：按 [风格参考, 产品图] 顺序传给模型。 */
+  referenceImages?: string[];
   uid?: string;
   /** 出图尺寸（对应界面的「比例」），不传时用 1024x1024 */
   size?: string;
@@ -24,8 +28,12 @@ export async function callImage(prompt: string, opts: {
 }): Promise<string> {
   if (!CLOUD.aiBaseUrl || !CLOUD.aiToken) throw new Error('图像服务未配置');
   const m = imageModel(opts.tier);
+  const refs = (opts.referenceImages || [])
+    .filter((s) => typeof s === 'string' && s.startsWith('data:image/'))
+    .slice(0, 4);
+  const single = opts.referenceImage || refs[0];
   // 需要参考图的档位没图时，宁可直接报错也不要偷偷换成别的模型（会扣错积分）
-  if (m.needsRef && !opts.referenceImage) throw new Error('该模型需要先上传参考图');
+  if (m.needsRef && !single) throw new Error('该模型需要先上传参考图');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-LunaSol-Token': CLOUD.aiToken,
@@ -40,7 +48,8 @@ export async function callImage(prompt: string, opts: {
         prompt,
         size: opts.size || '1024x1024',
         model: m.id,
-        ...(opts.referenceImage ? { image: opts.referenceImage } : {}),
+        ...(single ? { image: single } : {}),
+        ...(refs.length > 1 ? { images: refs } : {}),
       }),
       signal: opts.signal,
     });

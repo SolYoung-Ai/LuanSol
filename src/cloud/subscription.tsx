@@ -2,7 +2,9 @@
  * 订阅 / 额度数据层 + Provider（CloudBase Postgres + RLS）
  * ------------------------------------------------------------
  *  - 表 lunasol_subscriptions：owner_id = auth.uid()，RLS 自动隔离；
- *  - 免费用户 quota_total = 2（新注册自动授予），会员 = 600 次/月；
+ *  - quota_total / quota_used 只记「新注册赠送」这一桶。会员不含积分包，
+ *    开会员 / 续费都不碰这两个字段（数据库侧见 20261114020000_membership_no_credits.sql）；
+ *    单独购买的积分一律落 bonus_credits；
  *  - 闸门：AI 真正调用前过 registerAIGate；成功后 reportAIUsage 自增计数；
  *  - 非登录能力来源（GitHub Pages 镜像 / 未配置云）放行且不计量——
  *    因为这些来源无法订阅，强行拦截会破坏「镜像可试用」的既有承诺；
@@ -38,7 +40,6 @@ export interface Subscription {
 
 const TABLE = 'lunasol_subscriptions';
 const FREE_TRIAL = PRICING.freeTrialUses;
-const PRO_QUOTA = PRICING.proMonthlyQuota;
 
 export type CloudResult<T = undefined> = { ok: true; data: T } | { ok: false; message: string };
 const fail = (m: string) => ({ ok: false as const, message: m });
@@ -78,7 +79,8 @@ export function decideGate(input: {
   return {
     ok: false,
     reason: input.proActive
-      ? tl('会员额度已用完或已过期，请续费后继续', 'Your membership quota is used up or expired — renew to keep going')
+      ? tl('积分不足：会员权益不含积分包，请购买积分包或通过每日签到获取',
+        'Out of credits: membership does not include credits — buy a credit pack or check in daily')
       // 会员不含固定积分包，别在这里承诺「每月 N 积分」——积分只来自签到与充值
       : tl(
         `免费体验已用完（${trial} 积分），开通会员可解锁全部模型、云端同步与印刷级导出，积分可通过每日签到或充值获得`,
@@ -194,11 +196,18 @@ export async function recordUsage(uid: string, n = 1, taskType = 'ai_call'): Pro
  *  未来只允许「支付回调」或「服务端校验激活码」后调用本函数。 */
 export async function activatePlan(uid: string, plan: Plan = 'pro_monthly', months = 1, by: string | null = null): Promise<CloudResult<Subscription>> {
   const d = await db(); if (!d) return fail('云服务未配置，无法开通');
+  // 只改会员身份与有效期：额度字段必须原样保留。
+  // 以前这里写 quota_total: proMonthlyQuota(3000)、quota_used: 0，
+  // 等于「开会员送 3000 积分还把已用清零」，与会员不含积分包的定价口径冲突。
+  const cur = await getSubscription(uid);
+  const base = cur.ok ? cur.data : await ensureSubscription(uid);
   const start = new Date();
   const end = new Date(start.getTime() + months * 30 * 24 * 3600 * 1000);
   const row: Subscription = {
-    id: uid, owner_id: uid, plan, status: 'active', quota_total: PRO_QUOTA, quota_used: 0,
-    period_start: start.toISOString(), period_end: end.toISOString(), activated_by: by, updated_at: start.toISOString(),
+    ...base,
+    plan, status: 'active',
+    period_start: start.toISOString(), period_end: end.toISOString(),
+    activated_by: by, updated_at: start.toISOString(),
   };
   try { await d.from(TABLE).upsert(row, { onConflict: 'id' }); return { ok: true, data: row }; }
   catch (e) { return fail(errText(e) || '开通失败'); }
@@ -206,9 +215,8 @@ export async function activatePlan(uid: string, plan: Plan = 'pro_monthly', mont
 
 export function remainingOf(sub: Subscription | null): number {
   if (!sub) return 0;
-  if (sub.plan === 'pro_monthly') {
-    if (sub.status !== 'active' || !sub.period_end || new Date(sub.period_end).getTime() <= Date.now()) return 0;
-  }
+  // 积分是与会员身份无关的独立资产：会员到期只收回权益，不清零已购 / 已签到积分。
+  // 旧版在这里对过期会员直接返回 0，会把用户单独买来的积分一并吞掉。
   return Math.max(0, sub.quota_total - sub.quota_used);
 }
 

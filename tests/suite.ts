@@ -241,8 +241,10 @@ export async function runTests(): Promise<Result[]> {
     A(/免费体验已用完/.test(freeUsed.reason), '订阅提示没有说明原因');
 
     const proUsed = decideGate({ loggedIn: true, remaining: 0, proActive: true });
-    A(!proUsed.ok && proUsed.need === 'subscribe', '会员额度用完应引导订阅');
-    A(/续费/.test(proUsed.reason), '会员提示没有提到续费');
+    A(!proUsed.ok && proUsed.need === 'subscribe', '会员积分用完应引导订阅');
+    // 会员不含积分包：积分用完不能误导用户去「续费」，必须指向积分包 / 签到
+    A(/积分包/.test(proUsed.reason) && !/续费/.test(proUsed.reason),
+      '会员积分不足时应提示单独获取积分，不能说成续费');
 
     const unknown = decideGate({ loggedIn: true, remaining: null, proActive: false });
     A(unknown.ok, '订阅信息未加载时不应拦截');

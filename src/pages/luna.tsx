@@ -21,6 +21,7 @@ import { go } from '../ui';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageListCost, imageModel, imagePromoLabel, isPromoTier, resolveTier } from '../cloud/models';
 import { SideNavLinks, SideAccount, SideBrand, SideFold } from '../components/SideNav';
+import { compressImageForUpload } from '../workflow/imageUtils';
 import { useLang } from '../i18n';
 
 /** 名称类常量存双语：模块加载时拿不到当前语言，只能在渲染时挑。
@@ -423,14 +424,15 @@ export default function Luna() {
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [input, mode]);
 
-  const onPickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!f) return;
-    if (f.size > 4 * 1024 * 1024) { setToast(t('图片请小于 4MB', 'The image must be smaller than 4 MB.')); return; }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPendingImage(String(reader.result));
+    // 不再按原文件大小硬拒：先在本机压到长边 2048 / JPEG，
+    // 大图也能传，同时保证 base64 后的请求体不会撞云函数的 6MB 上限。
+    try {
+      const compressed = await compressImageForUpload(f);
+      setPendingImage(compressed.dataUrl);
       // GPT Image 2 的「文字输入」档不收参考图，带图必须走「输入图」档。
       // 这里明说一句，避免用户以为还是文字档的价却按改图档扣。
       if (imageModel(tier).id === 'gpt2-text') {
@@ -438,8 +440,12 @@ export default function Luna() {
         setToast(t(`已切到「${imageLabel('gpt2-ref')}」（${imageCost('gpt2-ref')} 积分/张），因为这次带了参考图`,
           `Switched to “${imageLabel('gpt2-ref')}” (${imageCost('gpt2-ref')} credits each) because a reference image is attached.`));
       }
-    };
-    reader.readAsDataURL(f);
+    } catch (err) {
+      const tooLarge = err instanceof Error && err.message === 'TOO_LARGE';
+      setToast(tooLarge
+        ? t('图片超过 30MB，请先压缩或换一张', 'This image is over 30 MB — compress it or pick another one')
+        : t('这张图读不出来，换一张试试', 'That image could not be read — try another one'));
+    }
   };
 
   const ratio = RATIOS.find((r) => r.id === ratioId) || RATIOS[0];

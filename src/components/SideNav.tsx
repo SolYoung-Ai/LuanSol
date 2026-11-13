@@ -237,7 +237,7 @@ export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
     </button>
 
     <div className="sd-usage" title={usage
-      ? t(`已用 ${usage.used} / 共 ${usage.bucket} 积分`, `${usage.used} of ${usage.bucket} credits used`)
+      ? t(`可用 ${usage.left} 积分 · 已用 ${usage.used} 积分`, `${usage.left} credits left · ${usage.used} used`)
       : undefined}>
       <div className="sd-bar"><i style={{ width: `${usedPct}%` }} /></div>
       <span className="sd-usage-text">

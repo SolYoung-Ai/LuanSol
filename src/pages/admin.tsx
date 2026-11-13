@@ -225,8 +225,7 @@ export default function Admin() {
           />}
         </div>
         {kind === 'pro_monthly' && <p className="adm-summary" style={{ marginTop: 8 }}>
-          兑换后写入的可用额度：天卡按 100 积分 / 天（1 天 = 100、3 天 = 300、7 天 = 700），月卡 3000。
-          这是这张码给的额度，会员权益本身不含固定积分包。
+          会员码只开通 / 顺延会员权益，不发放任何积分；需要给用户积分请单独生成「积分码」。
         </p>}
       </div>
 

@@ -260,7 +260,9 @@ export default function Subscribe() {
         <div className="gl-bar"><i style={{ width: `${pct}%` }} /></div>
         <div className="gl-bar-cap">
           <span>{t('已使用', 'Used')} {pct}%</span>
-          {usage && <span>{usage.used} / {usage.bucket} {t('积分', 'credits')}</span>}
+          {/* 分母是进度条的参考量级，不是「开通会员发的 600 积分」。
+              这里直接写可用余额，避免被读成会员赠送额度。 */}
+          {usage && <span>{t('可用 ', '')}{usage.left} {t('积分', 'credits')}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className={`gl-pill ${pro ? 'on' : ''}`}>
@@ -273,6 +275,10 @@ export default function Subscribe() {
           </span>}
           <span className="gl-pill gl-pill-accent">{t('对话不扣积分', 'Chat costs no credits')}</span>
         </div>
+        <p className="gl-note" style={{ marginTop: 10 }}>
+          {t('会员只解锁模型、云端同步与印刷级导出，不含积分包：开通或续费都不会增加积分余额。积分来自注册赠送、每日签到、兑换码和单独购买的积分包，且不会因会员到期清零。',
+            'Membership unlocks models, cloud sync and print-ready export — it does not include a credit pack, so subscribing or renewing never changes your balance. Credits come from the sign-up gift, daily check-ins, redeem codes and separately purchased packs, and they never expire when a membership ends.')}
+        </p>
 
         {logsOpen && <div className="gl-logs">
           {logsLoading ? <div className="gl-empty">{t('加载中…', 'Loading…')}</div>
@@ -369,6 +375,9 @@ export default function Subscribe() {
           <li><Icon name="check" size={13} />{t('云端同步 + 历史版本', 'Cloud sync + version history')}</li>
           <li><Icon name="check" size={13} />{t('印刷级文件导出（PDF / SVG / DXF / ZIP）', 'Print-ready export (PDF / SVG / DXF / ZIP)')}</li>
         </ul>
+        <p className="gl-note" style={{ marginBottom: 12 }}>
+          {t('会员不含积分包，积分请在下方「充值积分包」单独购买。', 'Membership does not include credits — buy a credit pack below if you need them.')}
+        </p>
         {pro
           ? <button className="gl-btn gl-btn-soft" onClick={() => go('/account')}>{t('已是会员', 'Current plan')}</button>
           : <>

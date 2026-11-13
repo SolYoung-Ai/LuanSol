@@ -28,7 +28,7 @@
 
 .rep-grid {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 360px minmax(0, 1fr);
   gap: 26px;
   margin-top: 30px;
   align-items: start;
@@ -44,15 +44,34 @@
   background: var(--v4-paper);
 }
 
+/* 双图上传：A 风格参考 / B 我的产品，两个框同源同尺寸，谁都不能缺 */
+.rep-drops {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.rep-drop-wrap { min-width: 0; }
+.rep-drop-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 550;
+  letter-spacing: 0.04em;
+  color: var(--v4-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .rep-drop {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  aspect-ratio: 4 / 3;
-  padding: 18px;
+  gap: 6px;
+  aspect-ratio: 1 / 1;
+  padding: 10px;
   border: 1.5px dashed var(--v4-line-strong);
   border-radius: 12px;
   background: var(--v4-surface);
@@ -68,15 +87,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--v4-line);
-  border-radius: 11px;
+  border-radius: 9px;
   background: var(--v4-paper);
   color: var(--v4-ink-2);
 }
-.rep-drop b { font-size: 13.5px; font-weight: 550; }
-.rep-drop-hint { font-size: 11px; line-height: 1.6; color: var(--v4-ink-3); max-width: 30ch; }
+.rep-drop b { font-size: 12px; font-weight: 550; }
+.rep-drop-hint { font-size: 10px; line-height: 1.5; color: var(--v4-ink-3); max-width: 20ch; }
 
 .rep-label {
   display: block;
@@ -272,6 +291,12 @@
 @media (max-width: 1100px) {
   .rep-grid { grid-template-columns: 1fr; }
   .rep-setup { position: static; }
+  /* 左栏铺满整行后，两个上传框不能各占半屏，否则会变成两张巨型方块 */
+  .rep-drops { max-width: 680px; }
+  .rep-drop { aspect-ratio: 4 / 3; }
+  .rep-drop-ic { width: 42px; height: 42px; border-radius: 11px; }
+  .rep-drop b { font-size: 13.5px; }
+  .rep-drop-hint { font-size: 11px; max-width: 30ch; }
 }
 /* 手机断点与全站一致（≤860px）：641–860 这段以前还在用三列结果卡，
    去掉桌面左栏后每张卡只剩 200px 出头，提示词和按钮会被挤成竖排。 */
@@ -281,7 +306,8 @@
   .rep-card { flex-direction: row; }
   .rep-card-img { width: 42%; flex-shrink: 0; aspect-ratio: auto; }
   .rep-card-body { flex: 1; min-width: 0; }
-  .rep-drop { aspect-ratio: 16 / 9; }
+  .rep-drops { max-width: 100%; }
+  .rep-drop { aspect-ratio: 1 / 1; }
 }
 
 /* 极窄屏（≤480px）：横排卡会把提示词和按钮挤成一条竖线，改回上下结构 */
@@ -290,6 +316,9 @@
   .rep-card { flex-direction: column; }
   .rep-card-img { width: 100%; aspect-ratio: 1 / 1; }
   .rep-card-actions .primary { margin-left: 0; }
+  .rep-drop-label { font-size: 10px; }
+  .rep-drop-hint { display: none; }
+  .rep-drop b { font-size: 11.5px; }
   .rep-placeholder { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .rep-ph { aspect-ratio: 3 / 4; padding: 8px 4px; text-align: center; }
   .rep-ph span { font-size: 11px; }
