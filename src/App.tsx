@@ -195,7 +195,9 @@ export default function App() {
     <CloudSyncProvider>
       <ProfileProvider>
         <ChatStoreProvider>
-          <div className={`app ${path.startsWith('/luna') ? '' : path.startsWith('/studio') ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''}`}>
+          {/* Luna 现在也用全站左栏（会话区挂在左栏分界线下方），所以只有编辑器是 no-side。
+              这样从工作台 / 开始页 / 审美市场切到 Luna 时左栏原地不动，只换中间内容，不再闪一下。 */}
+          <div className={`app ${path.startsWith('/studio') ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''}`}>
             <Nav onLogin={requestLogin} />
             {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
                 其中 /studio 保留顶部条，避免工具栏页连导航都没有 */}

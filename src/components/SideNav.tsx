@@ -11,7 +11,7 @@
  *   slot   —— 分界线下的「场景区」，随当前导航变化：
  *              · 工作台 → 四步创作流程（可点，直接跳到对应阶段）
  *              · Luna   → 由 Luna 页自己的侧栏渲染（新建对话 / 会话列表）
- *   account—— 头像 + 昵称 + 积分 + 使用进度 + 购买积分，点开是账户菜单
+ *   account—— 头像 + 昵称 + 积分 + 使用进度 + 查看计划，点开是账户菜单
  *
  * 手机端（≤860px）完全不用这套：.v4-nav 顶部条 + 抽屉保持原样，
  * 这里所有样式都写在 @media (min-width: 861px) 里。
@@ -25,7 +25,8 @@ import { useAuth } from '../cloud/auth';
 import { useSubscription } from '../cloud/subscription';
 import { useProfile } from '../cloud/profile';
 import { useLang } from '../i18n';
-import { useApp } from '../store';
+import { useApp, visibleProjects } from '../store';
+import { useChatStore } from '../cloud/useChatStore';
 import { applyTheme, readTheme, saveTheme, type Theme } from '../theme';
 import type { WorkflowStage } from '../types';
 
@@ -123,7 +124,7 @@ export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
   const inReplicate = path === '/replicate';
   const inNew = path === '/new';
 
-  const total = s.projects.length;
+  const total = visibleProjects(s.projects).length;
 
   return <div className="sd-panel sd-wb">
     <div className="sd-panel-label">{lang === 'en' ? 'Workspace' : '工作台'}</div>
@@ -146,10 +147,89 @@ export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
   </div>;
 }
 
+/** 分界线下的 Luna 会话区：新建对话 / 搜索 / 会话列表。
+ *
+ *  为什么放在全站左栏里，而不是 Luna 页自己再画一条侧栏：
+ *  以前 /luna 是独立整屏布局，从左栏页面点进来时「全站左栏消失 + Luna 侧栏出现」，
+ *  .app 的 padding-left 还要从 244px 过渡到 0，整块内容横移一下，
+ *  看起来就像刷新闪了一帧。现在 Luna 与工作台共用同一条左栏，
+ *  切页只是中间这段内容换掉，左栏原地不动。
+ *
+ *  移动端（≤860px）仍由 luna.tsx 的抽屉渲染这一份，两处同一个组件，不写第二套。 */
+export function LunaChats({ onPicked }: { onPicked?: () => void }) {
+  const chat = useChatStore();
+  const auth = useAuth();
+  const { t } = useLang();
+  const [query, setQuery] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+
+  // 未登录时对话不落云端，列表必然是空的：这里如实说明，不放一个点了没反应的「新建对话」
+  if (!auth.user) {
+    return <div className="sd-panel sd-chats">
+      <div className="lc-list-empty" style={{ marginTop: 8 }}>
+        {t('登录后在这里看到对话历史', 'Sign in to see your chats here')}
+      </div>
+    </div>;
+  }
+
+  const list = chat.conversations.filter((c) =>
+    query.trim() ? c.title.toLowerCase().includes(query.trim().toLowerCase()) : true);
+
+  const pick = (id: string) => { chat.selectConversation(id); onPicked?.(); };
+  const makeNew = () => { chat.newConversation(); onPicked?.(); };
+  const commitEdit = () => {
+    if (editingId && editDraft.trim()) chat.renameConversation(editingId, editDraft.trim());
+    setEditingId(null);
+  };
+
+  return <div className="sd-panel sd-chats">
+    <button className="lc-new" onClick={makeNew}>
+      <Icon name="plus" size={16} />
+      <span>{t('新建对话', 'New chat')}</span>
+    </button>
+
+    <div className="lc-search">
+      <Icon name="search" size={15} />
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('搜索对话', 'Search chats')} />
+    </div>
+
+    <div className="lc-group-label">{t('聊天', 'Chats')}</div>
+    <div className="lc-list">
+      {list.map((c) => (
+        <div key={c.id} className={`lc-item ${c.id === chat.activeId ? 'active' : ''}`} onClick={() => pick(c.id)}>
+          <Icon name="message" size={15} className="lc-item-ic" />
+          {editingId === c.id ? (
+            <input
+              className="lc-item-edit"
+              value={editDraft}
+              autoFocus
+              onChange={(e) => setEditDraft(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingId(null); }}
+              onBlur={commitEdit}
+            />
+          ) : <span className="lc-item-title">{c.title}</span>}
+          <div className="lc-item-ops" onClick={(e) => e.stopPropagation()}>
+            <button title={t('重命名', 'Rename')} onClick={() => { setEditingId(c.id); setEditDraft(c.title); }}>
+              <Icon name="edit" size={14} />
+            </button>
+            <button title={t('删除', 'Delete')} onClick={() => void chat.deleteConversation(c.id)}>
+              <Icon name="trash" size={14} />
+            </button>
+          </div>
+        </div>
+      ))}
+      {list.length === 0 && <div className="lc-list-empty">{t('没有对话', 'No chats yet')}</div>}
+    </div>
+  </div>;
+}
+
 /** 头像 + 昵称 + 余额 + 用量进度，点开是账户菜单（账户信息 / 积分与充值 / 帮助 / 开发者 / 退出） */
 export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
   onLogin?: () => void;
-  /** Luna 页会传「已同步到云端」这类状态，其他页不传 */
+  /** 同步状态只作为悬停提示（title），不再当副标题：账号卡全站统一为单行，
+   *  否则切到 Luna 时卡片会突然多出一行、高度跳一下 */
   syncLabel?: string;
   onNavigate?: () => void;
   /** 折叠成图标轨时只留头像：未登录则留一个圆形登录入口 */
@@ -225,9 +305,10 @@ export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
     <button className={`sd-acct ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)}
       aria-haspopup="menu" aria-expanded={open}>
       <div className="sd-acct-av">{avatarUrl ? <img src={avatarUrl} alt="" /> : initial}</div>
-      <div className="sd-acct-meta">
+      {/* 昵称一行居中，不再挂「积分可用 / 已同步」这类副标题：
+          头像、昵称、余额三者在同一中线上，视觉上是一行而不是两行 */}
+      <div className="sd-acct-meta is-single" title={syncLabel || auth.user.label}>
         <strong>{auth.user.label}</strong>
-        <span>{syncLabel || t('积分可用', 'Credits available')}</span>
       </div>
       <div className="sd-acct-cr">
         <b>{left ?? '–'}</b>
@@ -248,7 +329,7 @@ export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
     </div>
 
     <button className="sd-plan" onClick={() => { onNavigate?.(); go('/credits'); }}>
-      {t('购买积分', 'Buy credits')}
+      {t('查看计划', 'View plans')}
     </button>
   </div>;
 }
@@ -282,20 +363,19 @@ export default function SideNav({ onLogin }: { onLogin?: () => void }) {
   }, [folded]);
   useEffect(() => () => { document.body.classList.remove('sd-folded'); }, []);
 
-  // 两类页面自带「工作区」布局，左栏会把它们的工具栏挤到换行，让位：
-  //   /luna   —— 会话侧栏里已内嵌导航与账号卡
-  //   /studio —— 设计流程 + 编辑器，需要整屏宽度
-  if (path.startsWith('/luna') || path.startsWith('/studio')) return null;
+  // 编辑器（/studio）是整屏工作区，没有左栏可用；Luna 现在也走这条左栏，
+  // 只是分界线下方的场景区换成会话列表（见 LunaChats）。
+  if (path.startsWith('/studio')) return null;
+  const isLuna = path.startsWith('/luna');
   // 分界线下方的场景区：工作台相关页面显示「新建设计 / 项目 / 复制」
   const showFlow = SIDE_LINKS[2].match.some((p) => path.startsWith(p));
   return <aside className="sd-nav">
     <SideBrand />
     <SideNavLinks />
-    {showFlow && <>
-      <div className="sd-divider" />
-      <SideWorkbench />
-    </>}
-    <div className="sd-spacer" />
+    {isLuna
+      ? <><div className="sd-divider" /><LunaChats /></>
+      : showFlow && <><div className="sd-divider" /><SideWorkbench /></>}
+    {!isLuna && <div className="sd-spacer" />}
     <SideAccount onLogin={onLogin} compact={folded} />
     <SideFold folded={folded} onClick={() => setFolded((f) => !f)} />
   </aside>;

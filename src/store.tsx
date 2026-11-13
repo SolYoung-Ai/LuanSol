@@ -52,6 +52,20 @@ export const DEFAULT_SETTINGS: UserSettings = {
   name: '创作者', advancedMode: false, defaultUnit: 'mm', bleed: 3, printDpi: 300, autoSave: true,
 };
 
+/** 「空草稿」= 点过新建设计、但一条信息都没填的记录（没有设计稿、没有产品信息、没有参考图）。
+ *  这类记录只留在本机做「继续上次填写」的锚点，不该出现在工作台作品列表里：
+ *  否则用户会看到一屏「未命名草稿」，以为工作台混进了别人的项目。 */
+export function isBlankDraft(p: Project): boolean {
+  const pi = p.workflow?.productInfo;
+  return !p.design
+    && !p.brief?.product && !p.brief?.brand
+    && !pi?.description && !pi?.productName && !pi?.brandName && !pi?.productIntro
+    && !(p.workflow?.referenceImages?.length);
+}
+
+/** 工作台 / 侧栏计数统一走这里，口径必须一致（否则「项目 5」点进去只有 2 张卡） */
+export const visibleProjects = (list: Project[]): Project[] => list.filter((p) => !isBlankDraft(p));
+
 interface Persisted {
   projects: Project[];
   activeId: string | null;

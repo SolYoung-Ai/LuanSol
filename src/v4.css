@@ -1804,12 +1804,12 @@ button.ag-row.open { background: var(--v4-ios-fill); }
     position: relative;
     isolation: isolate;
     gap: 14px;
-    /* 不居中、不限宽：左栏必须和全站左栏落在同一个 x（8px）。
-       以前这里 max-width:1440 + margin:auto，窗口一超过 1440，
-       整个对话区连同侧栏会往右漂 36px，和别的页面就错位了。 */
+    /* 不居中、不限宽：左栏由全站左栏承担（.app.has-side 已经让出 244px），
+       这里只留右侧与底部的呼吸位。以前是自己画一条 lc-side、padding-left 8px，
+       两套侧栏交替出现，切页时会横移一下。 */
     max-width: none;
     margin: 0;
-    padding: 12px 20px 12px 8px;
+    padding: 12px 20px 12px 0;
     /* 不铺外部色晕：玻璃卡会把身后的颜色模糊洗白，卡片边缘便出现一条彩色硬边，
        看起来就像套了一圈边框。色彩只放在卡片内部。 */
     background: transparent;
@@ -3143,6 +3143,13 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 /* ---- 分界线 + 场景区（工作台四步流程） ---- */
 .sd-divider { height: 1px; background: var(--lc-hair); margin: 12px 2px 10px; }
 .sd-panel { display: flex; flex-direction: column; gap: 1px; }
+/* Luna 会话区：占满「导航」与「账号卡」之间的剩余高度，列表自己滚。
+   不放 .sd-spacer，否则两块 flex:1 会平分高度、列表只剩一半。 */
+.sd-chats { flex: 1; min-height: 0; }
+.sd-chats .lc-new { margin-top: 2px; }
+.sd-chats .lc-search { margin-top: 8px; }
+.sd-chats .lc-group-label { margin: 14px 4px 6px; }
+.sd-chats .lc-list { flex: 1 1 auto; min-height: 0; }
 .sd-panel-label {
   padding: 0 9px 6px; font-size: 10px; letter-spacing: .06em;
   color: var(--v4-ink-3); text-transform: uppercase;
@@ -3195,6 +3202,8 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 }
 .sd-acct-av img { width: 100%; height: 100%; object-fit: cover; }
 .sd-acct-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+/* 只有昵称一行时（全站账号卡默认形态）：垂直居中，和头像 / 余额同一中线 */
+.sd-acct-meta.is-single { justify-content: center; }
 .sd-acct-meta strong {
   font-size: 12px; font-weight: 500;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -3648,6 +3657,14 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 /* Luna / 编辑器：内部有 fixed 抽屉、贴底输入栏，只淡入不位移 */
 .app.is-fullbleed .main.nav-in-down,
 .app.is-fullbleed .main.nav-in-up { animation: navFade 0.2s ease-out both; }
+/* Luna 桌面端例外：左栏已交给全站左栏、抽屉只在手机上渲染，
+   页面里没有会被 transform 带偏的 fixed 元素，可以和其他页一样做 8px 位移，
+   让「开始 / 工作台 / 审美市场 → Luna Ai」的切换手感完全一致。
+   ≤860px 的抽屉仍是 fixed，继续走上面那条淡入。 */
+@media (min-width: 861px) {
+  .app.is-luna .main.nav-in-down { animation: navInDown 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+  .app.is-luna .main.nav-in-up { animation: navInUp 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+}
 /* 手机端：抽屉、顶栏都是 fixed，同样只淡入；小屏 5vh 的位移尤其晃眼 */
 @media (max-width: 860px) {
   .app .main.nav-in-down,

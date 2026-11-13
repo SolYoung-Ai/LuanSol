@@ -9,7 +9,7 @@
  * ============================================================ */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Empty, Modal, go, useHash } from '../ui';
-import { useApp } from '../store';
+import { useApp, visibleProjects } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useCloudSync } from '../cloud/useCloudSync';
 import { useLang } from '../i18n';
@@ -105,7 +105,8 @@ export default function Workspace() {
 
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase();
-    const filtered = s.projects.filter((p) => matchFilter(p, filter)
+    // 只列自己的真实项目：空草稿不算作品（见 store 的 isBlankDraft）
+    const filtered = visibleProjects(s.projects).filter((p) => matchFilter(p, filter)
       && (structGroup === 'all' || groupOf(p) === structGroup)
       && (!kw || `${p.name} ${STRUCT_NAME(p)} ${p.brief?.product || ''} ${p.brief?.brand || ''}`.toLowerCase().includes(kw)));
     const sorted = [...filtered].sort((a, b) =>
@@ -175,7 +176,7 @@ export default function Workspace() {
     }
   };
 
-  const empty = s.projects.length === 0;
+  const empty = visibleProjects(s.projects).length === 0;
 
   return <div className="v4-page">
     <div className="v4-page-head">
@@ -189,33 +190,15 @@ export default function Workspace() {
       </div>
     </div>
 
-    {/* 创作流程指引：让用户一眼看懂从想法到成品要走哪四步 */}
-    <div className="v4-flow-guide">
-      {[
-        { n: '01', t: t('创作入口', 'Start'), d: t('有方向 / 从零开始', 'With a direction / from scratch') },
-        { n: '02', t: t('确认需求', 'Requirements'), d: t('配色 · 卖点 · LOGO · 条码', 'Colours · selling points · logo · barcode') },
-        { n: '03', t: t('设计方案', 'Design'), d: t('生成 3 张，选一张', 'Generate 3, pick one') },
-        { n: '04', t: t('编辑器', 'Editor'), d: t('2D / 3D 精修导出', 'Refine and export in 2D / 3D') },
-      ].map((st, i) => (
-        <div className="v4-flow-step" key={st.n}>
-          <span className="v4-flow-dot">{st.n}</span>
-          <span className="v4-flow-text">
-            <strong>{st.t}</strong>
-            <em>{st.d}</em>
-          </span>
-          {i < 3 && <span className="v4-flow-arrow" aria-hidden>→</span>}
-        </div>
-      ))}
-    </div>
-
     {/* 云同步：登录后在这里集中操作（同步状态 / 立即双向同步 / 取回云端项目） */}
     <div className="v4-toolbar" style={{ borderBottom: 'none', paddingBottom: 0 }}>
       <div className="v4-sec-note">
         {auth.user
           ? <>{t('已登录', 'Signed in as')} <strong>{auth.user.label}</strong> · {sync.state === 'ok'
               ? t(
-                `已同步 ${sync.cloudCount ?? '—'} 个云端项目${sync.lastSync ? ` · 最近 ${new Date(sync.lastSync).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`,
-                `${sync.cloudCount ?? '—'} cloud projects synced${sync.lastSync ? ` · last ${new Date(sync.lastSync).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`,
+                // 不再报云端项目总数：列表已隐藏空草稿，说「同步 5 个」而下面 0 张卡会让人以为丢数据
+                `云端已同步${sync.lastSync ? ` · 最近 ${new Date(sync.lastSync).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`,
+                `Cloud synced${sync.lastSync ? ` · last ${new Date(sync.lastSync).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`,
               )
               : sync.message || t('待同步', 'Pending sync')}</>
           : t('未登录 · 作品仅保存在此设备浏览器；登录后可云端同步、多端取回', 'Not signed in · work is saved in this browser only. Sign in to sync and restore across devices')}
@@ -232,7 +215,7 @@ export default function Workspace() {
           {FILTERS.map((f) => <button key={f.id} className={`v4-filter ${filter === f.id ? 'active' : ''}`} onClick={() => setFilter(f.id)}>
             {lang === 'en' ? f.en : f.zh}
             <span style={{ marginLeft: 6, color: 'var(--v4-ink-3)', fontSize: 11 }}>
-              {s.projects.filter((p) => matchFilter(p, f.id)).length}
+              {visibleProjects(s.projects).filter((p) => matchFilter(p, f.id)).length}
             </span>
           </button>)}
           {tab === 'favorites' && <span className="v4-tag" style={{ marginLeft: 8 }}>{t('收藏视图', 'Favourites view')}</span>}

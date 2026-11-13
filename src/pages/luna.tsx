@@ -16,10 +16,9 @@ import { useAuth } from '../cloud/auth';
 import { useChatStore } from '../cloud/useChatStore';
 import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
-import { go } from '../ui';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageListCost, imageModel, imagePromoLabel, isPromoTier, resolveTier } from '../cloud/models';
-import { SideNavLinks, SideAccount, SideBrand, SideFold } from '../components/SideNav';
+import { LunaChats } from '../components/SideNav';
 import { compressImageForUpload } from '../workflow/imageUtils';
 import { useLang } from '../i18n';
 
@@ -235,11 +234,7 @@ export default function Luna() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [mode, setMode] = useState<LunaMode>('chat');
   const [input, setInput] = useState('');
-  const [query, setQuery] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState('');
-  const [sideOpen, setSideOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [ratioId, setRatioId] = useState('auto');
   const [styleId, setStyleId] = useState('none');
@@ -368,35 +363,7 @@ export default function Luna() {
     void chat.sendText(text, img);
   };
 
-  const startEdit = (id: string, title: string) => {
-    setEditingId(id);
-    setEditDraft(title);
-  };
-  const commitEdit = () => {
-    if (editingId && editDraft.trim()) chat.renameConversation(editingId, editDraft.trim());
-    setEditingId(null);
-  };
-
-  /* 桌面端：收起/展开常驻侧栏；移动端：关闭抽屉 */
-  const toggleSide = () => {
-    if (isMobile) setDrawerOpen(false);
-    else setSideOpen((o) => !o);
-  };
-
-  /* 移动端选中某个对话后自动收起抽屉 */
-  const pickConversation = (id: string) => {
-    chat.selectConversation(id);
-    if (isMobile) setDrawerOpen(false);
-  };
-
-  /* 新建对话：移动端同时收起抽屉，进入空白欢迎页 */
-  const makeNew = () => {
-    chat.newConversation();
-    if (isMobile) setDrawerOpen(false);
-  };
-
-  const filtered = chat.conversations.filter((c) =>
-    query.trim() ? c.title.toLowerCase().includes(query.trim().toLowerCase()) : true);
+  /* 会话的新建 / 切换 / 重命名 / 删除都在 LunaChats 里（桌面左栏与移动抽屉同一个组件） */
 
   /* 图片解码完成会把内容撑高：只在「本来就在底部附近」时跟随，
      用户往上翻看历史时不被强行拽回去。 */
@@ -441,71 +408,18 @@ export default function Luna() {
     <div className="lc-shell">
       <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
 
-      {/* ------------------------------ 左侧栏（桌面常驻 / 移动抽屉） ------------------------------ */}
-      <aside className={`lc-side ${sideOpen ? '' : 'collapsed'} ${drawerOpen ? 'drawer-open' : ''}`}>
+      {/* ------------------------------ 左侧栏 ------------------------------
+          桌面端（≥861px）不再自己画侧栏：品牌 / 导航 / 会话列表 / 账号卡全部由全站左栏
+          （components/SideNav.tsx）渲染。以前这里另起一条整屏侧栏，从别的页面点进 Luna 时
+          左栏会「消失再出现」，.app 的 padding-left 还要从 244px 过渡到 0，
+          整块内容横移一下，看起来像刷新闪了一帧。
+          手机端（≤860px）保持原来的左滑抽屉，一行都不动。 */}
+      {isMobile && <aside className={`lc-side ${drawerOpen ? 'drawer-open' : ''}`}>
         <div className="lc-side-inner">
-          {/* 桌面端品牌头与全站左栏完全一致（同一组件、同一字号、同一套 EN/深色按钮）：
-              以前这里是「Luna / 你的专属设计师」，和别的页面对不上，看起来像两个产品 */}
-          {!isMobile && <SideBrand />}
-          {/* 桌面端把全站三个主入口接进这条侧栏，和左栏其他页面保持同一套信息架构；
-              手机端仍是「抽屉里只有对话」，不动已被验收过的移动端布局 */}
-          {!isMobile && <><SideNavLinks /><div className="sd-divider" /></>}
-          <button className="lc-new" onClick={makeNew}>
-            <Icon name="plus" size={16} />
-            <span>{t('新建对话', 'New chat')}</span>
-          </button>
-
-          <div className="lc-search">
-            <Icon name="search" size={15} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('搜索对话', 'Search chats')}
-            />
-          </div>
-
-          <div className="lc-group-label">{t('聊天', 'Chats')}</div>
-          <div className="lc-list">
-            {filtered.map((c) => (
-              <div
-                key={c.id}
-                className={`lc-item ${c.id === chat.activeId ? 'active' : ''}`}
-                onClick={() => pickConversation(c.id)}
-              >
-                <Icon name="message" size={15} className="lc-item-ic" />
-                {editingId === c.id ? (
-                  <input
-                    className="lc-item-edit"
-                    value={editDraft}
-                    autoFocus
-                    onChange={(e) => setEditDraft(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') commitEdit();
-                      if (e.key === 'Escape') setEditingId(null);
-                    }}
-                    onBlur={commitEdit}
-                  />
-                ) : (
-                  <span className="lc-item-title">{c.title}</span>
-                )}
-                <div className="lc-item-ops" onClick={(e) => e.stopPropagation()}>
-                  <button title={t('重命名', 'Rename')} onClick={() => startEdit(c.id, c.title)}>
-                    <Icon name="edit" size={14} />
-                  </button>
-                  <button title={t('删除', 'Delete')} onClick={() => void chat.deleteConversation(c.id)}>
-                    <Icon name="trash" size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
-            {filtered.length === 0 && <div className="lc-list-empty">{t('没有对话', 'No chats yet')}</div>}
-          </div>
+          <LunaChats onPicked={() => setDrawerOpen(false)} />
 
           <div className="lc-side-foot">
-            {/* 桌面端用全站统一的账号卡（余额 + 用量 + 查看计划 + 账户菜单），
-                手机端保持原来的「头像 + 昵称 + 同步状态」一栏 */}
-            {!isMobile ? <SideAccount syncLabel={syncLabel} /> : <div className="lc-user">
+            <div className="lc-user">
               <div className="lc-user-avatar">
                 {auth.user.avatarUrl
                   ? <img src={auth.user.avatarUrl} alt={t('头像', 'Avatar')} />
@@ -515,45 +429,20 @@ export default function Luna() {
                 <div className="lc-user-name">{auth.user.label || auth.user.email}</div>
                 <div className={`lc-user-sync ${chat.syncState}`}>{syncLabel}</div>
               </div>
-            </div>}
+            </div>
           </div>
         </div>
 
-        {/* 收起后只留一列图标快捷入口，点「搜索」会直接把侧栏展开 */}
-        {!isMobile && !sideOpen && <div className="lc-rail">
-          <button className="lc-rail-logo" title={t('展开侧栏', 'Expand sidebar')} aria-label={t('展开侧栏', 'Expand sidebar')} onClick={() => setSideOpen(true)}>
-            <img src="./logo.png" alt="" />
-          </button>
-          <button className="lc-rail-btn" title={t('新建对话', 'New chat')} aria-label={t('新建对话', 'New chat')} onClick={makeNew}>
-            <Icon name="plus" size={18} />
-          </button>
-          <button className="lc-rail-btn" title={t('展开侧栏并搜索', 'Expand and search')} aria-label={t('展开侧栏并搜索', 'Expand and search')} onClick={() => setSideOpen(true)}>
-            <Icon name="search" size={18} />
-          </button>
-          {/* 收起后仍要能跳去别的页，否则「左栏」一收就把导航弄丢了 */}
-          <div className="lc-rail-sep" />
-          <button className="lc-rail-btn" title={t('工作台', 'Workspace')} aria-label={t('工作台', 'Workspace')} onClick={() => go('/workspace')}>
-            <Icon name="folder" size={18} />
-          </button>
-          <button className="lc-rail-btn" title={t('审美市场', 'Aesthetic Index')} aria-label={t('审美市场', 'Aesthetic Index')} onClick={() => go('/market')}>
-            <Icon name="grid" size={18} />
-          </button>
-        </div>}
-
-        {/* 桌面端：贴边小胶囊收起/展开（和工作台等页面的左栏同一颗按钮）；
-            移动端保留顶部圆形关闭按钮 */}
-        {!isMobile
-          ? <SideFold folded={!sideOpen} onClick={() => setSideOpen((o) => !o)} />
-          : <button
-            className="lc-side-toggle"
-            onClick={toggleSide}
-            title={t('关闭菜单', 'Close menu')}
-            aria-label={t('关闭菜单', 'Close menu')}
-          >
-            <Icon name="close" size={16} />
-            <span className="lc-side-toggle-text">{t('关闭菜单', 'Close menu')}</span>
-          </button>}
-      </aside>
+        <button
+          className="lc-side-toggle"
+          onClick={() => setDrawerOpen(false)}
+          title={t('关闭菜单', 'Close menu')}
+          aria-label={t('关闭菜单', 'Close menu')}
+        >
+          <Icon name="close" size={16} />
+          <span className="lc-side-toggle-text">{t('关闭菜单', 'Close menu')}</span>
+        </button>
+      </aside>}
 
       {/* 移动端抽屉遮罩：点击空白处关闭 */}
       <div
