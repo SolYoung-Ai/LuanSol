@@ -114,37 +114,16 @@ function flowStageOf(project: { workflow?: { stage?: WorkflowStage }; design?: u
 
 /** 分界线下的工作台功能：新建设计 / 项目（含状态筛选）/ 复制。
  *  这三项替代了原来的四步流程——流程是「进去以后的事」，这里是「从哪儿开始」。 */
-const PROJECT_TABS: { id: string; zh: string; en: string }[] = [
-  { id: 'all', zh: '全部', en: 'All' },
-  { id: 'draft', zh: '草稿', en: 'Drafts' },
-  { id: 'designing', zh: '设计中', en: 'In progress' },
-  { id: 'done', zh: '已完成', en: 'Finished' },
-  { id: 'cloud', zh: '云端', en: 'Cloud' },
-];
-
 export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
   const { s, setToast } = useApp();
   const { lang, t } = useLang();
   const hash = useHash();
   const path = hash.split('?')[0];
-  const query = new URLSearchParams(hash.split('?')[1] || '');
-  const tab = query.get('tab') || 'all';
   const inProjects = path === '/workspace' || path === '/projects';
   const inReplicate = path === '/replicate';
   const inNew = path === '/new';
 
-  const counts: Record<string, number> = {
-    all: s.projects.length,
-    draft: s.projects.filter((p) => p.status === 'draft').length,
-    designing: s.projects.filter((p) => p.status === 'designing').length,
-    done: s.projects.filter((p) => p.status === 'checked' || p.status === 'exported').length,
-    cloud: 0,
-  };
-
-  const goTab = (id: string) => {
-    onNavigate?.();
-    go(`/workspace?tab=${id}`);
-  };
+  const total = s.projects.length;
 
   return <div className="sd-panel sd-wb">
     <div className="sd-panel-label">{lang === 'en' ? 'Workspace' : '工作台'}</div>
@@ -157,20 +136,8 @@ export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
     <button className={`sd-act ${inProjects ? 'on' : ''}`} onClick={() => { onNavigate?.(); if (!inProjects) go('/workspace?tab=all'); }}>
       <span className="sd-ic"><Icon name="folder" size={16} /></span>
       <span>{t('项目', 'Projects')}</span>
-      <em className="sd-act-n">{counts.all}</em>
+      <em className="sd-act-n">{total}</em>
     </button>
-
-    {inProjects && <div className="sd-sub">
-      {PROJECT_TABS.map((x) => {
-        const n = counts[x.id] || 0;
-        const on = tab === x.id;
-        return <button key={x.id} className={`sd-sub-item ${on ? 'on' : ''}`}
-          onClick={() => (x.id === 'cloud' ? (setToast(t('云端项目在会员开通后可跨设备取回', 'Cloud projects are available with membership')), onNavigate?.(), go('/workspace?tab=all')) : goTab(x.id))}>
-          <span>{lang === 'en' ? x.en : x.zh}</span>
-          {x.id !== 'cloud' && <em>{n}</em>}
-        </button>;
-      })}
-    </div>}
 
     <button className={`sd-act ${inReplicate ? 'on' : ''}`} onClick={() => { onNavigate?.(); go('/replicate'); }}>
       <span className="sd-ic"><Icon name="copy" size={16} /></span>
