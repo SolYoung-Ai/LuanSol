@@ -134,13 +134,11 @@ function ImageModelPicker({ value, onChange, disabled }: {
   disabled?: boolean;
 }) {
   const { t } = useLang();
-  const { isPro } = useSubscription();
   return <select className="rep-select" value={value} disabled={disabled}
     onChange={(e) => onChange(e.target.value as ImageTier)}>
     {REPLICATE_MODELS.map((m) => {
-      const locked = !!m.pro && !isPro;
-      return <option key={m.id} value={m.id} disabled={locked}>
-        {imageLabel(m.id as ImageTier)} · {imageCost(m.id as ImageTier)} {t('积分', 'credits')}{locked ? t('（会员）', ' (member)') : ''}
+      return <option key={m.id} value={m.id}>
+        {imageLabel(m.id as ImageTier)} · {imageCost(m.id as ImageTier)} {t('积分', 'credits')}
       </option>;
     })}
   </select>;

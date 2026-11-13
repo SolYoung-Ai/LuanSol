@@ -61,7 +61,7 @@ async function ensureCredit(): Promise<void> {
   const gate = getAIGate();
   if (!gate) return;
   const g = await gate('chat');
-  if (!g.ok) throw new Error(g.reason || '需要登录或订阅后使用 AI 功能');
+  if (!g.ok) throw new Error(g.reason || '需要登录或积分才能使用 AI 功能');
 }
 
 const ANALYSIS_SYSTEM = `你是 LunaSol 的资深包装设计总监，精通包装结构、印刷工艺、材质、字体排版、色彩与品牌定位。

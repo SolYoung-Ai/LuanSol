@@ -35,7 +35,7 @@ async function ensureCredit() {
   const gate = getAIGate();
   if (!gate) return;
   const g = await gate('chat');
-  if (!g.ok) throw new Error(g.reason || '需要登录或订阅后使用 AI 功能');
+  if (!g.ok) throw new Error(g.reason || '需要登录或积分才能使用 AI 功能');
 }
 
 const PLANNER_SYSTEM = `你是 LunaSol 的包装设计总监。基于已确认的设计分析报告与选定的设计方向，把包装拆成可独立生成的视觉素材任务。

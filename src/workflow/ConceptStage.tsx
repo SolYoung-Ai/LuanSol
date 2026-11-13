@@ -88,7 +88,7 @@ export default function ConceptStage() {
     if (auth.user && balance < BATCH_COST) {
       setToast(t(`积分不足：生成 3 张需 ${BATCH_COST} 积分，当前余额 ${balance}。`,
         `Not enough credits: generating 3 concepts costs ${BATCH_COST}, you have ${balance}.`));
-      window.location.hash = '#/subscribe';
+      window.location.hash = '#/credits';
       return;
     }
     setLoading(true);
@@ -168,7 +168,7 @@ export default function ConceptStage() {
 
   /** 单张重新生成 */
   const regenerate = async (img: ConceptImage) => {
-    // 会员到期后仍停在上次选的 GPT Image 2：按当前身份归一，避免按会员档价格下单
+    // 旧状态里残留的档位名归一到当前目录，避免界面显示一个不存在的档
     const tier = resolveTier(draftTier, sub.isPro);
     if (tier !== draftTier) setDraftTier(tier);
     const cost = tierCost(tier);
@@ -176,7 +176,7 @@ export default function ConceptStage() {
     if (auth.user && balance < cost) {
       setToast(t(`积分不足：重新生成需 ${cost} 积分，当前余额 ${balance}。`,
         `Not enough credits: regenerating costs ${cost}, you have ${balance}.`));
-      window.location.hash = '#/subscribe';
+      window.location.hash = '#/credits';
       return;
     }
     setRegenBusy(img.id);
@@ -303,29 +303,16 @@ export default function ConceptStage() {
                 ) : (
                   <div className="wf-regen-panel">
                     <div className="wf-seg wf-seg-sm">
-                      {OPEN_IMAGE_MODELS.map((m) => {
-                        // GPT Image 2 两档为会员专属：免费版灰显，点了走订阅引导
-                        const locked = !!m.pro && !sub.isPro;
-                        return (
-                          <button
-                            key={m.id}
-                            className={`wf-seg-btn ${draftTier === m.id && !locked ? 'on' : ''}`}
-                            style={locked ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
-                            title={locked ? t('会员专属模型', 'Members-only model') : imageModelNote(m, lang)}
-                            onClick={() => {
-                              if (locked) {
-                                sub.setPaywall(true, t(
-                                  'GPT Image 2 是会员专属生图模型：出图质量最高，支持文字出图与参考图改图。免费版可用 Seedream 5.0 Flash / Pro。',
-                                  'GPT Image 2 is a members-only model: the best output quality, with text rendering and reference-based editing. The free plan includes Seedream 5.0 Flash / Pro.'));
-                                return;
-                              }
-                              setDraftTier(m.id);
-                            }}
-                          >
-                            {m.short} {t(`${m.cost} 积分`, `${m.cost} cr.`)}{locked ? t(' · 会员', ' · Pro') : ''}
-                          </button>
-                        );
-                      })}
+                      {OPEN_IMAGE_MODELS.map((m) => (
+                        <button
+                          key={m.id}
+                          className={`wf-seg-btn ${draftTier === m.id ? 'on' : ''}`}
+                          title={imageModelNote(m, lang)}
+                          onClick={() => setDraftTier(m.id)}
+                        >
+                          {m.short} {t(`${m.cost} 积分`, `${m.cost} cr.`)}
+                        </button>
+                      ))}
                     </div>
                     <textarea className="wf-textarea" rows={3} value={draftPrompt}
                       onChange={(e) => setDraftPrompt(e.target.value)}

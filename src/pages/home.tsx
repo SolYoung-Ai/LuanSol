@@ -54,13 +54,13 @@ export default function Home() {
       </button>
     </div>
 
-    {/* 价格必须在登录前就能看到：支付通道审核明确要求公开页展示会员与积分价格。
+    {/* 价格必须在登录前就能看到：支付通道审核明确要求公开页展示积分价格。
         直接指向静态页 /pricing/，不用 hash 路由。
-        数字一律从 PRICING 读——写死一个 $4 在这里，改价时必然漏掉首屏。 */}
+        数字一律从 PRICING 读——写死一个价格在这里，改价时必然漏掉首屏。 */}
     <a className="v4-home-price" href="./pricing/">
       {t(
-        `会员 US$${PRICING.proMonthlyPriceUSD}/月 · ${PRICING.creditsPacks[0].points} 积分 US$${PRICING.creditsPacks[0].priceUSD} · 注册送 ${PRICING.freeTrialUses} 积分`,
-        `Membership US$${PRICING.proMonthlyPriceUSD}/mo · ${PRICING.creditsPacks[0].points} credits US$${PRICING.creditsPacks[0].priceUSD} · ${PRICING.freeTrialUses} free credits on sign-up`
+        `无月费 · ${PRICING.creditsPacks[0].points} 积分 US$${PRICING.creditsPacks[0].priceUSD} · 注册送 ${PRICING.freeTrialUses} 积分`,
+        `No monthly fee · ${PRICING.creditsPacks[0].points} credits US$${PRICING.creditsPacks[0].priceUSD} · ${PRICING.freeTrialUses} free credits on sign-up`
       )}
     </a>
 

@@ -11,8 +11,8 @@
 export interface GateResult {
   ok: boolean;
   reason?: string;
-  /** 需要用户做什么：登录（匿名用 AI）或订阅（额度耗尽） */
-  need?: 'login' | 'subscribe';
+  /** 需要用户做什么：登录（匿名用 AI）或获取积分（余额耗尽） */
+  need?: 'login' | 'credits';
 }
 
 export type AIGate = (taskId: string) => GateResult | Promise<GateResult>;
@@ -20,7 +20,7 @@ export type AIGate = (taskId: string) => GateResult | Promise<GateResult>;
 let gate: AIGate | null = null;
 let reporter: ((taskId: string) => void) | null = null;
 
-/** 由 SubscriptionProvider 注入真实闸门（登录态 + 订阅额度判定）。传 null 关闭闸门。 */
+/** 由 SubscriptionProvider 注入真实闸门（登录态 + 积分余额判定）。传 null 关闭闸门。 */
 export function registerAIGate(fn: AIGate | null) { gate = fn; }
 export function getAIGate(): AIGate | null { return gate; }
 

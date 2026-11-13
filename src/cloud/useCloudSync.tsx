@@ -58,7 +58,7 @@ function writeOwners(m: Record<string, string>) {
 /** 单例内部实现：整个应用只跑一份同步循环，避免多个页面重复上传 */
 function useCloudSyncState(): CloudSync {
   const { user } = useAuth();
-  const { isPro, loading: subLoading } = useSubscription();
+  const { loading: subLoading } = useSubscription();
   const { s, update, mergeCloudProjects, dropProjects, setToast } = useApp();
   const [state, setState] = useState<SyncState>('off');
   const [message, setMessage] = useState(tl('未登录：项目只保存在本机浏览器', 'Not signed in: projects stay in this browser'));
@@ -115,11 +115,10 @@ function useCloudSyncState(): CloudSync {
   }, []);
 
   /** 全量同步：先合并云端，再把本地多出来的项目上传。
-   *  云同步是会员权益：免费用户只在本机保存，不自动上传；
-   *  但「取回云端项目」始终开放，避免会员到期后取不回已有作品。 */
+   *  纯积分制：登录后云端同步自动开启，「取回云端项目」始终开放。 */
   const syncNow = useCallback(async () => {
     if (!user) { setState('off'); setMessage(tl('未登录：项目只保存在本机浏览器', 'Not signed in: projects stay in this browser')); return; }
-    if (!isPro) { setState('off'); setMessage(tl('云同步为会员权益：当前作品只保存在本机浏览器', 'Cloud sync is a member benefit: work stays in this browser for now')); return; }
+    // 云同步登录后自动开启，不再按身份判定
     if (running.current) return;
     running.current = true;
     setState('syncing');
@@ -180,9 +179,9 @@ function useCloudSyncState(): CloudSync {
     } finally {
       running.current = false;
     }
-  }, [user, isPro, mergeCloudProjects]);
+  }, [user, mergeCloudProjects]);
 
-  /** 登录 / 会员状态变化时做一次合并；非会员或退出后停止一切上传 */
+  /** 登录状态变化时做一次合并；退出后停止一切上传 */
   useEffect(() => {
     if (!user) {
       mergedFor.current = null;
@@ -195,22 +194,16 @@ function useCloudSyncState(): CloudSync {
       setMessage(tl('未登录：项目只保存在本机浏览器', 'Not signed in: projects stay in this browser'));
       return;
     }
-    // 订阅还没加载完先等，避免把刚开通的会员判成免费用户
+    // 账本还没加载完先等，避免登录令牌未就绪时读到空数据
     if (subLoading) return;
-    if (!isPro) {
-      mergedFor.current = null;
-      setState('off');
-      setMessage(tl('云同步为会员权益：当前作品只保存在本机浏览器', 'Cloud sync is a member benefit: work stays in this browser for now'));
-      return;
-    }
     if (mergedFor.current === user.id) return;
     mergedFor.current = user.id;
     void syncNow();
-  }, [user, isPro, subLoading, syncNow]);
+  }, [user, subLoading, syncNow]);
 
   /** 变更自动上传（4 秒防抖，只传有新修改且属于当前账号的项目） */
   useEffect(() => {
-    if (!user || !isPro) return;
+    if (!user) return;
     if (syncedFor.current !== user.id) return;   // 首次同步（含墓碑）完成后再允许自动上传
     const dirty = s.projects.filter((p) => {
       if (tombstones.current.has(p.id)) return false;   // 删过的不再上传
@@ -236,7 +229,7 @@ function useCloudSyncState(): CloudSync {
       }
     }, 4000);
     return () => window.clearTimeout(t);
-  }, [s.projects, user, isPro, claim]);
+  }, [s.projects, user, claim]);
 
   const downloadAll = useCallback(async () => {
     if (!user) { setToast('请先登录再下载云端项目'); return; }
@@ -261,7 +254,7 @@ function useCloudSyncState(): CloudSync {
 
   const pushOne = useCallback(async (id: string) => {
     if (!user) { setToast('请先登录再同步'); return false; }
-    if (!isPro) { setToast('云同步为会员权益，开通后即可跨设备同步'); return false; }
+
     const p = projectsRef.current.find((x) => x.id === id);
     if (!p) return false;
     const o = owners.current[id];
@@ -281,7 +274,7 @@ function useCloudSyncState(): CloudSync {
     setMessage(tl(`已同步「${p.name}」· ${timeLabel(new Date().toISOString())}`, `“${p.name}” synced · ${timeLabel(new Date().toISOString())}`));
     update({});
     return true;
-  }, [user, isPro, setToast, update, claim]);
+  }, [user, setToast, update, claim]);
 
   const removeOne = useCallback(async (id: string) => {
     if (!user) return false;

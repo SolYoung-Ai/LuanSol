@@ -1,14 +1,18 @@
 /* ============================================================
- * 订阅 / 额度数据层 + Provider（CloudBase Postgres + RLS）
+ * 积分数据层 + Provider（CloudBase Postgres + RLS）
  * ------------------------------------------------------------
- *  - 表 lunasol_subscriptions：owner_id = auth.uid()，RLS 自动隔离；
- *  - quota_total / quota_used 只记「新注册赠送」这一桶。会员不含积分包，
- *    开会员 / 续费都不碰这两个字段（数据库侧见 20261114020000_membership_no_credits.sql）；
- *    单独购买的积分一律落 bonus_credits；
- *  - 闸门：AI 真正调用前过 registerAIGate；成功后 reportAIUsage 自增计数；
- *  - 非登录能力来源（GitHub Pages 镜像 / 未配置云）放行且不计量——
- *    因为这些来源无法订阅，强行拦截会破坏「镜像可试用」的既有承诺；
- *  - 支付系统尚未接入：activate 通过「激活码」占位开通，后续替换为支付回调。
+ *  纯积分制（2026-11-14 起）：全站没有会员 / 订阅 / 有效期 / 续费。
+ *  用户只需要理解一个数字——积分余额，用一次扣几分，不够就买积分包。
+ *
+ *  - 表 lunasol_subscriptions 继续当积分账本用，owner_id = auth.uid()，RLS 隔离；
+ *    plan / status / period_* / activated_by 是历史字段，代码不再读写；
+ *  - 余额 = max(0, quota_total - quota_used) + bonus_credits。
+ *    quota_total / quota_used 只记「新注册赠送」这一桶，签到 / 兑换码 / 积分包
+ *    一律落 bonus_credits；扣减顺序见 lunasol_consume_quota；
+ *  - 全部能力（模型 / 云端同步 / 印刷级导出 / 历史版本）登录后即可用，
+ *    不再设权限位；生图按档位扣积分，是唯一的变现点；
+ *  - 闸门：AI 调用前过 registerAIGate，只看「是否登录 + 总余额是否 > 0」；
+ *  - 非计量来源（GitHub Pages 镜像 / 未配置云）放行且不计量，保持「镜像可试用」。
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { tl } from '../langStore';
@@ -58,35 +62,27 @@ export function defaultFree(uid: string): Subscription {
 }
 
 /** AI 闸门的判定结果（纯函数，便于回归测试）。
- *  登录与额度是两件事：未登录 → need='login'（引导登录，有 2 次免费体验）；
- *  已登录但额度用完 / 会员过期 → need='subscribe'（引导订阅）。 */
+ *  纯积分制只有两种拦截：未登录 → need='login'；积分用尽 → need='credits'。
+ *  没有会员状态，也没有「订阅」这个动作。 */
 export type GateDecision = { ok: boolean; reason: string; need: PaywallNeed };
 
 export function decideGate(input: {
   loggedIn: boolean;
-  /** 剩余次数；null 表示订阅信息尚未加载完成，此时不拦截 */
+  /** 总积分余额；null 表示账本尚未加载完成，此时不拦截 */
   remaining: number | null;
-  proActive: boolean;
   freeTrial?: number;
-  quota?: number;
 }): GateDecision {
   const trial = input.freeTrial ?? FREE_TRIAL;
   if (!input.loggedIn) {
     return { ok: false, reason: tl(`登录后即可使用平台 AI；新注册用户有 ${trial} 积分免费体验`, `Sign in to use platform AI — new accounts get ${trial} credits to try it`), need: 'login' };
   }
-  if (input.remaining === null) return { ok: true, reason: '', need: 'subscribe' };
-  if (input.remaining > 0) return { ok: true, reason: '', need: 'subscribe' };
+  // 账本还没到 / 正在加载，先放行，避免首屏把正常用户拦在门外
+  if (input.remaining === null) return { ok: true, reason: '', need: 'credits' };
+  if (input.remaining > 0) return { ok: true, reason: '', need: 'credits' };
   return {
     ok: false,
-    reason: input.proActive
-      ? tl('积分不足：会员权益不含积分包，请购买积分包或通过每日签到获取',
-        'Out of credits: membership does not include credits — buy a credit pack or check in daily')
-      // 会员不含固定积分包，别在这里承诺「每月 N 积分」——积分只来自签到与充值
-      : tl(
-        `免费体验已用完（${trial} 积分），开通会员可解锁全部模型、云端同步与印刷级导出，积分可通过每日签到或充值获得`,
-        `Your ${trial} free credits are used up. A membership unlocks every model, cloud sync and print-grade export; credits come from daily check-ins or top-ups.`,
-      ),
-    need: 'subscribe',
+    reason: tl('积分不足，购买积分包或每日签到后即可继续使用', 'Out of credits — buy a credit pack or check in daily to continue'),
+    need: 'credits',
   };
 }
 
@@ -190,53 +186,31 @@ export async function recordUsage(uid: string, n = 1, taskType = 'ai_call'): Pro
   return next;
 }
 
-/** 【仅供服务端/内部调用】直接写库开通会员。
- *  绝不可由前端凭一个字符串调用：旧版 activate(code) 把 code 参数丢掉后直接调它，
- *  导致任何登录用户输入任意文本都能拿到 600 次/月额度。前端入口已停用（见 activate），
- *  未来只允许「支付回调」或「服务端校验激活码」后调用本函数。 */
-export async function activatePlan(uid: string, plan: Plan = 'pro_monthly', months = 1, by: string | null = null): Promise<CloudResult<Subscription>> {
-  const d = await db(); if (!d) return fail('云服务未配置，无法开通');
-  // 只改会员身份与有效期：额度字段必须原样保留。
-  // 以前这里写 quota_total: proMonthlyQuota(3000)、quota_used: 0，
-  // 等于「开会员送 3000 积分还把已用清零」，与会员不含积分包的定价口径冲突。
-  const cur = await getSubscription(uid);
-  const base = cur.ok ? cur.data : await ensureSubscription(uid);
-  const start = new Date();
-  const end = new Date(start.getTime() + months * 30 * 24 * 3600 * 1000);
-  const row: Subscription = {
-    ...base,
-    plan, status: 'active',
-    period_start: start.toISOString(), period_end: end.toISOString(),
-    activated_by: by, updated_at: start.toISOString(),
-  };
-  try { await d.from(TABLE).upsert(row, { onConflict: 'id' }); return { ok: true, data: row }; }
-  catch (e) { return fail(errText(e) || '开通失败'); }
-}
-
+/** 基础赠送桶的剩余量。只用于账本内部计算，界面与闸门一律用 totalCreditsOf()。 */
 export function remainingOf(sub: Subscription | null): number {
   if (!sub) return 0;
-  // 积分是与会员身份无关的独立资产：会员到期只收回权益，不清零已购 / 已签到积分。
-  // 旧版在这里对过期会员直接返回 0，会把用户单独买来的积分一并吞掉。
   return Math.max(0, sub.quota_total - sub.quota_used);
 }
 
-export function isProActive(sub: Subscription | null): boolean {
-  return !!sub && sub.plan === 'pro_monthly' && sub.status === 'active'
-    && !!sub.period_end && new Date(sub.period_end).getTime() > Date.now();
+/** 总积分余额：基础桶 + 单独获得的积分（签到 / 兑换码 / 积分包）。
+ *  lunasol_consume_quota 先扣基础桶再扣 bonus_credits，闸门与界面必须看两者之和，
+ *  否则「免费桶用完但买过积分包」的用户会被误判为没额度。 */
+export function totalCreditsOf(sub: Subscription | null): number {
+  if (!sub) return 0;
+  return remainingOf(sub) + Math.max(0, Number(sub.bonus_credits) || 0);
 }
 
 /* ---------------- 用量进度：分母口径全局唯一 ---------------- */
 
-/** 进度条 100% 对应的积分量：免费版 100、会员 600；充过值就用充值量 */
+/** 进度条 100% 对应的默认积分量 */
 export const CREDIT_BUCKET_FREE = PRICING.creditBucket;
-export const CREDIT_BUCKET_PRO = PRICING.proCreditBucket;
-/** 兼容旧引用：没有会员信息时的默认桶 */
+/** 兼容旧引用 */
 export const DEFAULT_CREDIT_BUCKET = CREDIT_BUCKET_FREE;
 
 export interface UsageStat {
   /** 当前可用积分 */
   left: number;
-  /** 100% 对应的积分量（免费 100 / 会员 600 / 充过值 = 该次充值量） */
+  /** 100% 对应的积分量（默认 100 / 充过值 = 该次充值量） */
   bucket: number;
   /** 已用掉的积分 */
   used: number;
@@ -245,17 +219,16 @@ export interface UsageStat {
 }
 
 /** 已使用进度：pct = (桶 - 余额) / 桶。
- *  侧栏账号卡与「积分与充值」页共用此函数，两处百分比不会再各算一套。
- *  桶取「免费 100 / 会员 600」与「近期充值量」的较大者——充值包最小 1000，
+ *  侧栏账号卡与「积分」页共用此函数，两处百分比不会再各算一套。
+ *  桶取「默认 100」与「近期充值量」的较大者——充值包最小 1000，
  *  所以真实充值一定大于默认桶；小额兑换码不会把分母压小到出现 100%。 */
 export function usageStat(
   left: number | null,
-  opts?: { recharge?: number | null; pro?: boolean },
+  opts?: { recharge?: number | null },
 ): UsageStat | null {
   if (left === null || left === undefined) return null;
-  const base = opts?.pro ? CREDIT_BUCKET_PRO : CREDIT_BUCKET_FREE;
   const recharge = Number(opts?.recharge);
-  const b = Math.max(base, Number.isFinite(recharge) ? recharge : 0);
+  const b = Math.max(CREDIT_BUCKET_FREE, Number.isFinite(recharge) ? recharge : 0);
   const l = Math.max(0, Math.round(left));
   const used = Math.max(0, b - l);
   return { left: l, bucket: b, used, pct: Math.min(100, Math.round((used / b) * 100)) };
@@ -266,20 +239,22 @@ export function usageStat(
 interface SubCtx {
   sub: Subscription | null;
   loading: boolean;
-  /** 当前来源是否走订阅计量（正式站点=是；GitHub Pages 镜像=否） */
+  /** 当前来源是否走积分计量（正式站点=是；GitHub Pages 镜像=否） */
   metered: boolean;
-  /** 剩余次数；非计量来源返回 null */
+  /** 总积分余额；非计量来源返回 null */
   usedLeft: number | null;
   /** 进度条 100% 对应的积分量（默认 1000；近期充过积分则为该次充值量） */
   creditBucket: number;
   /** 已使用进度，侧栏与积分页共用；未登录 / 非计量来源为 null */
   usage: UsageStat | null;
+  /** 兼容旧调用点：纯积分制下登录后全部能力开放，恒为 true。
+   *  生图高档位仍按积分扣费，不在这里做权限拦截。 */
   isPro: boolean;
   refresh: () => Promise<void>;
   activate: (code: string) => Promise<{ ok: boolean; message: string }>;
   paywallOpen: boolean;
   paywallReason: string;
-  /** 当前拦截原因：匿名（需登录）还是额度不足（需订阅） */
+  /** 当前拦截原因：匿名（需登录）还是积分不足（需充值） */
   paywallNeed: PaywallNeed;
   setPaywall: (open: boolean, reason?: string) => void;
   /** 内测期：签到 / 兑换码直接加到本地积分（localStorage），刷新保留 */
@@ -320,7 +295,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   const [loading, setLoading] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [paywallReason, setPaywallReason] = useState<string>('');
-  const [paywallNeed, setPaywallNeed] = useState<PaywallNeed>('subscribe');
+  const [paywallNeed, setPaywallNeed] = useState<PaywallNeed>('credits');
   const subRef = useRef<Subscription | null>(null);
   const userRef = useRef(auth.user);
   subRef.current = sub;
@@ -362,10 +337,9 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       const s = subRef.current;
       const d = decideGate({
         loggedIn: !!u,
-        // 还没有订阅行 = 新注册用户，免费体验一次都没用过，按满额放行；
-        // 订阅信息尚未加载完成时传 null，同样放行，避免在计量窗口内白送调用。
-        remaining: s ? remainingOf(s) : (u ? FREE_TRIAL : null),
-        proActive: isProActive(s),
+        // 还没有账本行 = 新注册用户，赠送积分一次都没用过，按满额放行；
+        // 账本尚未加载完成时传 null，同样放行，避免首屏误拦。
+        remaining: s ? totalCreditsOf(s) : (u ? FREE_TRIAL : null),
       });
       if (d.ok) return { ok: true };
       // 匿名用户不要直接抛登录框——那会打断正在填的表单。改为弹付费墙，
@@ -382,15 +356,12 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     return () => { registerAIGate(null); registerAIReporter(null); };
   }, [metered, requestLogin]);
 
-  /** 前端开通入口：当前一律拒绝。
-   *  原因：没有服务端校验的情况下，「输入任意字符串即开通」等于免费送会员。
-   *  真正的开通必须由支付回调或服务端激活码校验完成后写库；在那之前这里如实报「未开放」，
-   *  既不假装成功，也不给后门。 */
+  /** 兼容旧接口：纯积分制没有「输入码即开通」这回事，一律引导到积分页。
+   *  绝不可以在前端凭一个字符串改账本——旧版 activate(code) 曾把 code 丢掉后
+   *  直接写库，等于任何登录用户都能白拿额度。 */
   const activate = useCallback(async (_code: string): Promise<{ ok: boolean; message: string }> => {
-    const u = auth.user;
-    if (!u) return { ok: false, message: tl('请先登录', 'Please sign in first') };
-    return { ok: false, message: tl('会员开通尚未开放：支付系统接入中，激活通道已停用。开通后会在账户页显示真实有效期。', 'Membership is not open yet: payments are still being wired up and the activation channel is closed. Once live, the real expiry date appears on the account page.') };
-  }, [auth.user]);
+    return { ok: false, message: tl('已改为纯积分制，请在「积分」页购买积分包或每日签到获取积分', 'We switched to a simple credit system — buy a credit pack or check in daily on the Credits page') };
+  }, []);
 
   const setPaywall = useCallback((open: boolean, reason?: string) => {
     setPaywallOpen(open);
@@ -513,9 +484,8 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
       const lastStreak = rows.length > 0 ? rows[0].streak : 0;
       const newStreak = rows.length > 0 && dateKeyOf(rows[0].checkin_date) === yesterday ? lastStreak + 1 : 1;
 
-      const isProUser = isProActive(subRef.current);
-      // 已取消「连续 10 天额外 +100」：只按天给固定积分，会员双倍
-      const totalPoints = isProUser ? 20 : 10;
+      // 纯积分制：每天固定 +10，不再有会员双倍、月上限或连续天数奖励
+      const totalPoints = 10;
 
       const ins = await d.from('lunasol_checkin_logs').insert({
         user_id: u.id, checkin_date: today, streak: newStreak, bonus: totalPoints,
@@ -589,7 +559,7 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
         return {
           ok: true,
           points: Number(p.points) || 0,
-          message: String(p.message || (p.kind === 'membership' ? tl('兑换成功！会员已开通', 'Redeemed — your membership is active') : tl('兑换成功', 'Redeemed'))),
+          message: String(p.message || tl('兑换成功', 'Redeemed')),
         };
       }
       // 数据库函数报错：如实返回错误。原来的「直接改表 + 调 grant_bonus」兼容路径
@@ -622,17 +592,14 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     }
   }, []);
 
-  const usedLeftRaw = metered ? remainingOf(sub) : null;
-  // 积分余额 = 云端剩余（quota_total - quota_used + bonus_credits）
-  // 签到和兑换码的积分都存在 bonus_credits 里，不再用 localStorage 缓存
-  const bonus = sub ? (sub as any).bonus_credits || 0 : 0;
-  // 订阅行还没到（首屏加载中 / 拉取失败）时不给 0：否则侧栏会先闪一下
+  // 积分余额 = 基础桶剩余 + bonus_credits（签到 / 兑换码 / 积分包都在这里）
+  // 账本还没到（首屏加载中 / 拉取失败）时不给 0：否则侧栏会先闪一下
   // 「0 积分 · 已使用 100%」，看起来像余额被清空了。null 由各处显示占位。
-  const usedLeft = usedLeftRaw !== null && sub ? usedLeftRaw + bonus : null;
-  const isPro = isProActive(sub);
+  const usedLeft = metered && sub ? totalCreditsOf(sub) : null;
+  // 纯积分制：不再有会员身份，登录后所有能力开放，保留字段只为兼容既有调用点
+  const isPro = true;
 
-  // 进度条分母：免费 100 / 会员 600；用户近期（90 天）充值过，则用该次充值的积分量做 100%。
-  // 充值尚未上线，所以现在只会拿到默认桶；支付回调写入 grant 记录后自动生效。
+  // 进度条分母：默认 100；用户近期（90 天）充值过，则用该次充值的积分量做 100%。
   const [creditBucket, setCreditBucket] = useState<number>(CREDIT_BUCKET_FREE);
   useEffect(() => {
     const u = auth.user;
@@ -663,9 +630,9 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
     return () => { cancelled = true; };
   }, [auth.user?.id, metered]);
 
-  // 真正的分母 = max(免费 100 / 会员 600, 近期充值量)；state 里只存充值量
-  const usage = usageStat(usedLeft, { recharge: creditBucket, pro: isPro });
-  const bucket = usage?.bucket ?? (isPro ? CREDIT_BUCKET_PRO : CREDIT_BUCKET_FREE);
+  // 真正的分母 = max(默认 100, 近期充值量)；state 里只存充值量
+  const usage = usageStat(usedLeft, { recharge: creditBucket });
+  const bucket = usage?.bucket ?? CREDIT_BUCKET_FREE;
 
   const value = useMemo<SubCtx>(() => ({
     sub, loading, metered, usedLeft, creditBucket: bucket, usage, isPro, refresh, activate, paywallOpen, paywallReason, paywallNeed, setPaywall, addLocalCredits, doCheckin, checkinState, redeemCode, getCreditLogs,
@@ -673,6 +640,6 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
 
   return <Ctx.Provider value={value}>
     {children}
-    <PaywallModal open={paywallOpen} reason={paywallReason} need={paywallNeed} onClose={() => setPaywall(false)} onActivate={activate} onLogin={requestLogin} />
+    <PaywallModal open={paywallOpen} reason={paywallReason} need={paywallNeed} onClose={() => setPaywall(false)} onLogin={requestLogin} />
   </Ctx.Provider>;
 }

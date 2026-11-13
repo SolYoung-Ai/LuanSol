@@ -94,14 +94,14 @@ export default function WorkflowStage({ onEnterEditor }: { onEnterEditor: (tool:
   const runTask = async (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
-    // 会员到期后任务里可能还留着 GPT Image 2：按当前身份归一，界面与扣费同步改回 Flash
+    // 旧任务里残留的档位名归一到当前目录，避免界面显示一个不存在的档
     const tier = resolveTier(task.imageTier, sub.isPro);
     if (tier !== task.imageTier) patchTask(taskId, { imageTier: tier });
     const cost = tierCost(tier);
     const balance = sub.usedLeft ?? 0;
     if (balance < cost) {
       setToast(`积分不足：${tier === 'flash' ? 'Flash' : 'Pro'} 生图需要 ${cost} 积分，当前余额 ${balance}。`);
-      window.location.hash = '#/subscribe';
+      window.location.hash = '#/credits';
       return;
     }
     patchTask(taskId, { status: 'running', error: '' });
@@ -264,8 +264,6 @@ export default function WorkflowStage({ onEnterEditor }: { onEnterEditor: (tool:
               key={task.id}
               index={idx}
               task={task}
-              isPro={sub.isPro}
-              onNeedPro={() => sub.setPaywall(true, 'GPT Image 2 是会员专属生图模型：出图质量最高，支持文字出图与参考图改图。免费版可用 Seedream 5.0 Flash / Pro。')}
               onRun={() => runTask(task.id)}
               onPatch={(patch) => patchTask(task.id, patch)}
               onPreview={(v) => setPreview(v)}
@@ -333,13 +331,10 @@ export default function WorkflowStage({ onEnterEditor }: { onEnterEditor: (tool:
 
 // —— 单个任务卡片 ——
 function TaskCard({
-  task, index, isPro, onNeedPro, onRun, onPatch, onPreview, onAddToAsset,
+  task, index, onRun, onPatch, onPreview, onAddToAsset,
 }: {
   task: DesignTask;
   index: number;
-  /** 会员专属档位（GPT Image 2）只对会员开放 */
-  isPro: boolean;
-  onNeedPro: () => void;
   onRun: () => void;
   onPatch: (patch: Partial<DesignTask>) => void;
   onPreview: (v: TaskVariant) => void;
@@ -388,27 +383,20 @@ function TaskCard({
       {/* 模型档位选择 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
         {OPEN_IMAGE_MODELS.map((m) => {
-          // GPT Image 2 两档是会员专属：免费版灰显，点它弹订阅引导，不切换档位
-          const locked = !!m.pro && !isPro;
-          const on = task.imageTier === m.id && !locked;
+          const on = task.imageTier === m.id;
           return (
             <button
               key={m.id}
-              onClick={() => {
-                if (locked) { onNeedPro(); return; }
-                onPatch({ imageTier: m.id });
-              }}
+              onClick={() => onPatch({ imageTier: m.id })}
               style={{
-                fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                cursor: locked ? 'not-allowed' : 'pointer',
-                opacity: locked ? 0.45 : 1,
+                fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
                 border: on ? '1px solid #222' : '1px solid #eee',
                 background: on ? '#222' : '#fff',
                 color: on ? '#fff' : '#888',
               }}
-              title={locked ? '会员专属模型' : m.note}
+              title={m.note}
             >
-              {m.short} {m.cost}积分{locked ? ' · 会员' : ''}
+              {m.short} {m.cost}积分
             </button>
           );
         })}

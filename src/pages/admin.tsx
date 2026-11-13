@@ -1,11 +1,10 @@
 /* ============================================================
  * 开发者管理页（仅内部管理员 solyoungwork@gmail.com 可见）
  * ------------------------------------------------------------
- *  - 生成「积分码」和「会员码」：会员码兑换后直接开通 / 顺延会员
- *  - 支持批量生成 + 复制，列表里能看清类型、额度与使用状态
- *  - 作废未使用的码
- * 数据表：public.lunasol_redeem_codes（plan / months / days 为 2026-11 新增：月卡用 months，体验卡用 days）
- * 写入受 RLS 保护：只有管理员邮箱能 INSERT / SELECT。
+ * 纯积分制：只生成「积分码」，兑换后直接给账户加积分。
+ * 历史遗留的会员码仍可在列表里看到；它们兑换时会由数据库函数
+ * 折算成等值积分（见 20261114030000_pure_credits.sql），不会开通会员。
+ * 数据表：public.lunasol_redeem_codes；写入受 RLS 保护。
  * ============================================================ */
 import React, { useEffect, useState } from 'react';
 import { Button, Card, PageHead, SectionLabel, Notice, go } from '../ui';
@@ -13,8 +12,6 @@ import { useAuth } from '../cloud/auth';
 import { db } from '../cloud/sdk';
 import { PRICING } from '../cloud/plans';
 import { Icon } from '../components/icons';
-
-type CodeKind = 'points' | 'pro_monthly';
 
 interface RedeemCode {
   code: string;
@@ -27,39 +24,21 @@ interface RedeemCode {
   days?: number;
 }
 
-/** 会员码时长单位：体验卡按天，正式卡按月 */
-type DurationUnit = 'day' | 'month';
-interface Duration { unit: DurationUnit; value: number }
-
 const POINT_PRESETS = [100, 200, 300, 500, 1000];
-const DURATION_PRESETS: Duration[] = [
-  { unit: 'day', value: 1 },
-  { unit: 'day', value: 3 },
-  { unit: 'day', value: 7 },
-  { unit: 'month', value: 1 },
-  { unit: 'month', value: 3 },
-  { unit: 'month', value: 6 },
-  { unit: 'month', value: 12 },
-];
 const COUNT_PRESETS = [1, 5, 10];
 
-const durKey = (d: Duration) => `${d.unit}-${d.value}`;
-const durText = (d: Duration) => `${d.value} ${d.unit === 'day' ? '天' : '个月'}`;
-
 /** 纯前端生成码：8 位大写字母数字，撞码由主键约束兜底（重复会插入失败并被跳过） */
-function newCode(kind: CodeKind): string {
+function newCode(): string {
   const rand = () => Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `${kind === 'pro_monthly' ? 'LSV' : 'LSP'}-${rand()}${rand()}`;
+  return `LSP-${rand()}${rand()}`;
 }
 
 export default function Admin() {
   const auth = useAuth();
   const isAdmin = !!auth.user && auth.user.email === PRICING.adminEmail;
 
-  const [kind, setKind] = useState<CodeKind>('points');
   const [points, setPoints] = useState(300);
   const [customPoints, setCustomPoints] = useState('');
-  const [duration, setDuration] = useState<Duration>({ unit: 'month', value: 1 });
   const [count, setCount] = useState(1);
 
   const [codes, setCodes] = useState<RedeemCode[]>([]);
@@ -90,16 +69,12 @@ export default function Admin() {
   }
 
   const pointsValue = customPoints ? parseInt(customPoints, 10) || 0 : points;
-  const summary = kind === 'points'
-    ? `${count} 张 · 每张 ${pointsValue} 积分`
-    : `${count} 张 · 每张开通 ${durText(duration)}会员`;
 
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setMessage({ ok: true, text: `已复制 ${text}` });
     } catch {
-      // 非 https / 无剪贴板权限时退回选中式复制
       const ta = document.createElement('textarea');
       ta.value = text;
       document.body.appendChild(ta);
@@ -112,8 +87,7 @@ export default function Admin() {
 
   const create = async () => {
     if (creating) return;
-    if (kind === 'points' && pointsValue <= 0) { setMessage({ ok: false, text: '请输入有效积分额度' }); return; }
-    if (kind === 'pro_monthly' && duration.value <= 0) { setMessage({ ok: false, text: '请选择有效会员时长' }); return; }
+    if (pointsValue <= 0) { setMessage({ ok: false, text: '请输入有效积分额度' }); return; }
     const d = await db();
     if (!d) { setMessage({ ok: false, text: '数据库未连接' }); return; }
 
@@ -124,14 +98,13 @@ export default function Admin() {
     const errs: string[] = [];
 
     for (let i = 0; i < count; i++) {
-      const code = newCode(kind);
-      const isMember = kind === 'pro_monthly';
+      const code = newCode();
       const r = await d.from('lunasol_redeem_codes').insert({
         code,
-        points: kind === 'points' ? pointsValue : 0,
-        plan: kind,
-        months: isMember && duration.unit === 'month' ? duration.value : 0,
-        days: isMember && duration.unit === 'day' ? duration.value : 0,
+        points: pointsValue,
+        plan: 'points',
+        months: 0,
+        days: 0,
         used: false,
       });
       if (r.error) errs.push(r.error.message || '插入失败');
@@ -141,12 +114,7 @@ export default function Admin() {
     setCreating(false);
     setCreated(okCodes);
     if (okCodes.length) {
-      setMessage({
-        ok: true,
-        text: kind === 'points'
-          ? `已生成 ${okCodes.length} 张积分码（每张 ${pointsValue} 积分）`
-          : `已生成 ${okCodes.length} 张会员码（每张 ${durText(duration)}）`,
-      });
+      setMessage({ ok: true, text: `已生成 ${okCodes.length} 张积分码（每张 ${pointsValue} 积分）` });
       void load();
     } else {
       setMessage({ ok: false, text: `生成失败：${errs[0] || '未知错误'}` });
@@ -161,72 +129,47 @@ export default function Admin() {
     void load();
   };
 
-  const typeOf = (c: RedeemCode) => (c.plan === 'pro_monthly' ? '会员码' : '积分码');
+  const isLegacyMember = (c: RedeemCode) => c.plan === 'pro_monthly';
   const quotaOf = (c: RedeemCode) => {
-    if (c.plan !== 'pro_monthly') return `${c.points} 积分`;
-    if (c.days && c.days > 0) return `${c.days} 天`;
-    return `${c.months || 1} 个月`;
+    if (!isLegacyMember(c)) return `${c.points} 积分`;
+    // 历史会员码兑换时由数据库函数折算成积分，这里按等价口径展示
+    const pts = c.months ? c.months * 300 : (c.days || 1) * 10;
+    return `${pts} 积分（历史会员码折算）`;
   };
   const statusOf = (c: RedeemCode) =>
     !c.used ? '可用' : c.used_by && c.used_by !== 'revoked' ? '已使用' : '已作废';
 
   return <div className="page page-narrow adm-page">
-    <PageHead kicker="DEV" title="开发者管理" desc="生成积分码 / 会员码、查看使用情况。仅管理员可见。" />
+    <PageHead kicker="DEV" title="开发者管理" desc="生成积分码、查看使用情况。仅管理员可见。" />
 
     <Card className="pad-card">
-      <SectionLabel>生成兑换码</SectionLabel>
-
-      {/* 类型选择：两个大按钮，选中态用实底 + 勾选，避免「点了不知道选了哪个」 */}
-      <div className="adm-mode">
-        <button className={`adm-mode-btn ${kind === 'points' ? 'on' : ''}`} onClick={() => { setKind('points'); setCreated([]); }}>
-          <span className="adm-mode-name"><Icon name="spark" size={15} />积分码</span>
-          <span className="adm-mode-desc">兑换后给账户加积分</span>
-          {kind === 'points' && <span className="adm-mode-check"><Icon name="check" size={13} /></span>}
-        </button>
-        <button className={`adm-mode-btn ${kind === 'pro_monthly' ? 'on' : ''}`} onClick={() => { setKind('pro_monthly'); setCreated([]); }}>
-          <span className="adm-mode-name"><Icon name="shield" size={15} />会员码</span>
-          <span className="adm-mode-desc">兑换后直接开通 / 顺延会员</span>
-          {kind === 'pro_monthly' && <span className="adm-mode-check"><Icon name="check" size={13} /></span>}
-        </button>
-      </div>
+      <SectionLabel>生成积分码</SectionLabel>
+      <p className="adm-summary" style={{ marginTop: 0, marginBottom: 14 }}>
+        纯积分制：所有兑换码都只发放积分，没有会员、有效期或续费。用户兑换后积分立即到账且永久有效。
+      </p>
 
       <div className="adm-field">
-        <div className="adm-field-label">{kind === 'points' ? '每张额度' : '每张开通时长'}</div>
+        <div className="adm-field-label">每张额度</div>
         <div className="adm-chips">
-          {kind === 'points'
-            ? POINT_PRESETS.map((v) => {
-              const on = points === v && !customPoints;
-              return <button
-                key={v}
-                className={`adm-chip ${on ? 'on' : ''}`}
-                onClick={() => { setPoints(v); setCustomPoints(''); }}
-              >
-                {on && <Icon name="check" size={12} />}
-                {v} 积分
-              </button>;
-            })
-            : DURATION_PRESETS.map((d) => {
-              const on = duration.unit === d.unit && duration.value === d.value;
-              return <button
-                key={durKey(d)}
-                className={`adm-chip ${on ? 'on' : ''}`}
-                onClick={() => setDuration(d)}
-              >
-                {on && <Icon name="check" size={12} />}
-                {durText(d)}
-              </button>;
-            })}
-          {kind === 'points' && <input
+          {POINT_PRESETS.map((v) => {
+            const on = points === v && !customPoints;
+            return <button
+              key={v}
+              className={`adm-chip ${on ? 'on' : ''}`}
+              onClick={() => { setPoints(v); setCustomPoints(''); }}
+            >
+              {on && <Icon name="check" size={12} />}
+              {v} 积分
+            </button>;
+          })}
+          <input
             className="luna-input adm-custom"
             inputMode="numeric"
             placeholder="自定义积分"
             value={customPoints}
             onChange={(e) => setCustomPoints(e.target.value.replace(/\D/g, ''))}
-          />}
+          />
         </div>
-        {kind === 'pro_monthly' && <p className="adm-summary" style={{ marginTop: 8 }}>
-          会员码只开通 / 顺延会员权益，不发放任何积分；需要给用户积分请单独生成「积分码」。
-        </p>}
       </div>
 
       <div className="adm-field">
@@ -245,9 +188,9 @@ export default function Admin() {
 
       <div className="adm-actions">
         <Button variant="accent" onClick={() => void create()} disabled={creating}>
-          {creating ? '生成中…' : kind === 'points' ? '生成积分码' : '生成会员码'}
+          {creating ? '生成中…' : '生成积分码'}
         </Button>
-        <span className="adm-summary">将生成 {summary}</span>
+        <span className="adm-summary">将生成 {count} 张 · 每张 {pointsValue} 积分</span>
       </div>
 
       {message && <div style={{ marginTop: 14 }}><Notice tone={message.ok ? 'success' : 'warn'}>{message.text}</Notice></div>}
@@ -274,7 +217,6 @@ export default function Admin() {
               <thead>
                 <tr>
                   <th>兑换码</th>
-                  <th>类型</th>
                   <th>额度</th>
                   <th>状态</th>
                   <th>创建时间</th>
@@ -284,7 +226,6 @@ export default function Admin() {
               <tbody>
                 {codes.map((c) => <tr key={c.code}>
                   <td className="mono">{c.code}</td>
-                  <td>{typeOf(c)}</td>
                   <td>{quotaOf(c)}</td>
                   <td>
                     <span className={`adm-status ${!c.used ? 'ok' : statusOf(c) === '已使用' ? 'used' : 'revoked'}`}>
@@ -303,7 +244,7 @@ export default function Admin() {
             </table>
           </div>}
       <p className="adm-tip">
-        会员码兑换后会员立即生效；已是会员的会在原有效期上顺延（天卡、月卡可叠加）。天卡到期后自动失效，不自动续费。兑换码存在云端数据库，用户兑换时由数据库函数一次性占用，重复兑换会被拒绝。
+        兑换码存在云端数据库，用户兑换时由数据库函数一次性占用，重复兑换会被拒绝；积分到账后写入积分明细，永久有效。
       </p>
     </Card>
   </div>;

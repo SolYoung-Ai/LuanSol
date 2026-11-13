@@ -43,7 +43,7 @@ function Footer() {
       <a href="#/studio">{t('开始设计', 'Start designing')}</a>
       <a href="#/workspace">{t('工作台', 'Workspace')}</a>
       <a href="#/market">{t('审美市场', 'Aesthetic Index')}</a>
-      <a href="#/subscribe">{t('会员说明', 'Plans')}</a>
+      <a href="#/credits">{t('积分说明', 'Credits')}</a>
     </div>
     {/* 法务与价格必须是真实可抓取的静态地址：支付通道审核会直接请求 /terms 这类路径，
         而 #/terms 这种 hash 路由在他们眼里等于不存在。 */}
@@ -179,7 +179,8 @@ export default function App() {
   else if (path === '/account' || path === '/security') page = <Account />;
   else if (path === '/settings') page = <Settings />;
   else if (path === '/models') page = <ModelConfig />;
-  else if (path === '/subscribe') page = <Subscribe />;
+  // /credits 是纯积分制的主路径；/subscribe 是旧链接兼容别名，不再对外展示
+  else if (path === '/credits' || path === '/subscribe') page = <Subscribe />;
   else if (path === '/help') page = <Help />;
   else if (path === '/start' || path === '/home') page = <Start />;
   else if (path === '/luna') page = <Luna />;

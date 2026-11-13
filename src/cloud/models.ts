@@ -34,7 +34,7 @@ export interface ImageModel {
   noteEn: string;
   /** false = 已定价但暂未开放（灰显，不可选） */
   open: boolean;
-  /** true = 会员专属：免费版看不到也选不了（点它走订阅引导） */
+  /** 历史标记：曾用于「会员专属」灰显；纯积分制下不再限制，只保留数据兼容 */
   pro?: boolean;
 }
 
@@ -142,18 +142,15 @@ export function imageShort(id: ImageTier | undefined | null): string {
   return imageModel(id).short;
 }
 
-/** 这一档是否会员专属（免费版选不了） */
-export function isProOnlyTier(id: ImageTier | undefined | null): boolean {
-  return imageModel(id).pro === true;
+/** 纯积分制：所有档位登录后都可选，按档位扣分；保留函数签名兼容旧调用点。 */
+export function isProOnlyTier(_id: ImageTier | undefined | null): boolean {
+  return false;
 }
 
-/** 当前身份下真正可用的生图档位：
- *  免费版若还存着会员档（比如会员到期后继续用老会话），一律退回默认 Flash，
- *  绝不拿会员档偷偷下单——那会按会员档的价格扣一个本来不该卖的档位。 */
-export function resolveTier(id: ImageTier | undefined | null, isPro: boolean): ImageTier {
-  const m = imageModel(id);
-  if (m.pro && !isPro) return 'flash';
-  return m.id;
+/** 归一到当前目录里真实存在的档位（旧会话可能存着已下线的档位名）。
+ *  第二个参数历史上是 isPro，纯积分制已废弃，保留只为不改所有调用点。 */
+export function resolveTier(id: ImageTier | undefined | null, _isPro?: boolean): ImageTier {
+  return imageModel(id).id;
 }
 
 /** 3D 生成（Hyper3D-Gen2）目前只定价、未接入界面，价格单独放这里方便后面接 */

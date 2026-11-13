@@ -10,7 +10,6 @@ import { mockupSvg } from '../engine/export';
 import type { StructureId } from '../types';
 import { downloadBlob, formatDate, svgToDataUrl } from '../engine/utils';
 import { useAuth } from '../cloud/auth';
-import { useSubscription } from '../cloud/subscription';
 import { useCloudSync } from '../cloud/useCloudSync';
 
 const SAMPLE: Record<StructureId, { l: number; w: number; h: number }> = {
@@ -156,7 +155,6 @@ export function ProjectDetail() {
   const { lang, t } = useLang();
   const id = hash.split('/')[2];
   const { s, loadProject, restoreVersion, duplicateProject, deleteProject, setToast } = useApp();
-  const { isPro } = useSubscription();
   const p = s.projects.find((x) => x.id === id);
   const [confirm, setConfirm] = useState(false);
   if (!p) return <div className="page page-narrow"><Empty title={t('找不到这个项目', 'Project not found')} desc={t('它可能已被删除，或保存在另一台设备的浏览器里。', 'It may have been deleted, or it lives in another device\'s browser.')} action={<Button onClick={() => go('/projects')}>{t('返回我的工作台', 'Back to workspace')}</Button>} /></div>;
@@ -196,11 +194,8 @@ export function ProjectDetail() {
     <Card className="pad-card versions-card"><SectionLabel en="VERSION HISTORY">{t('历史版本', 'Version history')}</SectionLabel>
       {p.versions.length === 0 ? <p className="muted">{t('编辑设计后会自动生成版本。', 'Versions are created automatically as you edit.')}</p> :
         <>
-          <div className="version-table">{[...p.versions].slice(isPro ? -p.versions.length : -3).reverse().map((v) => <div key={v.id}><span>{v.label}</span><em>{formatDate(v.at)}</em>
+          <div className="version-table">{[...p.versions].slice(-p.versions.length).reverse().map((v) => <div key={v.id}><span>{v.label}</span><em>{formatDate(v.at)}</em>
             <Button size="sm" variant="ghost" onClick={() => { loadProject(p.id); restoreVersion(v.id); setToast(t('已恢复该版本', 'Version restored')); }}>{t('恢复', 'Restore')}</Button></div>)}</div>
-          {!isPro && p.versions.length > 3 && <p className="muted">
-            {t(`免费版可恢复最近 3 个版本；开通会员后可恢复全部 ${p.versions.length} 个（旧版本不会被删除，续期后即可看到）。`, `The free plan restores the 3 most recent versions; with a membership you can restore all ${p.versions.length} (older versions are kept, so they appear once you subscribe).`)}<Button size="sm" variant="ghost" onClick={() => go('/subscribe')}>{t('开通会员 →', 'Become a member →')}</Button>
-          </p>}
         </>}
     </Card>
     <Modal open={confirm} title={t('删除项目', 'Delete project')} onClose={() => setConfirm(false)}><p className="modal-p">{t('该操作不可撤销。', 'This cannot be undone.')}</p>

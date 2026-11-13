@@ -131,13 +131,7 @@ export default function Account() {
   const avatarUrl = avatar.trim();
   const initial = (a.user?.label || '?').slice(0, 1).toUpperCase();
 
-  /* 订阅状态只读 sub 上下文，和左侧账号卡、订阅页同一个来源，不另算一份。 */
-  const isPro = sub.isPro;
-  const periodEndRaw = sub.sub?.period_end || '';
-  const periodEnd = periodEndRaw
-    ? new Date(periodEndRaw).toLocaleDateString(lang === 'en' ? 'en-US' : 'zh-CN',
-      { year: 'numeric', month: '2-digit', day: '2-digit' })
-    : '';
+  // 纯积分制：不再读取 plan / period_end，积分余额直接取 sub.usedLeft
 
   return <div className="page page-narrow ag-page">
     <input ref={avatarFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickAvatar} />
@@ -220,41 +214,36 @@ export default function Account() {
         </div>}
       </section>
 
-      {/* ---------- 订阅与账单 ---------- */}
-      <div className="ag-group-label">{t('订阅与账单', 'Subscription & billing')}</div>
+      {/* ---------- 积分 ---------- */}
+      <div className="ag-group-label">{t('积分', 'Credits')}</div>
       <section className="ag-card ag-group">
         <div className="ag-row ag-row-static">
           <Ico name="badge" />
           <span className="ag-row-main">
-            <strong>{isPro ? t('会员已开通', 'Membership active') : t('当前为免费版', 'On the free plan')}</strong>
-            <small>{isPro
-              ? (periodEnd
-                ? t(`有效期至 ${periodEnd}，到期自动续费`, `Valid until ${periodEnd}, renews automatically`)
-                : t('有效期见订阅页', 'See the plans page for the expiry date'))
-              : t('会员解锁全部对话模型、云端同步与印刷级导出',
-                'Membership unlocks all chat models, cloud sync and print-ready export')}</small>
+            <strong>{t('积分余额', 'Credit balance')}</strong>
+            <small>{t('AI 生图按档位扣积分；对话、编辑、印刷级导出与云端同步都不额外收费',
+              'AI image generation spends credits per tier; chat, editing, print-grade export and cloud sync are all included')}</small>
           </span>
-          <span className="ag-value">{periodEnd && isPro ? periodEnd : '—'}</span>
+          <span className="ag-value">{sub.usedLeft ?? '—'}</span>
         </div>
 
-        <button className="ag-row" onClick={() => go('/subscribe')}>
+        <button className="ag-row" onClick={() => go('/credits')}>
           <Ico name="spark" />
           <span className="ag-row-main">
-            <strong>{isPro ? t('续费 / 购买积分包', 'Renew / buy credits') : t('订阅会员', 'Subscribe')}</strong>
-            <small>{t('在线支付，开通后立即生效；没有海外卡可用兑换码或微信',
-              'Pay online — active immediately. No overseas card? Use a redeem code or WeChat.')}</small>
+            <strong>{t('购买积分包 / 每日签到', 'Buy credits / daily check-in')}</strong>
+            <small>{t('在线支付，积分自动到账；没有海外卡可用兑换码或微信',
+              'Pay online — credits arrive automatically. No overseas card? Use a redeem code or WeChat.')}</small>
           </span>
           <Icon name="chevronRight" size={16} className="ag-chev" />
         </button>
 
-        {/* 支付由 Creem 作为记录商户（MoR）处理，订单、发票与退订都在它的自助门户里。
-            我们这边不存卡号，也就不该假装能在站内「一键取消」——把真实入口给出来。 */}
+        {/* 支付由 Creem 作为记录商户（MoR）处理，订单与发票在它的自助门户里。 */}
         <button className="ag-row" onClick={() => window.open(CREEM_PORTAL, '_blank', 'noopener,noreferrer')}>
           <Ico name="cloud" />
           <span className="ag-row-main">
-            <strong>{t('订单、发票与取消续费', 'Orders, invoices & cancellation')}</strong>
-            <small>{t('用付款时的邮箱登录 Creem 自助门户；取消后权益保留到当期结束',
-              'Sign in to the Creem portal with your payment email; after cancelling, access runs to the end of the period')}</small>
+            <strong>{t('订单与发票', 'Orders & invoices')}</strong>
+            <small>{t('用付款时的邮箱登录 Creem 自助门户查看历史订单',
+              'Sign in to the Creem portal with your payment email to see past orders')}</small>
           </span>
           <Icon name="chevronRight" size={16} className="ag-chev" />
         </button>

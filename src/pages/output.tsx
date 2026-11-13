@@ -7,7 +7,6 @@ import { buildBundle, buildDxf, buildPdf, downloadText, exportJpgMockup, exportP
 import { FLOW_STEPS } from '../data';
 import { downloadBlob, formatDate, round } from '../engine/utils';
 import { dielineStats, structureById } from '../engine/structure';
-import { useSubscription } from '../cloud/subscription';
 import type { CheckItem } from '../types';
 
 /* ============================ 6. 3D 智能包装预览 ============================ */
@@ -110,7 +109,6 @@ export function Prepress() {
 interface FileRow { name: string; info: string; ok: boolean }
 export function ExportCenter() {
   const { s, update, dieline, setToast } = useApp();
-  const { isPro } = useSubscription();
   const [busy, setBusy] = useState<string | null>(null);
   const [files, setFiles] = useState<FileRow[]>([]);
   const [confirmed, setConfirmed] = useState(false);
@@ -118,12 +116,7 @@ export function ExportCenter() {
   const report = s.report;
   const design = s.design;
   const safe = (n: string) => n.replace(/[\\/:*?"<>|·\s]+/g, '_');
-  /** 印刷级文件（PDF / SVG / DXF / ZIP）是会员权益；免费版保留 PNG / JPG 预览图。
-   *  未开通时不执行导出，直接说明原因并引导到会员页，避免「点了没反应」。 */
-  const needPro = () => {
-    setToast('PDF / SVG / DXF / ZIP 印刷级导出为会员权益，开通后即可下载');
-    go('/subscribe');
-  };
+  /** 纯积分制：印刷级导出登录后即可用，不额外收费也不扣积分。 */
   const wrapper = async (key: string, fn: () => Promise<FileRow>) => {
     setBusy(key);
     try { const r = await fn(); setFiles((f) => [r, ...f]); setToast(`${r.name} 已生成`); }
@@ -173,19 +166,15 @@ export function ExportCenter() {
         <div className="kv"><span>输出 DPI</span><strong>{s.settings.printDpi}</strong></div>
       </Card>
     </div>
-    {!isPro && <Notice tone="info">
-      免费版可下载 PNG / JPG 预览图；PDF / SVG / DXF / ZIP 印刷级文件（含刀模、出血与预检）为会员权益。
-      <Button variant="ghost" onClick={() => go('/subscribe')}>查看会员 →</Button>
-    </Notice>}
+    <Notice tone="info">PDF / SVG / DXF / ZIP 印刷级文件（含刀模、出血与预检）登录后即可导出，不额外收费。</Notice>
     <div className="format-grid">
       <Card className="format-card primary"><div className="format-top"><span>01</span><Tag tone="green">推荐</Tag></div><h3>高清印刷 PDF</h3>
         <p>毫米页面尺寸、3mm 出血、独立刀模页、逐图层绘制（非整图截图）、文字按 DPI 嵌入。导出后自动做字节级预检。</p>
-        <Button onClick={() => (isPro ? void doPdf() : needPro())} disabled={busy === 'pdf' || (isPro && (blocked || !confirmed))}>{busy === 'pdf' ? '生成中…' : '生成并下载 PDF'}</Button>
+        <Button onClick={() => void doPdf()} disabled={busy === 'pdf' || blocked || !confirmed}>{busy === 'pdf' ? '生成中…' : '生成并下载 PDF'}</Button>
         {pdfCheck && <div className={`pdf-verify ${pdfCheck.ok ? 'ok' : 'bad'}`}>预检：{pdfCheck.ok ? `通过 · ${pdfCheck.pages} 页 · 页面尺寸正确` : pdfCheck.issues.join('；')}</div>}
       </Card>
       <Card className="format-card"><div className="format-top"><span>02</span><Tag>SVG</Tag></div><h3>SVG 矢量展开稿</h3><p>保留可编辑文字与矢量图形，每个展开图单独一份，可在 Illustrator 中继续编辑。</p>
-        <Button variant="outline" disabled={isPro && (blocked || !confirmed)} onClick={() => {
-          if (!isPro) { needPro(); return; }
+        <Button variant="outline" disabled={blocked || !confirmed} onClick={() => {
           void wrapper('svg', async () => {
             dieline.sheets.forEach((sh, i) => downloadText(spreadSvg(design, dieline, i, false), `${base}_展开稿_${i + 1}.svg`, 'image/svg+xml'));
             return { name: `展开稿 SVG ×${dieline.sheets.length}`, info: '含全部可编辑文字图层', ok: true };
@@ -203,16 +192,15 @@ export function ExportCenter() {
           return { name: `${base}_效果图.jpg`, info: `${r.width} × ${r.height} px`, ok: true };
         })}>下载 JPG</Button></Card>
       <Card className="format-card"><div className="format-top"><span>05</span><Tag>DXF</Tag></div><h3>DXF 刀模文件</h3><p>CUT 裁切线 / CREASE 压痕线，单位 mm，由结构引擎几何直接写出，供模切厂使用。</p>
-        <Button variant="outline" disabled={isPro && (blocked || !confirmed)} onClick={() => {
-          if (!isPro) { needPro(); return; }
+        <Button variant="outline" disabled={blocked || !confirmed} onClick={() => {
           void wrapper('dxf', async () => {
             dieline.sheets.forEach((_, i) => downloadText(buildDxf(dieline, i), `${base}_刀模_${i + 1}.dxf`, 'application/dxf'));
             return { name: `刀模 DXF ×${dieline.sheets.length}`, info: `CUT ${dielineStats(dieline).cut} 段 / CREASE ${dielineStats(dieline).crease} 段`, ok: true };
           });
         }}>下载 DXF</Button></Card>
       <Card className="format-card"><div className="format-top"><span>06</span><Tag tone="amber">打包</Tag></div><h3>完整印刷文件包</h3><p>一次打包 SVG、DXF、PDF、效果图与导出说明；包内 PDF 同样经过真实预检。</p>
-        <Button variant="outline" disabled={busy === 'zip' || (isPro && (blocked || !confirmed))} onClick={() => {
-          if (!isPro) { needPro(); return; }
+        <Button variant="outline" disabled={busy === 'zip' || blocked || !confirmed} onClick={() => {
+          
           void doBundle();
         }}>{busy === 'zip' ? '打包中…' : '下载 ZIP 文件包'}</Button></Card>
     </div>

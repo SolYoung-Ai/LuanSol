@@ -11,7 +11,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Empty, Modal, go, useHash } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
-import { useSubscription } from '../cloud/subscription';
 import { useCloudSync } from '../cloud/useCloudSync';
 import { useLang } from '../i18n';
 import { DesignView } from '../components/visuals';
@@ -69,7 +68,6 @@ const checkBoxStyle = (checked: boolean, right?: boolean): React.CSSProperties =
 export default function Workspace() {
   const { s, update, loadProject, deleteProject, duplicateProject } = useApp();
   const auth = useAuth();
-  const { isPro } = useSubscription();
   const sync = useCloudSync();
   const hash = useHash();
   const { lang, t } = useLang();
@@ -214,9 +212,7 @@ export default function Workspace() {
     <div className="v4-toolbar" style={{ borderBottom: 'none', paddingBottom: 0 }}>
       <div className="v4-sec-note">
         {auth.user
-          ? <>{t('已登录', 'Signed in as')} <strong>{auth.user.label}</strong> · {!isPro
-            ? t('云端跨设备同步为会员权益，当前作品保存在本机浏览器', 'Cloud sync across devices is a member benefit — work is currently saved in this browser only')
-            : sync.state === 'ok'
+          ? <>{t('已登录', 'Signed in as')} <strong>{auth.user.label}</strong> · {sync.state === 'ok'
               ? t(
                 `已同步 ${sync.cloudCount ?? '—'} 个云端项目${sync.lastSync ? ` · 最近 ${new Date(sync.lastSync).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`,
                 `${sync.cloudCount ?? '—'} cloud projects synced${sync.lastSync ? ` · last ${new Date(sync.lastSync).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`,
@@ -225,13 +221,8 @@ export default function Workspace() {
           : t('未登录 · 作品仅保存在此设备浏览器；登录后可云端同步、多端取回', 'Not signed in · work is saved in this browser only. Sign in to sync and restore across devices')}
       </div>
       {auth.user && <div style={{ display: 'flex', gap: 8 }}>
-        {isPro ? <>
-          <button className="v4-btn-line" onClick={() => void sync.downloadAll()}>{t('取回云端项目', 'Restore from cloud')}</button>
-          <button className="v4-btn-line" onClick={() => void sync.syncNow()}>{sync.state === 'syncing' ? t('同步中…', 'Syncing…') : t('立即双向同步', 'Sync now')}</button>
-        </> : <>
-          <button className="v4-btn-line" onClick={() => void sync.downloadAll()}>{t('取回云端项目', 'Restore from cloud')}</button>
-          <button className="v4-btn-dark" onClick={() => go('/subscribe')}>{t('开通会员 · 云端同步', 'Become a member · cloud sync')}</button>
-        </>}
+        <button className="v4-btn-line" onClick={() => void sync.downloadAll()}>{t('取回云端项目', 'Restore from cloud')}</button>
+        <button className="v4-btn-line" onClick={() => void sync.syncNow()}>{sync.state === 'syncing' ? t('同步中…', 'Syncing…') : t('立即双向同步', 'Sync now')}</button>
       </div>}
     </div>
 

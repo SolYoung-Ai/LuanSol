@@ -82,14 +82,14 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     { label: t('登录 / 注册', 'Sign in / Create account'), primary: true, action: requestLogin },
     { label: t('我的工作台', 'Workspace'), path: '/workspace' },
     { label: t('账户信息', 'Account'), path: '/account' },
-    { label: t('订阅与会员', 'Membership'), path: '/subscribe' },
+    { label: t('积分', 'Credits'), path: '/credits' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
   ];
   /* 个人资料与账号安全已合并成「账户信息」一页：
      资料、密码、换绑邮箱都在 /account，菜单里不再拆成两个入口。 */
   const userItems: { label: string; path?: string; action?: () => void; adminOnly?: boolean }[] = [
     { label: t('账户信息', 'Account'), path: '/account' },
-    { label: t('积分与充值', 'Credits & Recharge'), path: '/subscribe' },
+    { label: t('积分', 'Credits'), path: '/credits' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
     { label: t('开发者管理', 'Developer'), path: '/admin', adminOnly: true },
   ];
@@ -177,7 +177,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
           {auth.user && sub.usedLeft !== null && (
             <button
               className="v4-credits-pill"
-              onClick={() => go('/subscribe')}
+              onClick={() => go('/credits')}
               title={t('积分余额', 'Credit balance')}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" style={{ verticalAlign: '-2px' }}>

@@ -1,8 +1,10 @@
 /* ============================================================
  * Luna 对话状态与云端同步
  * ------------------------------------------------------------
- * - 对话模型：默认 DeepSeek-V4.1-Flash（人人可用）；其余 6 款为会员专属，
- *   并共用「每人每天 ¥1」的语言模型额度（目录与价格见 cloud/chatModels.ts）；
+ * - 纯积分制：界面不再提供语言模型选择，统一使用默认档；
+ *   后台保留一个兜底档，仅在上游故障时自动切换（见云函数 resolveChatModel）。
+ * - 对话免费，不扣积分也不展示任何「额度 / 还能聊几轮」；
+ *   滥用防护由云函数按 uid 静默限流，用户无感。
  * - 生图档位随对话保存（Seedream Flash/Pro、GPT Image 2 文字/输入图），由用户在输入区切换；
  * - 对话本地持久化 + 登录后云端合并，变更防抖上传，换设备/浏览器可见；
  * - 人设统一引用 engine/persona.ts，全站同一份。
@@ -15,11 +17,8 @@ import { useAuth } from './auth';
 import { loadAI, llmChatWithReasoning } from '../engine/llm';
 import { isCancelled } from '../engine/cancel';
 import { callImage } from '../engine/seedream';
-import { imageCost, imageShort, isProOnlyTier, resolveTier } from './models';
-import {
-  CHAT_DAILY_BUDGET_RMB, CHAT_MODELS, FREE_CHAT_MODEL, chatModel as findChatModel,
-} from './chatModels';
-import { addChatSpend, loadChatSpend } from './chatSpend';
+import { imageCost, imageShort, resolveTier } from './models';
+import { CHAT_MODELS, FREE_CHAT_MODEL } from './chatModels';
 import { LUNA_PERSONA_PROMPT } from '../engine/persona';
 import { recordUsage, useSubscription } from './subscription';
 import { canSyncChats, pullAllConversations, pushConversation, removeConversation } from './chats';
@@ -36,23 +35,15 @@ interface ChatStore {
   syncState: ChatSyncState;
   syncMessage: string;
   booted: boolean;
+  /** 当前生效的对话模型档位名（纯积分制下恒为默认档，仅用于透传给云函数） */
   chatModel: string;
   /** 空白草稿状态下选择的生图档位（会话还没创建时使用） */
   draftTier: ImageTier;
-  /** 今日语言模型已花费（元）；null = 还在统计 / 非计量来源 */
-  chatSpendRmb: number | null;
-  /** 每人每天的额度上限（元） */
-  chatBudgetRmb: number;
-  /** 今日额度是否已用完：用完时会员专属模型不可选，自动退回默认模型 */
-  chatQuotaUsedUp: boolean;
-  /** 重新拉取今日额度（登录后 / 每轮对话后 / 打开模型菜单时） */
-  refreshChatSpend: () => Promise<void>;
   newConversation: () => string;
   selectConversation: (id: string) => void;
   deleteConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => void;
   setTier: (tier: ImageTier) => void;
-  setChatModel: (m: string) => void;
   /** 取消正在进行的对话 / 生图：断开请求、不扣积分 */
   cancel: () => void;
   /** 生图预备期的剩余秒数（3 → 2 → 1）；0 表示不在预备期。
@@ -64,19 +55,7 @@ interface ChatStore {
 }
 
 /** 对话模型目录从 cloud/chatModels.ts 透出，保持既有 import 路径可用 */
-export { CHAT_MODELS, FREE_CHAT_MODEL, CHAT_DAILY_BUDGET_RMB };
-
-const CHAT_MODEL_KEY = 'lunasol.chatModel';
-
-/** 读本地选择：老版本存的是 'deepseek-chat' 之类，chatModel() 会映射到新档位；
- *  映射后仍然落不到目录里的（比如已下线的档位）一律回到默认模型。 */
-function loadChatModel(): string {
-  try {
-    const raw = localStorage.getItem(CHAT_MODEL_KEY) || '';
-    if (!raw) return FREE_CHAT_MODEL;
-    return findChatModel(raw).id;
-  } catch { return FREE_CHAT_MODEL; }
-}
+export { CHAT_MODELS, FREE_CHAT_MODEL };
 
 /** 按 id 合并两组对话：同 id 取 updatedAt 更新的一方，最后按更新时间倒序。 */
 function mergeConversations(local: Conversation[], cloud: Conversation[]): Conversation[] {
@@ -169,42 +148,10 @@ function useChatStoreState(): ChatStore {
   const [booted, setBooted] = useState(false);
   const [draftTier, setDraftTier] = useState<ImageTier>('flash');
   const [preflight, setPreflight] = useState(0);
-  const [chatModel, setChatModelState] = useState<string>(loadChatModel);
-  const setChatModel = useCallback((m: string) => {
-    const id = findChatModel(m).id;
-    setChatModelState(id);
-    try { localStorage.setItem(CHAT_MODEL_KEY, id); } catch { /* ignore */ }
-  }, []);
-
-  /* --------------------------- 今日语言模型额度 ---------------------------
-   * 每人每天 ¥1（CHAT_DAILY_BUDGET_RMB），六款会员模型共用这一个桶。
-   * 账本在云端（lunasol_chat_spend），按云函数回传的真实 cost 累加：
-   *   - 只有计量来源（正式站点）才查得到，GitHub Pages 镜像显示「不限」；
-   *   - 还没查到之前是 null（界面显示「统计中」），不能当 0 用，
-   *     否则会员会先看到「已用 0」，聊两句之后突然变成额度耗尽。 */
-  const [chatSpendRmb, setChatSpendRmb] = useState<number | null>(null);
-  const refreshChatSpend = useCallback(async () => {
-    if (!user || !sub.metered) { setChatSpendRmb(null); return; }
-    const s = await loadChatSpend(user.id);
-    setChatSpendRmb(s ? s.costRmb : null);
-  }, [user, sub.metered]);
-  /* 等订阅加载完再读账本：RLS 依赖登录态，登录令牌还没进 SDK 时这条查询会被拒，
-     读到 null 之后又没人再触发，界面就会一直停在「统计中」。
-     sub.loading 由 false 变 true 再变 false，正好是「令牌已就绪」的信号。 */
-  useEffect(() => {
-    if (sub.loading) return;
-    void refreshChatSpend();
-  }, [refreshChatSpend, sub.loading, sub.sub?.id]);
-
-  const chatQuotaUsedUp = chatSpendRmb !== null && chatSpendRmb >= CHAT_DAILY_BUDGET_RMB;
-
-  /** 实际生效的对话模型：这里做最终裁决，界面只负责把规则讲清楚。
-   *  1) 免费用户只能默认模型（本地残留的会员选项不算数）；
-   *  2) 会员选的档位若「平台未开通」或「今日额度已用完」，退回默认模型。 */
-  const selected = findChatModel(chatModel);
-  const canUseSelected = sub.isPro && !selected.soon
-    && !(selected.tier === 'pro' && chatQuotaUsedUp);
-  const activeChatModel = canUseSelected ? selected.id : FREE_CHAT_MODEL;
+  /** 纯积分制：界面不提供模型选择，统一走默认档。
+   *  旧版本 localStorage 里可能存着已下线的档位名，云函数会用
+   *  resolveChatModel() 归一，这里不再读取本地选择，避免「看起来选了 Kimi」。 */
+  const activeChatModel = FREE_CHAT_MODEL;
 
   const conversationsRef = useRef<Conversation[]>(conversations);
   conversationsRef.current = conversations;
@@ -251,11 +198,11 @@ function useChatStoreState(): ChatStore {
   /* --------------------------- 登录后云端合并 --------------------------- */
   useEffect(() => {
     if (!user) { mergedFor.current = null; return; }
-    // 对话云端同步同样是会员权益：免费用户只在本机 localStorage 保存
-    if (!sub.isPro) {
+    // 对话在登录后自动云端同步；未登录时只保存在本机 localStorage
+    if (!user) {
       mergedFor.current = null;
       setSyncState('off');
-      setSyncMessage('对话保存在本机；跨设备同步为会员权益');
+      setSyncMessage('对话保存在本机；登录后自动跨设备同步');
       return;
     }
     if (mergedFor.current === user.id) return;
@@ -278,11 +225,11 @@ function useChatStoreState(): ChatStore {
         setSyncMessage(r.message);
       }
     })();
-  }, [user, sub.isPro]);
+  }, [user]);
 
   /* --------------------------- 变更防抖上传 --------------------------- */
   useEffect(() => {
-    if (!user || !sub.isPro || !canSyncChats(user.id)) return;
+    if (!user || !canSyncChats(user.id)) return;
     const dirty = conversations.filter((c) => isRealConversation(c) && c.updatedAt > (lastPushed.current[c.id] ?? 0));
     if (!dirty.length) return;
     const t = window.setTimeout(async () => {
@@ -297,7 +244,7 @@ function useChatStoreState(): ChatStore {
       else { setSyncState('ok'); setSyncMessage('对话已同步到云端'); }
     }, 1500);
     return () => window.clearTimeout(t);
-  }, [conversations, user, sub.isPro]);
+  }, [conversations, user]);
 
   /* ------------------------------- 新建 ------------------------------- */
   /** 「新建对话」只是回到一张空白草稿：不立刻建记录。
@@ -332,16 +279,11 @@ function useChatStoreState(): ChatStore {
 
   /* ----------------------------- 切换生图档 ----------------------------- */
   const setTier = useCallback((tier: ImageTier) => {
-    // 会员专属档（GPT Image 2）不让免费用户选中：界面已经灰显，这里再兜一层，
-    // 免得从别的入口（快捷键 / 老状态）绕过界面把会员档设进来
-    if (isProOnlyTier(tier) && !sub.isPro) {
-      setToast('GPT Image 2 为会员专属生图模型，开通会员后可用');
-      return;
-    }
+    // 纯积分制：所有生图档位都可选，按档位扣分，界面与运行时归一到同一份目录
     // 还没开始对话时只记在草稿上，等发出第一条消息时带进新会话
     if (!activeId) { setDraftTier(tier); return; }
     updateConv(activeId, (c) => ({ ...c, imageTier: tier, updatedAt: Date.now() }));
-  }, [activeId, updateConv, sub.isPro, setToast]);
+  }, [activeId, updateConv]);
 
   /* ----------------------------- 发送文本 ----------------------------- */
   const sendText = useCallback(async (textRaw: string, image?: string) => {
@@ -401,28 +343,9 @@ function useChatStoreState(): ChatStore {
       ];
       const r = await llmChatWithReasoning(llmMessages, ai, { signal: ctrl.signal });
 
-      /* 记账：额度按「云函数算出的本次花费」累加，失败/取消走不到这里，所以不会白占额度。
-         只记会员专属模型——默认档不占额度（见 chatModels 的说明），
-         否则用户聊了一整天默认模型，晚上想试 Kimi 却被锁，规则说不通。
-         跨过 ¥1 的那一刻明确告诉用户为什么会员模型被锁，而不是下次点开才发现选不动了。
-
-         注意：这里刻意「不 await」。记账要走一趟数据库，一旦网络卡住，
-         await 会把 busy 卡在生成中，用户看到永远转圈、回复也刷不出来。
-         额度是辅助信息，晚几百毫秒更新完全可以接受。 */
-      const billed = findChatModel(activeChatModel);
-      if (user && billed.tier === 'pro' && typeof r.cost === 'number' && r.cost > 0) {
-        const uidNow = user.id;
-        const spentBefore = chatSpendRmb;
-        void addChatSpend(uidNow, r.cost).then((total) => {
-          if (total === null) return;
-          setChatSpendRmb(total);
-          if (total >= CHAT_DAILY_BUDGET_RMB
-            && (spentBefore === null || spentBefore < CHAT_DAILY_BUDGET_RMB)) {
-            setToast('今日语言模型额度已用完：会员模型暂时锁定，明天 0 点恢复。DeepSeek-V4.1-Flash 仍可继续用。');
-          }
-        }).catch(() => { /* 记账失败不影响对话本身 */ });
-      }
-
+      /* 对话免费：不扣积分、不记账、不展示额度。
+         滥用防护在云函数侧按 uid 静默限流（CHAT_DAILY_TURNS_PER_USER），
+         用户不会看到第二套计量单位，也不会聊到一半被「额度」锁住。 */
       const aiMsg: LunaMessage = {
         id: uid('msg'),
         role: 'assistant',
@@ -452,7 +375,7 @@ function useChatStoreState(): ChatStore {
       if (abortRef.current === ctrl) abortRef.current = null;
       setBusy(false);
     }
-  }, [activeId, updateConv, user, activeChatModel, draftTier, chatSpendRmb, setToast]);
+  }, [activeId, updateConv, user, activeChatModel, draftTier, setToast]);
 
   /* ----------------------------- 生成图片 ----------------------------- */
   /** 两条入口：
@@ -469,12 +392,12 @@ function useChatStoreState(): ChatStore {
     let target = convId ? conversationsRef.current.find((c) => c.id === convId) : null;
 
     // 先算积分再落消息：余额不够时不应该在历史里留下一条「说了但没画」的孤立气泡。
-    // 档位先按当前身份归一：会员到期后残留的 GPT Image 2 会退回 Flash，避免卖出不该卖的档
-    const tierForCheck: ImageTier = resolveTier(target?.imageTier || draftTier, sub.isPro);
+    // 档位先归一到当前目录，避免旧会话里残留一个已下线的档位
+    const tierForCheck: ImageTier = resolveTier(target?.imageTier || draftTier);
     const cost = tierCost(tierForCheck);
     const balance = sub.usedLeft ?? 0;
     if (balance < cost) {
-      // 不在这里强行跳订阅页：跳转会卸载页面，用户写好的描述会一起丢掉。
+      // 不在这里强行跳积分页：跳转会卸载页面，用户写好的描述会一起丢掉。
       // 只提示原因，让用户自己决定去签到 / 兑换 / 继续聊。
       setToast(`积分不足：${tierLabel(tierForCheck)} 生图需要 ${cost} 积分，当前余额 ${balance}。可在「积分与充值」签到或兑换后再试。`);
       return;
@@ -523,9 +446,9 @@ function useChatStoreState(): ChatStore {
     // 旧会话可能没有 imageTier（早期数据），缺省时必须和界面显示保持同一档，
     // 否则会出现「界面写 6 积分、实际按 10 积分扣」的错账。
     const rawTier: ImageTier = conv.imageTier || draftTier;
-    const tier: ImageTier = resolveTier(rawTier, sub.isPro);
+    const tier: ImageTier = resolveTier(rawTier);
     if (tier !== rawTier) {
-      setToast(`「${imageShort(rawTier)}」是会员专属档，已改用 ${imageShort(tier)} 生成`);
+      setToast(`「${imageShort(rawTier)}」当前不可用，已改用 ${imageShort(tier)} 生成`);
     }
 
     setBusy(true);
@@ -610,9 +533,8 @@ function useChatStoreState(): ChatStore {
   return {
     conversations, activeId, active, busy, syncState, syncMessage, booted,
     chatModel: activeChatModel, draftTier,
-    chatSpendRmb, chatBudgetRmb: CHAT_DAILY_BUDGET_RMB, chatQuotaUsedUp, refreshChatSpend,
     newConversation, selectConversation, deleteConversation, renameConversation,
-    setTier, setChatModel, cancel, preflight, sendText, generateImage,
+    setTier, cancel, preflight, sendText, generateImage,
   };
 }
 

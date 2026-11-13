@@ -43,18 +43,25 @@ function corsHeaders(req) {
   return {};
 }
 
-/* ---------- 滥用防护（2026-11-06 追加） ----------
+/* ---------- 滥用防护 ----------
  * 代理令牌随前端 JS 公开，任何人都能提取后直连本函数，所以令牌不是唯一门槛：
  *  1) 来源校验：只接受 Origin 落在白名单内的浏览器请求（LUNASOL_REQUIRE_ORIGIN=0 可关）；
  *  2) 单 IP 频率限制：LUNASOL_RATE_PER_MINUTE，默认 30 次/分钟；
- *  3) 每日全局上限：LUNASOL_DAILY_LIMIT，默认 2000 次/日，作为成本熔断。
- * 计数只存在于进程内存，用于挡滥用与兜底；精确的会员额度仍由前端订阅表在服务端扣减。
+ *  3) 每日全局上限：LUNASOL_DAILY_LIMIT，默认 2000 次/日，作为成本熔断；
+ *  4) 每人每日对话轮数：LUNASOL_CHAT_TURNS_PER_DAY，默认 200。
+ *
+ * 纯积分制（2026-11-14）：对话免费、不扣积分，界面也不再展示任何额度或轮数，
+ * 但免费对话仍需防刷。第 4 项只作用于对话请求（生图本来就扣积分，不再叠加限制），
+ * 且只在服务端静默计数，用户看到的只是一句「今天先到这儿」。
+ * 计数在进程内存里，多实例下是近似值，作为兜底足够；精确计费仍是积分账本。
  */
 const RATE_PER_MINUTE = Math.max(1, Number(process.env.LUNASOL_RATE_PER_MINUTE || 30));
 const DAILY_LIMIT = Math.max(1, Number(process.env.LUNASOL_DAILY_LIMIT || 2000));
+const CHAT_TURNS_PER_DAY = Math.max(1, Number(process.env.LUNASOL_CHAT_TURNS_PER_DAY || 200));
 const REQUIRE_ORIGIN = String(process.env.LUNASOL_REQUIRE_ORIGIN ?? '1') !== '0';
 
 const rateBuckets = new Map();
+const chatTurnBuckets = new Map();
 let dayStamp = new Date().toISOString().slice(0, 10);
 let dayUsed = 0;
 
@@ -65,10 +72,14 @@ function clientIp(req) {
 
 function rollDay() {
   const today = new Date().toISOString().slice(0, 10);
-  if (today !== dayStamp) { dayStamp = today; dayUsed = 0; }
+  if (today !== dayStamp) {
+    dayStamp = today; dayUsed = 0;
+    chatTurnBuckets.clear();
+    if (chatTurnBuckets.size > 20000) chatTurnBuckets.clear();
+  }
 }
 
-function guard(req) {
+function guard(req, isChat = false) {
   const origin = String(req.headers.origin || '').trim().replace(/\/+$/, '');
   if (REQUIRE_ORIGIN && !allowedOrigins().includes(origin)) {
     return { status: 403, message: '来源不受信任：只能从站点页面调用' };
@@ -81,6 +92,15 @@ function guard(req) {
   rollDay();
   if (dayUsed >= DAILY_LIMIT) {
     return { status: 429, message: '今日 AI 调用已达上限，请明天再试' };
+  }
+  if (isChat) {
+    const key = uid + '|' + dayStamp;
+    const used = chatTurnBuckets.get(key) || 0;
+    if (used >= CHAT_TURNS_PER_DAY) {
+      return { status: 429, message: '今天聊得挺多了，明天再继续吧' };
+    }
+    chatTurnBuckets.set(key, used + 1);
+    if (chatTurnBuckets.size > 20000) chatTurnBuckets.clear();
   }
   const ip = clientIp(req);
   const now = Date.now();
@@ -98,15 +118,16 @@ function guard(req) {
   return { ok: true };
 }
 
-/* ---------- 对话模型白名单（2026-11 扩到 7 款） ----------
- * 前端只传「档位名」（如 kimi-k3.1-pro），真实模型 ID 与单价只存在于这张表：
- *  - 传表外的名字一律回落到默认档，绝不按前端给的厂商模型名直连（防绕过白名单）；
- *  - price/peak 用于把上游 usage 折算成人民币回传前端，前端拿它累加「今日额度」。
- *    价格 = 火山方舟「在线推理（常规）」刊例价，单位 元/百万 token，
- *    分时定价只对 DeepSeek 两档有效：高峰 = 周一至周五 09:00–12:00、14:00–18:00（北京时间）。
- * 改这里必须同步 src/cloud/chatModels.ts（前端目录与展示口径）。
+/* ---------- 对话模型白名单（纯积分制，2026-11-14） ----------
+ * 界面不再提供模型选择，用户只看到「Luna AI」。这里保留两档：
+ *   - ds-v41-flash       主档，所有对话走它
+ *   - ds-v41-flash-eco   主档上游故障时自动兜底（见 handleChat）
+ * 前端只传「档位名」，真实模型 ID 与单价只存在于这张表；表外的名字一律回落默认档。
+ * price/peak 只用于回传 cost 给后台做成本观测，界面不再展示金额、额度或轮数。
+ * 改这里必须同步 src/cloud/chatModels.ts。
  */
 const DEFAULT_CHAT_MODEL = 'ds-v41-flash';
+const FALLBACK_CHAT_MODEL = 'ds-v41-flash-eco';
 const ARK_CHAT_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/+$/, '');
 
 const CHAT_MODELS = {
@@ -120,41 +141,24 @@ const CHAT_MODELS = {
     price: { input: 0.8, cache: 0.016, output: 3.2 },
     peak: { input: 1.6, cache: 0.032, output: 6.4 },
   },
-  'ds-v4-pro': {
-    model: 'deepseek-v4-pro-ga-260813',
-    price: { input: 9, cache: 0.3, output: 27 },
-  },
-  'kimi-k3.1-pro': {
-    model: 'kimi-k3-1-pro-261024',
-    price: { input: 13, cache: 1.3, output: 68 },
-    // Kimi-K3.1-Pro 只接受 temperature=1，传其他值直接 400
-    temperature: 1,
-  },
-  'doubao-2.1-lite': {
-    model: 'doubao-seed-2-1-lite-260915',
-    price: { input: 0.8, cache: 0.16, output: 2.7 },
-  },
-  'doubao-2.1-turbo': {
-    model: 'doubao-seed-2-1-turbo-260628',
-    price: { input: 3, cache: 0.6, output: 15 },
-  },
-  'glm-5.3-flash': {
-    model: 'glm-5-3-flash-260828',
-    price: { input: 0.8, cache: 0.23, output: 2.8 },
-  },
 };
 
-/** 旧构建 / 老用户本地缓存里的档位名 → 新档位。
- *  不做这一步，用户带着 'deepseek-chat' 进来会收到「未知模型」而不是默认档。 */
+/** 旧构建 / 老用户本地缓存里的档位名一律归一到默认档。
+ *  已下线的 5 款（Kimi / Doubao ×2 / GLM / DeepSeek-V4-pro）不能再被路由到上游。 */
 const LEGACY_CHAT_MODELS = {
   'deepseek-chat': 'ds-v41-flash',
   'deepseek-reasoner': 'ds-v41-flash',
   'deepseek-flash': 'ds-v41-flash',
-  'kimi-k3.1': 'kimi-k3.1-pro',
-  'doubao-seed-pro': 'doubao-2.1-turbo',
-  'doubao-seed-lite': 'doubao-2.1-lite',
-  'doubao-seed-turbo': 'doubao-2.1-turbo',
-  'glm-5.3': 'glm-5.3-flash',
+  'ds-v4-pro': 'ds-v41-flash',
+  'kimi-k3.1': 'ds-v41-flash',
+  'kimi-k3.1-pro': 'ds-v41-flash',
+  'doubao-seed-pro': 'ds-v41-flash',
+  'doubao-seed-lite': 'ds-v41-flash',
+  'doubao-seed-turbo': 'ds-v41-flash',
+  'doubao-2.1-lite': 'ds-v41-flash',
+  'doubao-2.1-turbo': 'ds-v41-flash',
+  'glm-5.3': 'ds-v41-flash',
+  'glm-5.3-flash': 'ds-v41-flash',
 };
 
 function resolveChatModel(name) {
@@ -692,7 +696,7 @@ async function handleChat(req, res, body) {
   if (given !== token) {
     return sendJson(res, 401, { error: { message: '代理令牌无效' } });
   }
-  const verdict = guard(req);
+  const verdict = guard(req, true);
   if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
 
   if (!arkKey()) {
@@ -708,6 +712,15 @@ async function handleChat(req, res, body) {
   try {
     dayUsed += 1;
     let r = await callArkChat(payload);
+    // 主档上游故障（5xx / 限流）：自动切到经济兜底档重试一次，用户无感。
+    // 只有两档，且都不对外暴露，不需要用户做任何选择。
+    if ((r.status >= 500 || r.status === 429) && frontModel === DEFAULT_CHAT_MODEL) {
+      const fb = buildUpstreamPayload({ ...body, model: FALLBACK_CHAT_MODEL }, withJsonFormat);
+      const r2 = await callArkChat(fb.payload);
+      if (r2.status >= 200 && r2.status < 300 && r2.json) {
+        r = r2; payload = fb.payload; frontModel = fb.frontModel; route = fb.route;
+      }
+    }
     // 部分模型不接受 response_format：去掉该字段重试一次，不做结果伪装
     if (r.status === 400 && withJsonFormat && /response_format/i.test(r.raw)) {
       ({ payload } = buildUpstreamPayload(body, false));
@@ -728,7 +741,7 @@ async function handleChat(req, res, body) {
     if (message0 && typeof message0.reasoning_content === 'string' && message0.reasoning_content.length) {
       outMessage.reasoning_content = message0.reasoning_content;
     }
-    // cost 由服务端按 usage × 单价算好：前端拿它记「今日额度」，不再自己估
+    // cost 由服务端按 usage × 单价算好，仅用于后台成本观测，界面不展示
     const usage = r.json.usage || undefined;
     return sendJson(res, 200, {
       id: r.json.id,
@@ -756,10 +769,14 @@ async function handleChat(req, res, body) {
  *
  * 为什么不用静态 checkout link：静态链接带不了用户身份，付款成功后无法对应到账号。
  *
+ * 纯积分制（2026-11-14）：前端只卖积分包，会员订阅产品已停售。
+ * 但 Creem 后台可能还有未取消的旧订阅推续费事件，这些事件一律折算成积分入账，
+ * 既不返回 5xx 让 Creem 无限重投，也不再写任何会员身份 / 有效期。
+ *
  * 环境变量（全部只存云函数，绝不进前端）：
  *   CREEM_API_KEY              Creem 后台 Developers 页
  *   CREEM_WEBHOOK_SECRET       Webhooks 端点详情页
- *   CREEM_PRODUCT_ID           会员（订阅）产品 prod_xxx
+ *   CREEM_PRODUCT_ID           历史会员订阅产品 prod_xxx（仅用于识别老续费事件）
  *   CREEM_CREDIT_PRODUCTS      积分包白名单 JSON：{"prod_xxx":1000,"prod_yyy":2100}。
  *                              不配则用代码里内置的三档（1000 / 2100 / 3500）。
  *                              加档位优先配这一项，不用改代码、不用重新部署。
@@ -768,9 +785,8 @@ async function handleChat(req, res, body) {
  *   CREEM_TEST_MODE=1          走 test-api.creem.io
  *   PAY_SUCCESS_URL            支付成功后跳回的前端地址（默认正式站点订阅页）
  *
- * 两个产品怎么区分：**只认产品 ID 白名单**，不认前端传来的任何金额或名称。
- * 前端只能传 kind='pro' | 'credits'，具体对应哪个 prod_ 由这里决定——
- * 否则用户改一个请求体就能用积分包的价格买到会员。
+ * 产品归属只认服务端白名单，不认前端传来的任何金额或产品 ID——
+ * 否则用户改一个请求体就能用低价档买到高额积分。
  */
 const crypto = require('crypto');
 const PAY_ENV_ID = 'solyoung-d4gpp1f7s4e075f6d';
@@ -843,7 +859,7 @@ function payCfg() {
     creditsPerPack: Math.max(1, Math.min(1000000, Math.round(creditsPerPack))),
     test,
     base: test ? 'https://test-api.creem.io' : 'https://api.creem.io',
-    successUrl: String(process.env.PAY_SUCCESS_URL || 'https://luna.solyoung.top/#/subscribe?paid=1').trim(),
+    successUrl: String(process.env.PAY_SUCCESS_URL || 'https://luna.solyoung.top/#/credits?paid=1').trim(),
   };
 }
 
@@ -927,20 +943,21 @@ async function handlePayCheckout(req, res) {
   // 名字只用于预填收银台，并给风控多一点信号；不参与开通判断
   const name = String(body.name || '').trim().slice(0, 60);
 
-  // 产品只认服务端白名单：前端只能声明「买会员」还是「买哪一档积分」，
-  // 具体对应哪个 prod_、发多少积分，全由这里决定——传金额一律无效。
-  const kind = String(body.kind || 'pro') === 'credits' ? 'credits' : 'pro';
+  // 纯积分制：只卖积分包。老构建（浏览器缓存）可能还传 kind='pro'，
+  // 明确提示刷新页面，绝不悄悄把会员订阅单开出去。
+  if (String(body.kind || 'credits') !== 'credits') {
+    return sendJson(res, 400, {
+      error: { message: '会员已下线，请刷新页面后在「积分」页购买积分包' },
+    });
+  }
+  // 产品只认服务端白名单：前端只能声明「买哪一档」，具体 prod_ 与发放量由这里决定。
   const wantPoints = Math.round(Number(body.pack || body.points || 0) || 0);
-  const picked = kind === 'credits'
-    ? creditProductFor(wantPoints)
-    : { productId: c.productId, points: 0 };
+  const picked = creditProductFor(wantPoints);
   const productId = picked.productId;
   if (!productId) {
     return sendJson(res, 503, {
       error: {
-        message: kind === 'credits'
-          ? (wantPoints ? `没有 ${wantPoints} 积分这一档，请刷新页面后重试` : '积分包还没配置产品 ID，请先联系客服')
-          : '会员产品还没配置完整',
+        message: wantPoints ? `没有 ${wantPoints} 积分这一档，请刷新页面后重试` : '积分包还没配置产品 ID，请先联系客服',
       },
     });
   }
@@ -948,7 +965,7 @@ async function handlePayCheckout(req, res) {
   const payload = {
     product_id: productId,
     success_url: c.successUrl,
-    metadata: { uid, kind, ...(kind === 'credits' ? { points: picked.points } : {}) },
+    metadata: { uid, kind: 'credits', points: picked.points },
   };
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) payload.customer = { email, ...(name ? { name } : {}) };
 
@@ -967,7 +984,7 @@ async function handlePayCheckout(req, res) {
       return sendJson(res, 502, { error: { message: `结账会话创建失败：${String(upstream).slice(0, 120)}` } });
     }
     // 只回传跳转地址，不回传 API Key / 客户信息
-    return sendJson(res, 200, { ok: true, url: data.checkout_url, id: data.id || '', kind });
+    return sendJson(res, 200, { ok: true, url: data.checkout_url, id: data.id || '', kind: 'credits' });
   } catch (e) {
     // fetch 的根因在 e.cause 里（ENOTFOUND / ETIMEDOUT / ECONNRESET），
     // 只打 "fetch failed" 排查不了问题。
@@ -1116,25 +1133,65 @@ async function handleCreemWebhook(req, res) {
     return sendJson(res, 200, { ok: true, ignored: true });
   }
 
-  // 拿不到 uid 说明会话不是本函数创建的（例如后台手工开单）。落一条待人工处理的记录，
-  // 仍然返回 200 —— 返回 5xx 只会让 Creem 反复重投同一件处理不了的事。
-  const owner = e.uid || `unresolved:${e.email || e.subscriptionId || 'unknown'}`;
+  // 拿不到 uid 说明会话不是本函数创建的（例如后台手工开单）。
+  // 过去这里会落到 unresolved:xxx 造一行假账号，纯积分制下改成「记日志 + 返回 200」：
+  // 返回 5xx 只会让 Creem 反复重投同一件处理不了的事，记账更不能记到不存在的账号上。
 
-  // 积分包与会员走不同落库函数：积分包加 bonus_credits，会员改 period_end。
+  // 纯积分制：所有付款事件最终都只落「积分」，不再写会员身份 / 有效期。
   // 判定只认产品 ID → 白名单里查这一档发多少积分；metadata.kind 仅在拿不到产品 ID 时兜底
   // （metadata 是前端声明，可被伪造；产品 ID 是付款时 Creem 认定的，改不了）。
   const packPoints = (e.productId && c.packs[e.productId]) || 0;
   const isCredits = packPoints > 0 || (!e.productId && e.metaKind === 'credits');
 
+  // 历史会员订阅（老订单 / 尚未取消的自动续费）仍会推事件过来。
+  // 不能返回 5xx（Creem 会无限重投），也不能改 period_end（纯积分制没有会员），
+  // 统一折算成积分入账：$5/月 ≈ 350 积分，与积分包 US$14/1000 的单价接近。
+  const isLegacyPro = (!!c.productId && !!e.productId && e.productId === c.productId)
+    || (!e.productId && (e.metaKind === 'pro' || !!e.subscriptionId));
+  const LEGACY_PRO_CREDITS = 350;
+
+  if (!isCredits && isLegacyPro) {
+    // 取消 / 过期 / 退款不扣回已发积分：积分可能已被用掉，扣回会产生负余额和说不清的账。
+    // 只记 payments 留痕，返回 200，交由运营人工核对。
+    if (e.kind !== 'grant') {
+      console.log('[pay] 历史会员事件（不扣积分）：', e.type, 'order=' + e.orderId);
+      return sendJson(res, 200, { ok: true, ignored: true, legacyPro: true });
+    }
+    if (!e.uid) {
+      console.error('[pay] 历史会员付款缺少 uid，需人工补积分：order=' + e.orderId, 'email=' + e.email);
+      return sendJson(res, 200, { ok: true, needsManual: true });
+    }
+    try {
+      const out = await payApply({
+        p_secret: c.applySecret,
+        p_owner_id: e.uid,
+        p_event_id: eventId,
+        p_credits: LEGACY_PRO_CREDITS,
+        p_amount: e.amount,
+        p_currency: e.currency,
+        p_order_id: e.orderId,
+        p_raw: evt,
+      }, 'lunasol_credits_apply');
+      if (!out || out.ok !== true) {
+        console.error('[pay] 历史会员折算积分被拒：', JSON.stringify(out).slice(0, 200));
+        return sendJson(res, 500, { error: { message: 'legacy credits apply rejected' } });
+      }
+      console.log('[pay] 历史会员订阅已折算积分', 'credits=' + LEGACY_PRO_CREDITS, out.duplicate ? '(重复)' : '');
+      return sendJson(res, 200, { ok: true, kind: 'credits', credits: LEGACY_PRO_CREDITS, duplicate: Boolean(out.duplicate) });
+    } catch (err) {
+      console.error('[pay] 历史会员折算积分失败：', (err && err.message) || err);
+      return sendJson(res, 500, { error: { message: 'legacy credits apply failed' } });
+    }
+  }
+
   if (isCredits) {
     // 没有 uid 就不知道该给谁加积分。绝不能落到 unresolved:xxx 这种假账号上，
-    // 那会凭空建出一行订阅；记日志留痕，返回 200 避免 Creem 反复重投。
+    // 那会凭空建出一行积分账；记日志留痕，返回 200 避免 Creem 反复重投。
     if (!e.uid) {
       console.error('[pay] 积分包事件缺少 uid，需人工补积分：order=' + e.orderId, 'email=' + e.email);
       return sendJson(res, 200, { ok: true, needsManual: true });
     }
     const sign = e.kind === 'revoke' ? -1 : 1;
-    // 退款按原档位扣回；拿不到产品 ID 时才退回单档默认值
     const perPack = packPoints || c.creditsPerPack;
     const credits = sign * perPack * (sign > 0 ? e.quantity : 1);
     try {
@@ -1160,45 +1217,16 @@ async function handleCreemWebhook(req, res) {
     }
   }
 
-  // 退款事件最容易搞错：Creem 的 refund 对象不一定带 product。若无法判断退的是
-  // 会员还是积分包，绝不能按「会员退款」处理——那会把还在有效期内的会员直接掐掉。
-  // 这类事件只记录日志，留给人工核对。
+  // 退款事件最容易搞错：Creem 的 refund 对象不一定带 product。若无法判断产品，
+  // 绝不能按「会员退款」处理，只记录日志留给人工核对。
   if (e.type === 'refund.created' && !e.productId) {
     console.error('[pay] 退款事件无法判断产品，需人工处理：order=' + e.orderId, ' sub=' + e.subscriptionId + ' uid=' + (e.uid ? e.uid.slice(0, 8) + '…' : 'none'));
     return sendJson(res, 200, { ok: true, needsManual: true });
   }
 
   // 已知产品 ID 但不属于本站任何产品：不是本函数开的单，不动数据库
-  if (e.productId && c.productId && e.productId !== c.productId) {
-    console.log('[pay] 未知产品，忽略：', e.productId);
-    return sendJson(res, 200, { ok: true, ignored: true });
-  }
-
-  try {
-    const out = await payApply({
-      p_secret: c.applySecret,
-      p_owner_id: owner,
-      p_event_id: eventId,
-      p_status: e.status,
-      p_kind: e.kind,
-      p_period_end: e.periodEnd,
-      p_amount: e.amount,
-      p_currency: e.currency,
-      p_order_id: e.orderId,
-      p_subscription_id: e.subscriptionId,
-      p_raw: evt,
-    });
-    if (!out || out.ok !== true) {
-      console.error('[pay] 落库被拒：', JSON.stringify(out).slice(0, 200));
-      return sendJson(res, 500, { error: { message: 'apply rejected' } });
-    }
-    console.log('[pay] 已处理', e.type, 'kind=' + e.kind, 'uid=' + (e.uid ? e.uid.slice(0, 8) + '…' : 'none'), out.duplicate ? '(重复事件)' : '');
-    return sendJson(res, 200, { ok: true, kind: e.kind, duplicate: Boolean(out.duplicate) });
-  } catch (err) {
-    // 落库失败必须让 Creem 重试，否则用户付了钱没开通
-    console.error('[pay] 落库失败：', (err && err.message) || err);
-    return sendJson(res, 500, { error: { message: 'apply failed' } });
-  }
+  console.log('[pay] 未知产品，忽略：', e.productId || '(none)');
+  return sendJson(res, 200, { ok: true, ignored: true });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1224,7 +1252,7 @@ const server = http.createServer(async (req, res) => {
       imageProvider: process.env.SEEDREAM_API_KEY ? 'seedream' : 'none',
       gptImageEnabled: Boolean(process.env.BAI_API_KEY),
       hyper3dEnabled: Boolean(process.env.SEEDREAM_API_KEY),
-      limits: { ratePerMinute: RATE_PER_MINUTE, dailyLimit: DAILY_LIMIT, dailyUsed: dayUsed, requireOrigin: REQUIRE_ORIGIN },
+      limits: { ratePerMinute: RATE_PER_MINUTE, dailyLimit: DAILY_LIMIT, dailyUsed: dayUsed, chatTurnsPerDay: CHAT_TURNS_PER_DAY, requireOrigin: REQUIRE_ORIGIN },
       pay: {
         configured: Boolean(payCfg().apiKey && payCfg().productId),
         webhookReady: Boolean(payCfg().webhookSecret && payCfg().applySecret),

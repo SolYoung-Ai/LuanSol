@@ -60,13 +60,13 @@ export async function runAITask(id: AITaskId, ctx: AIContext, ai: AISettings): P
       def.local(ctx), started, ai);
   }
 
-  // 1.5) 订阅 / 登录闸门：AI 真正调用前校验额度（由 SubscriptionProvider 注入）
+  // 1.5) 登录 / 积分闸门：AI 真正调用前校验余额（由 SubscriptionProvider 注入）
   const gate = getAIGate();
   if (gate) {
     const g = await gate(id);
     if (!g.ok) {
       return result(id, 'paywall',
-        g.reason || '需要订阅后使用 AI 功能。',
+        g.reason || '积分不足，无法调用 AI。',
         def.local(ctx), started, ai);
     }
   }
@@ -105,12 +105,12 @@ export async function runAITask(id: AITaskId, ctx: AIContext, ai: AISettings): P
 }
 
 /** 统一的 AI 结果提示语。
- *  必须区分三种情况：真的调用了 AI / 回退到本地引擎 / 被订阅规则拦截。
- *  把「被额度拦下」说成「本地生成」是误导——用户会以为模型坏了。
- *  被拦截时直接用闸门给出的真实原因（未登录 / 额度用完 / 会员过期），不做二次臆测。 */
+ *  必须区分三种情况：真的调用了 AI / 回退到本地引擎 / 被积分闸门拦截。
+ *  把「被拦下」说成「本地生成」是误导——用户会以为模型坏了。
+ *  被拦截时直接用闸门给出的真实原因（未登录 / 积分不足），不做二次臆测。 */
 export function aiResultToast(r: { source: AISource; note?: string }, aiMsg: string, localMsg: string): string {
   if (r.source === 'ai') return aiMsg;
-  if (r.source === 'paywall') return r.note || tl('需要订阅后才能使用 AI 功能', 'AI features require a subscription');
+  if (r.source === 'paywall') return r.note || tl('积分不足，无法调用 AI 功能', 'Not enough credits to use AI features');
   return localMsg;
 }
 

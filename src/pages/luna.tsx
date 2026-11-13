@@ -3,8 +3,8 @@
  * ------------------------------------------------------------
  * 布局：左侧液态玻璃对话栏（桌面常驻 / 手机抽屉）+ 右侧纯白对话区。
  * 输入框是一个玻璃 composer，里面可以切换两种模式：
- *   · 对话      —— 默认 DeepSeek-V4.1-Flash（不限额度）；会员可切其余 6 款，共用每日 ¥1 额度
- *   · 图像生成  —— 自己写画面描述，可选模型 / 比例 / 风格 / 模板
+ *   · 对话      —— 平台统一模型，免费、不扣积分，界面不提供模型选择
+ *   · 图像生成  —— 自己写画面描述，可选模型 / 比例 / 风格 / 模板；按档位扣积分
  * 全页不使用渐变：白底 + 极淡描边 + 一层柔和投影，靠留白分层。
  * 人设统一来自 engine/persona.ts，全站同一份。
  * ============================================================ */
@@ -14,7 +14,6 @@ import type { IconName } from '../components/icons';
 import type { ImageTier, LunaMessage } from '../types';
 import { useAuth } from '../cloud/auth';
 import { useChatStore } from '../cloud/useChatStore';
-import { CHAT_MODELS, chatModel as findChatModel, turnsForBudget } from '../cloud/chatModels';
 import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
 import { go } from '../ui';
@@ -123,7 +122,7 @@ function Pick({
   value: string;
   options: Option[];
   onPick: (id: string) => void;
-  /** 点了会员专属档位时调用：不选中，改成弹订阅引导 */
+  /** 点了不可用档位时调用：不选中，改成提示 */
   onLocked?: (id: string) => void;
   /** 选项多的时候给更高的弹层，避免一进来就要滚（模板有 16 项） */
   tall?: boolean;
@@ -156,7 +155,7 @@ function Pick({
                   }}
                 >
                   <span>{o.label}</span>
-                  <span className="lc-pop-hint">{o.locked ? t('会员', 'Pro') : (o.hint || '')}</span>
+                  <span className="lc-pop-hint">{o.locked ? t('暂不可用', 'Unavailable') : (o.hint || '')}</span>
                   {o.label === value && !o.locked && <Icon name="check" size={13} className="lc-pop-check" />}
                 </button>
               </Fragment>
@@ -168,136 +167,14 @@ function Pick({
   );
 }
 
-/** 「对话」这颗胶囊同时是对话模型的入口：
- *  免费版只有 DeepSeek-V4.1-Flash 可用，其余点了走订阅引导；
- *  会员可选全部，但六款会员模型共用「每人每天 ¥1」的额度，
- *  弹层里直接给一条今日额度进度条 + 每个档位「≈还能聊几轮」。
- *  真正的裁决在 useChatStore（额度用完 / 档位未开通都会退回默认模型），
- *  这里只负责把规则讲清楚，不做静默降级。 */
-function ChatModelTag({ pro, value, spent, budget, onPick, onNeedPro, onQuotaEmpty, onUnavailable, onRefresh }: {
-  pro: boolean;
-  value: string;
-  /** 今日已花费（元）；null = 统计中 / 非计量来源 */
-  spent: number | null;
-  budget: number;
-  onPick: (id: string) => void;
-  onNeedPro: () => void;
-  onQuotaEmpty: () => void;
-  /** 平台账号还没开通这一档：点了要说清原因，不能什么都不发生 */
-  onUnavailable: (label: string) => void;
-  onRefresh: () => void;
-}) {
-  const { lang, t } = useLang();
-  const [open, setOpen] = useState(false);
-  const cur = findChatModel(value);
-  const shortOf = (m: { short: string; shortEn?: string }) => (lang === 'en' ? (m.shortEn || m.short) : m.short);
-  const used = spent ?? 0;
-  const left = Math.max(0, budget - used);
-  // 只显示「用掉百分之几」：金额是内部成本口径，摊给用户看反而要解释汇率与分时价
-  const pct = Math.min(100, Math.round((used / budget) * 100));
-  const empty = spent !== null && used >= budget;
-  const maxTurns = turnsForBudget(cur, left);
-
-  const toggle = () => {
-    if (!open) onRefresh();
-    setOpen((o) => !o);
-  };
-
+/** 「对话」只是一颗模式标识：纯积分制下不提供语言模型选择，
+ *  也不显示额度、轮数或模型名。平台在服务端统一接入模型并自动兜底。 */
+function ChatTag() {
+  const { t } = useLang();
   return (
-    <div className="lc-pick">
-      <button
-        className={`lc-tag on ${open ? 'open' : ''}`}
-        onClick={toggle}
-        title={t(`对话模型：${cur.label}`, `Chat model: ${cur.label}`)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        <Icon name="message" size={14} />{t('对话', 'Chat')}
-        <span className="lc-tag-sub">{shortOf(cur)}</span>
-        <Icon name="chevronDown" size={12} className="lc-tag-chev" />
-      </button>
-      {open && (
-        <>
-          <div className="lc-backdrop" onClick={() => setOpen(false)} />
-          <div className="lc-pop wide" role="menu">
-            <div className="lc-pop-title">{t('选择语言模型', 'Choose a language model')}</div>
-
-            {/* 今日额度：所有人共用一口 ¥1 的桶，会员模型按真实 token 花费计入 */}
-            <div className={`lc-quota ${empty ? 'full' : ''}`}>
-              <div className="lc-quota-head">
-                <span>{t('今日额度 · 会员模型', 'Today’s quota · Pro models')}</span>
-                <span className="lc-quota-num">{spent === null ? t('统计中…', 'Calculating…') : `${pct}%`}</span>
-              </div>
-              <div className="lc-quota-bar">
-                {/* 0% 时不画那 1px 橙点：看起来像「已经花了 1%」，容易让人以为额度被偷跑 */}
-                <i className="lc-quota-fill" style={{ width: pct > 0 ? `${Math.max(pct, 2)}%` : 0 }} />
-              </div>
-              <div className="lc-quota-note">
-                {spent === null
-                  ? t('连接云端后显示今日用量', 'Connect to the cloud to see today’s usage')
-                  : empty
-                    ? t('今日额度已用完，会员模型明天 0 点恢复；DeepSeek-V4.1-Flash 不限',
-                      'Quota used up — Pro models reset at midnight; DeepSeek-V4.1-Flash has no limit')
-                    : cur.tier === 'free'
-                      // 默认档不占额度，必须写清楚，否则用户以为聊几句就把额度花光了
-                      ? t('当前是免费默认档，不占额度；切到 PRO 模型才计算今日额度',
-                        'You are on the free default model, which uses no quota — only Pro models count')
-                      : t(`按当前 ${shortOf(cur)} 估算约还能聊 ${maxTurns} 轮`,
-                        `About ${maxTurns} more turns at the current rate`)}
-              </div>
-            </div>
-
-            {CHAT_MODELS.map((m) => {
-              const planLocked = !pro && m.tier === 'pro';
-              const quotaLocked = m.tier === 'pro' && empty;
-              const locked = planLocked || quotaLocked || !!m.soon;
-              const right = m.soon
-                ? t('待开通', 'Soon')
-                : quotaLocked
-                  ? t('额度用完', 'Quota used up')
-                  : planLocked
-                    ? t('会员', 'Pro')
-                    : m.tier === 'free'
-                      ? t('不限', 'Unlimited')
-                      : t(`约 ${turnsForBudget(m, left)} 轮`, `~${turnsForBudget(m, left)} turns`);
-              return (
-                <button
-                  key={m.id}
-                  role="menuitem"
-                  className={`lc-pop-opt model ${m.id === value ? 'sel' : ''} ${locked ? 'locked' : ''}`}
-                  title={m.soon
-                    ? t('这个模型在方舟账号里尚未开通，开通后这里会自动可选',
-                      'Not enabled on the platform account yet — it becomes selectable automatically once it is')
-                    : undefined}
-                  onClick={() => {
-                    if (m.soon) { onUnavailable(m.label); return; }
-                    if (planLocked) { onNeedPro(); return; }
-                    if (quotaLocked) { onQuotaEmpty(); return; }
-                    onPick(m.id); setOpen(false);
-                  }}
-                >
-                  <span className="lc-pop-main">
-                    <span className="lc-pop-name">{m.label}</span>
-                    <span className="lc-pop-sub">{lang === 'en' ? m.noteEn : m.note}</span>
-                  </span>
-                  <span className="lc-pop-hint">{right}</span>
-                  {m.id === value && !locked && <Icon name="check" size={13} className="lc-pop-check" />}
-                </button>
-              );
-            })}
-
-            {!pro && <div className="lc-pop-note">
-              {t('免费版可用 DeepSeek-V4.1-Flash；其余 6 款开通会员后解锁',
-                'The free plan includes DeepSeek-V4.1-Flash; the other six unlock with membership')}
-            </div>}
-            {pro && <div className="lc-pop-note">
-              {t('会员模型共用今日额度，按实际 token 花费计算，每天 0 点重置；默认档不占额度',
-                'Pro models share today’s quota, charged by actual token usage and reset at midnight; the default model is free')}
-            </div>}
-          </div>
-        </>
-      )}
-    </div>
+    <span className="lc-tag on lc-tag-static" title={t('对话由平台 AI 提供，免费不扣积分', 'Chat is powered by platform AI, free and spends no credits')}>
+      <Icon name="message" size={14} />{t('对话', 'Chat')}
+    </span>
   );
 }
 
@@ -551,14 +428,12 @@ export default function Luna() {
   }
 
   const initial = (auth.user.label || auth.user.email || 'U').slice(0, 1).toUpperCase();
-  // 只有真的同步成功才说「已同步」：免费用户与尚未同步时都如实显示「本机保存」
-  const syncLabel = !sub.isPro
-    ? t('本机保存', 'Saved locally')
-    : chat.syncState === 'syncing'
-      ? t('同步中…', 'Syncing…')
-      : chat.syncState === 'error'
-        ? t('同步失败', 'Sync failed')
-        : chat.syncState === 'ok' ? t('已同步到云端', 'Synced to the cloud') : t('本机保存', 'Saved locally');
+  // 只有真的同步成功才说「已同步」：未登录 / 尚未同步时都如实显示「本机保存」
+  const syncLabel = chat.syncState === 'syncing'
+    ? t('同步中…', 'Syncing…')
+    : chat.syncState === 'error'
+      ? t('同步失败', 'Sync failed')
+      : chat.syncState === 'ok' ? t('已同步到云端', 'Synced to the cloud') : t('本机保存', 'Saved locally');
   const canSend = !!input.trim() || !!pendingImage;
   const balance = sub.usedLeft;
 
@@ -800,23 +675,7 @@ export default function Luna() {
 
                 {mode === 'chat' ? (
                   <>
-                    <ChatModelTag
-                      pro={sub.isPro}
-                      value={chat.chatModel}
-                      spent={chat.chatSpendRmb}
-                      budget={chat.chatBudgetRmb}
-                      onPick={chat.setChatModel}
-                      onNeedPro={() => sub.setPaywall(true, t(
-                        '会员专属模型（Kimi-K3.1-Pro、DeepSeek-V4-pro、Doubao-Seed、GLM、经济版）开通会员后解锁，每天共用一份额度',
-                        'Members-only models (Kimi-K3.1-Pro, DeepSeek-V4-pro, Doubao-Seed, GLM, Eco) unlock with membership and share one daily quota.'))}
-                      onQuotaEmpty={() => setToast(t(
-                        '今日语言模型额度已用完，明天 0 点恢复；DeepSeek-V4.1-Flash 不限额度，可以继续聊',
-                        'Today’s chat quota is used up — it resets at midnight. DeepSeek-V4.1-Flash has no limit, so you can keep chatting.'))}
-                      onUnavailable={(label) => setToast(t(
-                        `${label} 还没有在当前火山方舟账号开通，开通后这里会自动可选`,
-                        `${label} is not enabled on the platform account yet — it becomes selectable once it is.`))}
-                      onRefresh={() => void chat.refreshChatSpend()}
-                    />
+                    <ChatTag />
                     <button className="lc-tag" onClick={() => setMode('image')} title={t('切换到图像生成', 'Switch to image generation')}>
                       <Icon name="image" size={14} />{t('图像生成', 'Image')}
                       <Icon name="chevronRight" size={12} className="lc-tag-chev" />
@@ -838,12 +697,8 @@ export default function Luna() {
                         hint: m.cost < m.listCost
                           ? t(`${m.cost} 积分 · 原价 ${m.listCost}`, `${m.cost} credits · was ${m.listCost}`)
                           : t(`${m.cost} 积分`, `${m.cost} credits`),
-                        locked: !!m.pro && !sub.isPro,
                       }))}
                       onPick={(id) => chat.setTier(id as ImageTier)}
-                      onLocked={() => sub.setPaywall(true, t(
-                        'GPT Image 2 是会员专属生图模型：出图质量最高，支持文字出图与参考图改图。免费版可用 Seedream 5.0 Flash / Pro，开通会员后这两档自动解锁。',
-                        'GPT Image 2 is a members-only model: the best output quality, with text rendering and reference-based editing. The free plan includes Seedream 5.0 Flash / Pro, and both unlock with membership.'))}
                     />
                     <Pick
                       caption={t('比例', 'Ratio')}

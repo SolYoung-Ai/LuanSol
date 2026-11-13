@@ -73,15 +73,14 @@ function buildGroups(t: TFn): Group[] {
     },
     {
       id: 'credits',
-      title: t('积分与订阅', 'Credits & plans'),
+      title: t('积分', 'Credits'),
       en: 'CREDITS',
       items: [
         {
           q: t('积分怎么扣？', 'How are credits charged?'),
           a: <>
             <strong>{t('对话不扣积分', 'Chat costs no credits')}</strong>
-            {t('（免费版用 DeepSeek-V4.1-Flash；会员可切其余 6 款，共用每天一份额度）。生图按档位：',
-              ' — the free plan uses DeepSeek-V4.1-Flash; members can switch to the other six, which share one daily quota. Image generation is per tier: ')}
+            {t('。AI 生图按档位：', '. AI image generation is charged per tier: ')}
             <strong>Seedream {t('快速', 'Fast')} {PRICING.costs.imageFlash} {t('积分/张', 'credits/image')}</strong>
             {' · '}
             <strong>Seedream {t('精细', 'Fine')} {PRICING.costs.imagePro} {t('积分/张', 'credits/image')}</strong>
@@ -103,8 +102,8 @@ function buildGroups(t: TFn): Group[] {
           a: <>
             {t('新注册送 ', 'New accounts get ')}
             <strong>{t(`${PRICING.freeTrialUses} 积分`, `${PRICING.freeTrialUses} credits`)}</strong>
-            {t(`；每日签到 +10（会员翻倍 +20，每月签到最多 600）；另外可以用兑换码兑换，或加微信 ${WX_ID} 人工购买。签到入口在「积分与充值」页顶部。`,
-              `; daily check-in gives +10 (doubled to +20 for members, up to 600 a month). You can also redeem a code or buy manually on WeChat ${WX_ID}. Check-in sits at the top of the Credits page.`)}
+            {t(`；每日签到 +10，没有上限，积分永久有效；另外可以用兑换码兑换，或加微信 ${WX_ID} 人工购买。签到入口在「积分」页顶部。`,
+              `; daily check-in gives +10 with no cap, and credits never expire. You can also redeem a code or buy manually on WeChat ${WX_ID}. Check-in sits at the top of the Credits page.`)}
           </>,
         },
         {
@@ -117,16 +116,15 @@ function buildGroups(t: TFn): Group[] {
           </>,
         },
         {
-          q: t('会员包含什么？支付能付吗？', 'What does membership include? Can I pay?'),
+          q: t('怎么买积分？支付能付吗？', 'How do I buy credits? Can I pay online?'),
           a: <>
-            {t(`会员 US$${PRICING.proMonthlyPriceUSD}/月：签到双倍、全部对话模型、云端跨设备同步与全部历史版本、PDF / SVG / DXF / ZIP 印刷级导出。订阅页可直接用 `,
-              `Membership is US$${PRICING.proMonthlyPriceUSD}/month: doubled check-in, all chat models, cross-device cloud sync with full version history, and print-ready PDF / SVG / DXF / ZIP export. The plans page accepts `)}
+            {t('没有月费，也不需要订阅。积分永久有效，用多少买多少。在线支付支持 ',
+              'There is no monthly fee or subscription. Credits never expire — buy only what you need. Online payments accept ')}
             <strong>Visa / Mastercard / Apple Pay / Google Pay</strong>
-            {t(' 付款，到期自动续费，可随时在账户页取消。中国内地用户可用兑换码开通：',
-              ', renews monthly, and can be cancelled any time from the account page. Mainland China users can activate with a redeem code: ')}
-            <strong>¥{PRICING.proMonthlyPriceCodeRMB}{t('/月', '/mo')}</strong>
-            {t(`，请联系微信 ${WX_ID} 购买。积分包在线三档：${packsOnline}（付款后自动到账）；兑换码三档：${packsCode}，自定义积分按 ¥1 = ${PRICING.customPointsPerRMB} 积分折算。`,
-              ` — message WeChat ${WX_ID} to buy. Credit packs online: ${packsOnline} (credited automatically). Redeem-code packs: ${packsCode}, and custom amounts are ¥1 = ${PRICING.customPointsPerRMB} credits.`)}
+            {t('，付款后自动到账。中国内地用户可用兑换码或加微信购买。',
+              ' and credits arrive automatically. Mainland China users can use a redeem code or WeChat. ')}
+            {t(`积分包在线三档：${packsOnline}；兑换码三档：${packsCode}，自定义积分按 ¥1 = ${PRICING.customPointsPerRMB} 积分折算。`,
+              `Credit packs online: ${packsOnline}. Redeem-code packs: ${packsCode}, and custom amounts are ¥1 = ${PRICING.customPointsPerRMB} credits.`)}
           </>,
         },
       ],
@@ -139,15 +137,15 @@ function buildGroups(t: TFn): Group[] {
         {
           q: t('我的设计存在哪里？换设备还在吗？', 'Where are my designs stored? Do they follow me across devices?'),
           a: <>
-            {t('本机浏览器会自动保存（IndexedDB），不登录也不会丢。云端同步是会员权益：会员登录后自动上传并合并，换设备在工作台点「取回云端项目」即可继续编辑；免费版只保存在本机（已有云端作品仍可取回，不会丢）。清空浏览器数据会连同本地草稿一起清掉，重要项目建议先备份。',
-              'Everything is saved in your browser (IndexedDB), so nothing is lost even without signing in. Cloud sync is a membership benefit: members upload and merge automatically, and on another device you simply click “Restore cloud projects” in the workspace. The free plan keeps work local only (existing cloud projects can still be restored). Clearing browser data wipes local drafts too, so back up anything important.')}
+            {t('本机浏览器会自动保存（IndexedDB），不登录也不会丢。登录后云端同步自动开启：作品自动上传并合并，换设备在工作台点「取回云端项目」即可继续编辑。云端同步不额外收费，也不扣积分。清空浏览器数据会连同本地草稿一起清掉，重要项目建议先备份。',
+              'Everything is saved in your browser (IndexedDB), so nothing is lost even without signing in. Once you sign in, cloud sync turns on automatically: work uploads and merges, and on another device you click “Restore cloud projects” in the workspace. Cloud sync costs nothing and spends no credits. Clearing browser data wipes local drafts too, so back up anything important.')}
           </>,
         },
         {
           q: t('能导出什么格式？', 'What formats can I export?'),
           a: <>
-            {t('PDF（含出血与 CMYK，可直接送印）、SVG 矢量、DXF 刀模、ZIP 打包属于会员权益；免费版可导出 PNG / JPG 预览图与做印前检查。所有格式都在「文件导出中心」生成。AI 生成的效果图本身是位图 PNG，文字若要印刷级清晰，建议在编辑器里用文字图层重新排一遍再导出。',
-              'Members get PDF (with bleed and CMYK, ready for print), SVG vector, DXF dielines and ZIP bundles; the free plan exports PNG / JPG previews and runs prepress checks. Everything is produced in the export centre. The AI mockups themselves are raster PNGs — for print-sharp type, re-set the text with text layers in the editor before exporting.')}
+            {t('登录后即可导出 PDF（含出血与 CMYK，可直接送印）、SVG 矢量、DXF 刀模、ZIP 打包，以及 PNG / JPG 预览图与印前检查报告，全部不额外收费、不扣积分。所有格式都在「文件导出中心」生成。AI 生成的效果图本身是位图 PNG，文字若要印刷级清晰，建议在编辑器里用文字图层重新排一遍再导出。',
+              'After signing in you can export PDF (with bleed and CMYK, ready for print), SVG vector, DXF dielines, ZIP bundles, PNG / JPG previews and prepress reports — all included, with no extra charge and no credits spent. Everything is produced in the export centre. The AI mockups themselves are raster PNGs — for print-sharp type, re-set the text with text layers in the editor before exporting.')}
           </>,
         },
         {
@@ -230,7 +228,7 @@ function buildUpdates(t: TFn) {
 function buildLinks(t: TFn): { label: string; desc: string; path: string; icon: 'spark' | 'grid' | 'folder' | 'user' }[] {
   return [
     { label: t('开始一个设计', 'Start a design'), desc: t('四步出图', 'Four steps to images'), path: '/new', icon: 'spark' },
-    { label: t('积分与充值', 'Credits & top-up'), desc: t('余额与签到', 'Balance & check-in'), path: '/subscribe', icon: 'folder' },
+    { label: t('积分', 'Credits'), desc: t('余额与签到', 'Balance & check-in'), path: '/credits', icon: 'folder' },
     { label: t('审美市场', 'Aesthetic Index'), desc: t('找参考方向', 'Find a direction'), path: '/market', icon: 'grid' },
     { label: t('账户信息', 'Account'), desc: t('密码与邮箱', 'Password & email'), path: '/account', icon: 'user' },
   ];

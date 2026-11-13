@@ -12,12 +12,12 @@ import { createEmptyDraft, draftToBrief, dimensionComplete, structureReady } fro
 import { generatePalettes } from '../src/v3/colors';
 import { accountKey, otpTarget, emailTarget, isEmail, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
 import { LOGIN_CONFIG } from '../src/cloud/loginConfig';
-import { decideGate, usageStat, CREDIT_BUCKET_FREE, CREDIT_BUCKET_PRO } from '../src/cloud/subscription';
+import { decideGate, usageStat, CREDIT_BUCKET_FREE } from '../src/cloud/subscription';
 import { PRICING } from '../src/cloud/plans';
 import { payReturnFlag } from '../src/cloud/pay';
 import { IMAGE_MODELS, OPEN_IMAGE_MODELS, HYPER3D_COST, imageCost, imageModel, isProOnlyTier, resolveTier } from '../src/cloud/models';
 import {
-  CHAT_MODELS, CHAT_DAILY_BUDGET_RMB, FREE_CHAT_MODEL, chatModel, costOfUsage, isPeakNow, turnsForBudget,
+  CHAT_MODELS, FALLBACK_CHAT_MODEL, FREE_CHAT_MODEL, chatModel, costOfUsage, isPeakNow,
 } from '../src/cloud/chatModels';
 import { toastTone } from '../src/store';
 import { CLOUD, cloudConfigured, deepSeekReady } from '../src/cloud/config';
@@ -228,27 +228,23 @@ export async function runTests(): Promise<Result[]> {
     return STRUCTURES.map((s) => s.name).join(' / ');
   });
 
-  await t('AI 闸门 · 未登录引导登录、额度用完引导订阅，互不混淆', () => {
-    const anon = decideGate({ loggedIn: false, remaining: null, proActive: false });
+  await t('AI 闸门 · 未登录引导登录、积分用尽引导买积分，互不混淆', () => {
+    const anon = decideGate({ loggedIn: false, remaining: null });
     A(!anon.ok && anon.need === 'login', '未登录时应引导登录');
-    A(/免费体验/.test(anon.reason), '未登录提示没有说明免费体验次数');
+    A(/免费体验/.test(anon.reason), '未登录提示没有说明免费体验积分');
 
-    const freeLeft = decideGate({ loggedIn: true, remaining: 2, proActive: false });
-    A(freeLeft.ok, '还有免费额度时不应拦截');
+    const left = decideGate({ loggedIn: true, remaining: 2 });
+    A(left.ok, '还有积分时不应拦截');
 
-    const freeUsed = decideGate({ loggedIn: true, remaining: 0, proActive: false });
-    A(!freeUsed.ok && freeUsed.need === 'subscribe', '免费额度用完应引导订阅');
-    A(/免费体验已用完/.test(freeUsed.reason), '订阅提示没有说明原因');
+    const used = decideGate({ loggedIn: true, remaining: 0 });
+    A(!used.ok && used.need === 'credits', '积分用尽应引导购买积分');
+    // 纯积分制没有「订阅 / 续费」这个动作，提示里绝不能出现这两个词
+    A(/积分包/.test(used.reason), '积分不足应指向积分包');
+    A(!/订阅|续费|会员/.test(used.reason), '纯积分制下不应再提订阅 / 续费 / 会员');
 
-    const proUsed = decideGate({ loggedIn: true, remaining: 0, proActive: true });
-    A(!proUsed.ok && proUsed.need === 'subscribe', '会员积分用完应引导订阅');
-    // 会员不含积分包：积分用完不能误导用户去「续费」，必须指向积分包 / 签到
-    A(/积分包/.test(proUsed.reason) && !/续费/.test(proUsed.reason),
-      '会员积分不足时应提示单独获取积分，不能说成续费');
-
-    const unknown = decideGate({ loggedIn: true, remaining: null, proActive: false });
-    A(unknown.ok, '订阅信息未加载时不应拦截');
-    return '登录 / 免费 / 会员 / 未知 四种状态判定正确';
+    const unknown = decideGate({ loggedIn: true, remaining: null });
+    A(unknown.ok, '账本未加载时不应拦截');
+    return '登录 / 有积分 / 无积分 / 未加载 四种状态判定正确';
   });
 
   let design: DesignDoc;
@@ -783,29 +779,29 @@ export async function runTests(): Promise<Result[]> {
     return 'gpt2-ref 需参考图，其余不需要';
   });
 
-  await t('生图档位 · GPT Image 2 是会员专属，免费版自动回落 Flash', () => {
-    A(isProOnlyTier('gpt2-text') && isProOnlyTier('gpt2-ref'), 'GPT Image 2 两档必须标记为会员专属');
-    A(!isProOnlyTier('flash') && !isProOnlyTier('pro'), 'Seedream 两档不应对免费版加锁');
-    // 免费版会话里残留的会员档必须回落，否则会按 86/93 积分卖出不该卖的档
-    A(resolveTier('gpt2-ref', false) === 'flash', '免费版残留 gpt2-ref 应回落 flash');
-    A(resolveTier('gpt2-text', false) === 'flash', '免费版残留 gpt2-text 应回落 flash');
-    A(resolveTier('gpt2-ref', true) === 'gpt2-ref', '会员应保留 gpt2-ref');
-    A(resolveTier('pro', false) === 'pro', '免费版仍可选 Seedream Pro');
-    A(resolveTier(undefined, false) === 'flash', '未指定档位应默认 flash');
-    return 'gpt2 两档仅会员可用，其余不受影响';
+  await t('生图档位 · 纯积分制下全部可选，档位名一律归一', () => {
+    // 没有会员身份，任何档位都不该被身份锁住——锁住等于用户买了积分也花不出去
+    A(!isProOnlyTier('gpt2-text') && !isProOnlyTier('gpt2-ref'), 'GPT Image 2 不应再按身份加锁');
+    A(!isProOnlyTier('flash') && !isProOnlyTier('pro'), 'Seedream 两档不应被加锁');
+    A(resolveTier('gpt2-ref') === 'gpt2-ref', 'gpt2-ref 应原样保留');
+    A(resolveTier('gpt2-text') === 'gpt2-text', 'gpt2-text 应原样保留');
+    A(resolveTier('pro') === 'pro', 'Seedream Pro 应原样保留');
+    A(resolveTier(undefined) === 'flash', '未指定档位应默认 flash');
+    A(resolveTier('已下线的档位' as never) === 'flash', '未知档位应回落 flash');
+    return '所有档位按积分扣费，不再有身份门槛';
   });
 
-  await t('对话模型 · 7 款目录与默认档（会员 6 款 / 默认免费）', () => {
-    A(CHAT_MODELS.length === 7, `应有 7 款对话模型，实际 ${CHAT_MODELS.length}`);
+  await t('对话模型 · 只保留主档与兜底两档，界面不再让用户选模型', () => {
+    // 界面已无模型下拉：多一档就多一次解释，也与「不对外卖 token」的口径冲突
+    A(CHAT_MODELS.length === 2, `应只有 2 档（主档 + 兜底），实际 ${CHAT_MODELS.length}`);
     const ids = CHAT_MODELS.map((m) => m.id);
     A(new Set(ids).size === ids.length, '档位 id 有重复');
+    A(ids.includes(FREE_CHAT_MODEL) && ids.includes(FALLBACK_CHAT_MODEL), '主档或兜底档不在目录里');
     const def = chatModel(FREE_CHAT_MODEL);
     A(def.id === FREE_CHAT_MODEL, '默认档不在目录里');
-    A(def.tier === 'free', '默认档必须是人人可用的免费档');
-    A(CHAT_MODELS.filter((m) => m.tier === 'pro').length === 6, '会员专属模型应为 6 款');
-    // 旧版本 localStorage 里的档位名必须能映射到新档位，否则老用户会被退回默认档
+    // 已下线的档位必须能映射走，否则云函数会收到一个白名单外的名字
     A(chatModel('deepseek-chat').id === FREE_CHAT_MODEL, 'deepseek-chat 未映射到默认档');
-    A(chatModel('kimi-k3.1').id === 'kimi-k3.1-pro', 'kimi-k3.1 未映射到新档位');
+    A(chatModel('kimi-k3.1-pro').id === FREE_CHAT_MODEL, '已下线的 kimi 未映射到默认档');
     A(chatModel('不存在的档位').id === FREE_CHAT_MODEL, '未知档位没有回落默认档');
     return ids.join(' / ');
   });
@@ -830,49 +826,35 @@ export async function runTests(): Promise<Result[]> {
     return `空闲 ${off} / 高峰 ${on}`;
   });
 
-  await t('对话模型 · ¥1 额度下各档可聊轮数（贵的档必须更少）', () => {
-    const d = new Date('2026-11-11T12:00:00Z'); // 空闲时段，便于固定预期
-    const turns = (id: string) => turnsForBudget(chatModel(id), CHAT_DAILY_BUDGET_RMB, d);
-    A(turns('kimi-k3.1-pro') < turns('ds-v4-pro'), 'Kimi 比 DeepSeek-V4-pro 贵，轮数应更少');
-    A(turns('ds-v4-pro') < turns('doubao-2.1-turbo'), 'Doubao-turbo 比 V4-pro 便宜，轮数应更多');
-    A(turns('doubao-2.1-lite') > 100, 'litte 档应当能聊 100 轮以上');
-    A(turns('kimi-k3.1-pro') >= 1, '¥1 至少应能聊 1 轮 Kimi');
-    A(CHAT_DAILY_BUDGET_RMB === 1, '每人每天预算应为 ¥1');
-    return `Kimi ${turns('kimi-k3.1-pro')} / V4-pro ${turns('ds-v4-pro')} / turbo ${turns('doubao-2.1-turbo')} / lite ${turns('doubao-2.1-lite')} 轮`;
-  });
-
-  await t('用量进度 · 免费 100 / 会员 600 / 充值后按充值量算 100%', () => {
-    A(CREDIT_BUCKET_FREE === 100, `免费桶应为 100，实际 ${CREDIT_BUCKET_FREE}`);
-    A(CREDIT_BUCKET_PRO === 600, `会员桶应为 600，实际 ${CREDIT_BUCKET_PRO}`);
-    // 免费版：分母 100，余额 62 → 用掉 38
-    const free = usageStat(62, { pro: false })!;
-    A(free.bucket === 100 && free.used === 38 && free.pct === 38, `免费桶计算错误: ${JSON.stringify(free)}`);
-    // 会员：分母 600，余额 162 → 用掉 438
-    const pro = usageStat(162, { pro: true })!;
-    A(pro.bucket === 600 && pro.used === 438 && pro.pct === 73, `会员桶计算错误: ${JSON.stringify(pro)}`);
+  await t('用量进度 · 分母取默认桶与近期充值量的较大者', () => {
+    A(CREDIT_BUCKET_FREE === 100, `默认桶应为 100，实际 ${CREDIT_BUCKET_FREE}`);
+    // 只有默认桶：分母 100，余额 62 → 用掉 38
+    const base = usageStat(62)!;
+    A(base.bucket === 100 && base.used === 38 && base.pct === 38, `默认桶计算错误: ${JSON.stringify(base)}`);
     // 充过值：分母换成该次充值量
-    const paid = usageStat(1800, { pro: true, recharge: 2100 })!;
+    const paid = usageStat(1800, { recharge: 2100 })!;
     A(paid.bucket === 2100 && paid.used === 300 && paid.pct === 14, `充值桶计算错误: ${JSON.stringify(paid)}`);
     // 小额发放不该把分母压到比默认桶还小
-    const small = usageStat(80, { pro: true, recharge: 100 })!;
-    A(small.bucket === 600, `小额发放把分母压小了: ${JSON.stringify(small)}`);
+    const small = usageStat(80, { recharge: 100 })!;
+    A(small.bucket === 100, `小额发放把分母压小了: ${JSON.stringify(small)}`);
     // 余额比充值量还多（充值后还没怎么用）→ 0%，不出现负进度
-    const d = usageStat(3500, { pro: true, recharge: 2100 })!;
-    A(d.bucket === 2100 && d.pct === 0 && d.used === 0, `余额超桶时算出了负进度: ${JSON.stringify(d)}`);
+    const more = usageStat(3500, { recharge: 2100 })!;
+    A(more.bucket === 2100 && more.pct === 0 && more.used === 0, `余额超桶时算出了负进度: ${JSON.stringify(more)}`);
     // 未登录 / 未计量 → null，界面显示占位而不是 0%
-    A(usageStat(null, { pro: true }) === null, '无余额时应返回 null');
-    return '免费 100 / 会员 600 / 充值量 / 小额发放 / 超桶 五种情况均正确';
+    A(usageStat(null) === null, '无余额时应返回 null');
+    return '默认桶 / 充值量 / 小额发放 / 超桶 四种情况均正确';
   });
 
-  await t('定价口径 · 会员价以美元为唯一权威，RMB 只是测算', () => {
-    A(PRICING.proMonthlyPriceUSD === 5, `美元价应为 5，实际 ${PRICING.proMonthlyPriceUSD}`);
-    const derived = +(PRICING.proMonthlyPriceUSD * PRICING.usdToRmb).toFixed(2);
-    A(Math.abs(PRICING.proMonthlyPriceRMB - derived) < 1,
-      `RMB 测算值应与美元价对得上：${PRICING.proMonthlyPriceRMB} vs ${derived}`);
-    // 中国内地兑换码价是单独定的：必须比美元折算价低，否则没人愿意走人工通道
-    A(PRICING.proMonthlyPriceCodeRMB < PRICING.proMonthlyPriceRMB,
-      `兑换码价 ¥${PRICING.proMonthlyPriceCodeRMB} 不应高于美元折算 ¥${PRICING.proMonthlyPriceRMB}`);
-    return `US$${PRICING.proMonthlyPriceUSD} ≈ ¥${PRICING.proMonthlyPriceRMB}（按 ${PRICING.usdToRmb} 折算）· 兑换码 ¥${PRICING.proMonthlyPriceCodeRMB}`;
+  await t('定价口径 · 只有积分，没有任何按月收费的字段', () => {
+    // 旧版这里有 proMonthlyPriceUSD / proMonthlyQuota，语义含糊到被数据库函数
+    // 当成「开会员送 3000 积分」。这类字段一旦回到 PRICING，误发积分就会重演。
+    const keys = Object.keys(PRICING);
+    for (const banned of ['proMonthlyPriceUSD', 'proMonthlyPriceRMB', 'proMonthlyPriceCodeRMB', 'proMonthlyQuota', 'proCreditBucket']) {
+      A(!keys.includes(banned), `PRICING 不应再有会员字段 ${banned}`);
+    }
+    A(PRICING.freeTrialUses > 0, '新注册赠送积分必须为正');
+    A(PRICING.costs.chat === 0, '对话必须免费，否则与「聊天不扣积分」的对外说明冲突');
+    return `无会员字段 · 注册送 ${PRICING.freeTrialUses} 积分 · 对话 ${PRICING.costs.chat} 积分`;
   });
 
   await t('积分包 · 三档递增、单位价格递减、兑换码价低于美元折算', () => {

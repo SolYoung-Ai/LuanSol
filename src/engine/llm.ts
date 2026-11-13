@@ -248,11 +248,11 @@ export async function llmJson<T>(messages: LLMMessage[], s: AISettings): Promise
 
 export async function llmImage(prompt: string, s: AISettings): Promise<{ src: string; naturalW: number; naturalH: number }> {
   if (!aiEnabled(s)) throw new Error('尚未启用 AI 接入');
-  // 订阅 / 登录闸门：图像生成同样消耗额度
+  // 登录 / 积分闸门：图像生成按档位扣积分
   const gate = getAIGate();
   if (gate) {
     const g = await gate('image');
-    if (!g.ok) throw new Error(g.reason || '需要订阅后使用 AI 功能');
+    if (!g.ok) throw new Error(g.reason || '积分不足，无法生成图片');
   }
   return withRetry(async () => {
     const ctrl = new AbortController();

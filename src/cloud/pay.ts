@@ -6,13 +6,13 @@
  * 把 uid 写进 metadata，Creem 的 webhook 回来时才能对上人。
  *
  * 云函数负责：来源白名单 / 登录态 / 代理令牌 / Creem 密钥 / 产品 ID 白名单。
- * 前端一条也不持有——这里只声明「买会员还是买积分包」。
+ * 前端一条也不持有——这里只声明「买哪一档积分包」。
  * ============================================================ */
 import { CLOUD } from './config';
 import { tl } from '../langStore';
 
-/** 买什么：会员订阅（pro）还是一次性积分包（credits）。 */
-export type PayKind = 'pro' | 'credits';
+/** 纯积分制：只有一次性积分包，没有会员订阅。 */
+export type PayKind = 'credits';
 
 export type PayStart = { ok: true; url: string } | { ok: false; message: string };
 
@@ -24,7 +24,7 @@ export function markPayKind(kind: PayKind): void {
 }
 
 export function lastPayKind(): PayKind {
-  try { return sessionStorage.getItem(KIND_KEY) === 'credits' ? 'credits' : 'pro'; } catch { return 'pro'; }
+  return 'credits';
 }
 
 export function clearPayKind(): void {
@@ -37,7 +37,7 @@ export function clearPayKind(): void {
 export async function startCheckout(opts: { uid: string; email?: string; name?: string; kind?: PayKind; points?: number }): Promise<PayStart> {
   const base = CLOUD.aiBaseUrl;
   if (!base) return { ok: false, message: tl('支付服务未配置，请先在账户页联系人工开通', 'Payments are not configured — contact us from the account page to activate manually') };
-  const kind = opts.kind || 'pro';
+  const kind: PayKind = 'credits';
   try {
     const r = await fetch(`${base}/pay/checkout`, {
       method: 'POST',

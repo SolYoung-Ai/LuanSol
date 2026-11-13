@@ -11,7 +11,7 @@
  *   slot   —— 分界线下的「场景区」，随当前导航变化：
  *              · 工作台 → 四步创作流程（可点，直接跳到对应阶段）
  *              · Luna   → 由 Luna 页自己的侧栏渲染（新建对话 / 会话列表）
- *   account—— 头像 + 昵称 + 积分 + 使用进度 + 查看计划，点开是账户菜单
+ *   account—— 头像 + 昵称 + 积分 + 使用进度 + 购买积分，点开是账户菜单
  *
  * 手机端（≤860px）完全不用这套：.v4-nav 顶部条 + 抽屉保持原样，
  * 这里所有样式都写在 @media (min-width: 861px) 里。
@@ -198,7 +198,7 @@ export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
   const isAdmin = auth.user.email === 'solyoungwork@gmail.com';
   const items: { label: string; path: string; adminOnly?: boolean }[] = [
     { label: t('账户信息', 'Account'), path: '/account' },
-    { label: t('积分与充值', 'Credits & Recharge'), path: '/subscribe' },
+    { label: t('积分', 'Credits'), path: '/credits' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
     { label: t('开发者管理', 'Developer'), path: '/admin', adminOnly: true },
   ];
@@ -227,7 +227,7 @@ export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
       <div className="sd-acct-av">{avatarUrl ? <img src={avatarUrl} alt="" /> : initial}</div>
       <div className="sd-acct-meta">
         <strong>{auth.user.label}</strong>
-        <span>{syncLabel || (sub.isPro ? t('会员', 'Member') : t('免费版', 'Free'))}</span>
+        <span>{syncLabel || t('积分可用', 'Credits available')}</span>
       </div>
       <div className="sd-acct-cr">
         <b>{left ?? '–'}</b>
@@ -247,8 +247,8 @@ export function SideAccount({ onLogin, syncLabel, onNavigate, compact }: {
       </span>
     </div>
 
-    <button className="sd-plan" onClick={() => { onNavigate?.(); go('/subscribe'); }}>
-      {t('查看计划', 'View plans')}
+    <button className="sd-plan" onClick={() => { onNavigate?.(); go('/credits'); }}>
+      {t('购买积分', 'Buy credits')}
     </button>
   </div>;
 }
