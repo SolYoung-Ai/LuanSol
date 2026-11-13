@@ -21,9 +21,6 @@ const Account = lazy(() => import('./pages/account'));
 const Structures = lazy(() => import('./pages/library').then((m) => ({ default: m.Structures })));
 const ProjectDetail = lazy(() => import('./pages/library').then((m) => ({ default: m.ProjectDetail })));
 const Workspace = lazy(() => import('./pages/workspace'));
-const Market = lazy(() => import('./pages/market').then((m) => ({ default: m.default })));
-const MarketSite = lazy(() => import('./pages/market').then((m) => ({ default: m.MarketSitePage })));
-const MarketWork = lazy(() => import('./pages/market').then((m) => ({ default: m.MarketWorkPage })));
 const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
 const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default: m.ModelConfig })));
 const Subscribe = lazy(() => import('./pages/subscribe'));
@@ -42,7 +39,6 @@ function Footer() {
     <div className="footer-min-links">
       <a href="#/studio">{t('开始设计', 'Start designing')}</a>
       <a href="#/workspace">{t('工作台', 'Workspace')}</a>
-      <a href="#/market">{t('审美市场', 'Aesthetic Index')}</a>
       <a href="#/credits">{t('积分说明', 'Credits')}</a>
     </div>
     {/* 法务与价格必须是真实可抓取的静态地址：支付通道审核会直接请求 /terms 这类路径，
@@ -105,12 +101,11 @@ export default function App() {
   /* 主入口按固定顺序排列，切换时按「从上往下 / 从下往上」决定滑入方向 */
   const prevNav = useRef<number>(-1);
   useEffect(() => {
-    const order = ['/start', '/home', '/luna', '/workspace', '/projects', '/market'];
+    const order = ['/start', '/home', '/luna', '/workspace', '/projects'];
     const idxOf = (p: string) => {
       if (p === '/start' || p === '/home') return 0;
       if (p.startsWith('/luna')) return 1;
       if (p.startsWith('/workspace') || p.startsWith('/projects')) return 2;
-      if (p.startsWith('/market')) return 3;
       return -1;
     };
     const cur = idxOf(path);
@@ -163,17 +158,14 @@ export default function App() {
   } else if (path === '/') page = <Home />;
   else if (path === '/studio') page = <Studio />;
   else if (path === '/new') page = <NewDesign />;
-  /* 旧灵感库（内容为虚构项目）已下线：统一指向真实可溯源的审美市场 */
-  else if (path === '/inspiration') page = <Market />;
   else if (path === '/structures') page = <Structures />;
   /* 工作台：/workspace 与历史路径 /projects 指向同一个新页面，旧链接不 404 */
   else if (path === '/workspace' || path === '/projects') page = <Workspace />;
-  /* 复制：上传参考图 → 三种风格方案 */
+  /* 复刻：选类型 → 多图参考 + 多图素材 → 三张方案 */
   else if (path === '/replicate') page = <Replicate />;
-  /* 审美市场：列表 + 站点详情 + 作品详情 */
-  else if (path === '/market') page = <Market />;
-  else if (path.startsWith('/market/site/')) page = <MarketSite />;
-  else if (path.startsWith('/market/work/')) page = <MarketWork />;
+  /* 审美市场已永久下线：老书签（/market、/market/site/*、/inspiration）统一送回工作台，
+     不做 404，也不再保留任何入口与数据。 */
+  else if (path.startsWith('/market') || path === '/inspiration') page = <OldRouteRedirect to="/workspace" />;
   else if (path.startsWith('/project/')) page = <ProjectDetail />;
   /* 账户信息是唯一入口：/security 是旧链接，直接渲染同一页，避免功能分家 */
   else if (path === '/account' || path === '/security') page = <Account />;
@@ -196,7 +188,7 @@ export default function App() {
       <ProfileProvider>
         <ChatStoreProvider>
           {/* Luna 现在也用全站左栏（会话区挂在左栏分界线下方），所以只有编辑器是 no-side。
-              这样从工作台 / 开始页 / 审美市场切到 Luna 时左栏原地不动，只换中间内容，不再闪一下。 */}
+              这样从工作台 / 开始页切到 Luna 时左栏原地不动，只换中间内容，不再闪一下。 */}
           <div className={`app ${path.startsWith('/studio') ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''}`}>
             <Nav onLogin={requestLogin} />
             {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
@@ -220,11 +212,11 @@ export default function App() {
   </SubscriptionProvider>;
 }
 
-/** 旧设计链路路由统一重定向到新工作台 */
-function OldRouteRedirect() {
+/** 旧路由统一重定向到新工作台 */
+function OldRouteRedirect({ to = '/studio' }: { to?: string }) {
   React.useEffect(() => {
-    window.location.hash = '#/studio';
-  }, []);
+    window.location.hash = `#${to}`;
+  }, [to]);
   return <div className="page" style={{ padding: 40, textAlign: 'center', color: '#888' }}>
     Redirecting to the workspace…
   </div>;

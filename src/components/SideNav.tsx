@@ -7,10 +7,10 @@
  *
  * 结构与 Luna 页自己的侧栏完全一致（同一套圆角玻璃卡 + 同一套内边距）：
  *   brand  —— 品牌头（logo + 名称 + 副标题）
- *   links  —— Luna / 工作台 / 审美市场
+ *   links  —— 开始 / Luna Ai / 工作台
  *   slot   —— 分界线下的「场景区」，随当前导航变化：
- *              · 工作台 → 四步创作流程（可点，直接跳到对应阶段）
- *              · Luna   → 由 Luna 页自己的侧栏渲染（新建对话 / 会话列表）
+ *              · 工作台 → 新建设计 / 项目 / 复刻
+ *              · Luna   → 会话列表（新建对话 / 搜索 / 历史）
  *   account—— 头像 + 昵称 + 积分 + 使用进度 + 查看计划，点开是账户菜单
  *
  * 手机端（≤860px）完全不用这套：.v4-nav 顶部条 + 抽屉保持原样，
@@ -28,7 +28,6 @@ import { useLang } from '../i18n';
 import { useApp, visibleProjects } from '../store';
 import { useChatStore } from '../cloud/useChatStore';
 import { applyTheme, readTheme, saveTheme, type Theme } from '../theme';
-import type { WorkflowStage } from '../types';
 
 /** 三个主入口。工作台包含设计流程的全部子路由，都算「在工作台里」。 */
 const SIDE_LINKS: { zh: string; en: string; path: string; icon: IconName; match: string[] }[] = [
@@ -40,16 +39,12 @@ const SIDE_LINKS: { zh: string; en: string; path: string; icon: IconName; match:
     match: ['/workspace', '/projects', '/replicate', '/studio', '/new', '/project', '/structures',
       '/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'],
   },
-  { zh: '审美市场', en: 'Aesthetic Index', path: '/market', icon: 'grid', match: ['/market', '/inspiration'] },
 ];
 
-/** 四步创作流程：与工作台页顶部的流程图、CreationFlow 的阶段一一对应。 */
-const FLOW_STEPS: { n: string; stage: WorkflowStage; zh: string; en: string; dzh: string; den: string }[] = [
-  { n: '01', stage: 'entry', zh: '创作入口', en: 'Start', dzh: '有方向 / 从零开始', den: 'Brief or scratch' },
-  { n: '02', stage: 'requirements', zh: '确认需求', en: 'Requirements', dzh: '配色 · 卖点 · LOGO · 条码', den: 'Color · Copy · Logo' },
-  { n: '03', stage: 'concepts', zh: '设计方案', en: 'Concepts', dzh: '生成 3 张，选一张', den: 'Pick one of three' },
-  { n: '04', stage: 'editor', zh: '编辑器', en: 'Editor', dzh: '2D / 3D 精修导出', den: 'Refine & export' },
-];
+/** 哪些路由算「在工作台里」，分界线下方就展开场景区。
+ *  以前用 SIDE_LINKS[2].match 取下标，入口一增一减就会指到别的项上，这里改成按路径查。 */
+const WORKBENCH_MATCH = SIDE_LINKS.find((l) => l.path === '/workspace')!.match;
+const inWorkbench = (path: string) => WORKBENCH_MATCH.some((p) => path.startsWith(p));
 
 export function SideNavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const hash = useHash();
@@ -104,16 +99,7 @@ export function SideBrand() {
   </div>;
 }
 
-/** 把历史阶段归一到四步流程里的某一步（与 CreationFlow.normalizeStage 同口径） */
-function flowStageOf(project: { workflow?: { stage?: WorkflowStage }; design?: unknown } | undefined): WorkflowStage {
-  const raw = project?.workflow?.stage;
-  if (!raw) return 'entry';
-  if (raw === 'analysis' || raw === 'planning' || raw === 'workflow') return 'requirements';
-  if (raw === 'assembled') return 'editor';
-  return raw;
-}
-
-/** 分界线下的工作台功能：新建设计 / 项目（含状态筛选）/ 复制。
+/** 分界线下的工作台功能：新建设计 / 项目 / 复刻。
  *  这三项替代了原来的四步流程——流程是「进去以后的事」，这里是「从哪儿开始」。 */
 export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
   const { s, setToast } = useApp();
@@ -142,7 +128,7 @@ export function SideWorkbench({ onNavigate }: { onNavigate?: () => void }) {
 
     <button className={`sd-act ${inReplicate ? 'on' : ''}`} onClick={() => { onNavigate?.(); go('/replicate'); }}>
       <span className="sd-ic"><Icon name="copy" size={16} /></span>
-      <span>{t('复制', 'Replicate')}</span>
+      <span>{t('复刻', 'Recreate')}</span>
     </button>
   </div>;
 }
@@ -367,8 +353,8 @@ export default function SideNav({ onLogin }: { onLogin?: () => void }) {
   // 只是分界线下方的场景区换成会话列表（见 LunaChats）。
   if (path.startsWith('/studio')) return null;
   const isLuna = path.startsWith('/luna');
-  // 分界线下方的场景区：工作台相关页面显示「新建设计 / 项目 / 复制」
-  const showFlow = SIDE_LINKS[2].match.some((p) => path.startsWith(p));
+  // 分界线下方的场景区：工作台相关页面显示「新建设计 / 项目 / 复刻」
+  const showFlow = inWorkbench(path);
   return <aside className="sd-nav">
     <SideBrand />
     <SideNavLinks />

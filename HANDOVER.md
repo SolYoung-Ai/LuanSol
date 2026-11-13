@@ -189,7 +189,7 @@ GitHub Pages 会自动部署，约 1-2 分钟生效。
 ### 5.5 其他页面
 - 首页
 - Luna AI 对话
-- 审美市场
+- 复刻（主图 / 详情页 / 海报 / 视频封面 / 包装 / 周边）
 - 帮助与反馈
 - 账号安全
 - 管理员后台
@@ -387,7 +387,7 @@ src/
   components/  DesignView / DielineView / ProductMockup / Viewer3D / SideNav
   editor/      在线编辑器（画布、图层面板、属性面板、素材库、左栏工具）
   workflow/    /new 四步流程（入口 → 需求 → 方案 → 编辑器）
-  pages/       start / luna / workspace / market / account / subscribe / help / settings
+  pages/       start / luna / workspace / replicate / account / subscribe / help / settings
   cloud/       鉴权 / 订阅与额度 / 云同步 / 支付 / 模型目录 / 登录配置
   store.tsx    全局项目仓库（IndexedDB）
   App.tsx      hash 路由（无需服务端 rewrite）

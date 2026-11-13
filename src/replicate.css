@@ -1,12 +1,13 @@
 /* ============================================================
-   复制页（/replicate）
+   复刻页（/replicate）
    ------------------------------------------------------------
-   左侧设置、右侧三张结果。配色沿用 V4 变量，深色模式自动跟随。
+   左侧设置、右侧三张结果；进入先弹「类型」卡片选择。
+   配色全部走 V4 变量，深色模式自动跟随，不写死颜色。
    ============================================================ */
 
 .rep-page { max-width: 1240px; margin: 0 auto; padding: 36px 28px 120px; }
 
-.rep-head { max-width: 72ch; }
+.rep-head { max-width: 74ch; }
 .rep-kicker {
   font-size: 10.5px;
   letter-spacing: 0.26em;
@@ -25,12 +26,28 @@
   line-height: 1.75;
   color: var(--v4-ink-2);
 }
+.rep-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 7px 13px;
+  border: 1px solid var(--v4-line);
+  border-radius: var(--v4-r-pill, 999px);
+  background: var(--v4-surface);
+  color: var(--v4-ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.rep-switch:hover { color: var(--v4-ink); border-color: var(--v4-ink-3); background: var(--v4-paper); }
 
 .rep-grid {
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-columns: 372px minmax(0, 1fr);
   gap: 26px;
-  margin-top: 30px;
+  margin-top: 26px;
   align-items: start;
 }
 
@@ -44,66 +61,98 @@
   background: var(--v4-paper);
 }
 
-/* 双图上传：A 风格参考 / B 我的产品，两个框同源同尺寸，谁都不能缺 */
-.rep-drops {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+/* 两栏上传：参考图给「感觉」，素材图给「主体」，谁都不能缺 */
+.rep-slots { display: flex; flex-direction: column; gap: 14px; }
+.rep-slot { min-width: 0; }
+.rep-slot-head { display: flex; align-items: center; gap: 8px; }
+.rep-slot-title { font-size: 12.5px; font-weight: 550; letter-spacing: 0.02em; }
+.rep-slot-n {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--v4-surface);
+  border: 1px solid var(--v4-line);
+  color: var(--v4-ink-3);
+  font-size: 10px;
 }
-.rep-drop-wrap { min-width: 0; }
-.rep-drop-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 10.5px;
-  font-weight: 550;
-  letter-spacing: 0.04em;
-  color: var(--v4-ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.rep-slot-hint { margin: 4px 0 7px; font-size: 10.5px; line-height: 1.5; color: var(--v4-ink-3); }
 
-.rep-drop {
+.rep-thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.rep-thumb {
   position: relative;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--v4-line);
+  border-radius: 10px;
+  background: #f7f7f5;
+  overflow: hidden;
+}
+.rep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rep-thumb-x {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.62);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+.rep-thumb:hover .rep-thumb-x, .rep-thumb:focus-within .rep-thumb-x { opacity: 1; }
+
+.rep-add {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 3px;
   aspect-ratio: 1 / 1;
-  padding: 10px;
+  padding: 6px;
   border: 1.5px dashed var(--v4-line-strong);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--v4-surface);
+  color: var(--v4-ink-3);
+  font: inherit;
   text-align: center;
   cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.18s ease, background 0.18s ease;
+  transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
 }
-.rep-drop:hover, .rep-drop.over { border-color: var(--v4-orange); }
-.rep-drop.has { padding: 0; border-style: solid; }
-.rep-drop img { width: 100%; height: 100%; object-fit: contain; background: #f7f7f5; }
-.rep-drop-ic {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--v4-line);
-  border-radius: 9px;
-  background: var(--v4-paper);
-  color: var(--v4-ink-2);
-}
-.rep-drop b { font-size: 12px; font-weight: 550; }
-.rep-drop-hint { font-size: 10px; line-height: 1.5; color: var(--v4-ink-3); max-width: 20ch; }
+.rep-add:hover, .rep-add.over { border-color: var(--v4-orange); color: var(--v4-ink-2); }
+.rep-add b { font-size: 10.5px; font-weight: 550; line-height: 1.3; }
+.rep-add span { font-size: 9px; line-height: 1.3; }
+/* 还没传图时铺满整行，做成一块能看懂的拖放区；有图之后缩成一个小方块只留「+」 */
+.rep-thumbs:not(.has) .rep-add { grid-column: 1 / -1; aspect-ratio: auto; min-height: 100px; gap: 5px; }
+.rep-thumbs:not(.has) .rep-add b { font-size: 12px; }
+.rep-thumbs.has .rep-add { aspect-ratio: 1 / 1; gap: 0; }
+.rep-thumbs.has .rep-add b, .rep-thumbs.has .rep-add span { display: none; }
+
+.rep-cap { margin: 8px 0 0; font-size: 10px; color: var(--v4-ink-3); letter-spacing: 0.02em; }
 
 .rep-label {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   margin: 16px 0 6px;
   font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--v4-ink-3);
 }
+.rep-fid-val { font-size: 12px; font-weight: 600; color: var(--v4-ink); letter-spacing: 0; }
+
 .rep-textarea, .rep-select {
   width: 100%;
   padding: 9px 11px;
@@ -119,11 +168,47 @@
 .rep-textarea:focus, .rep-select:focus { outline: none; border-color: var(--v4-ink-3); }
 .rep-select { height: 34px; padding: 0 8px; }
 
+/* 复刻度滑杆：轨道左右两端就是「借感觉 / 照做」 */
+.rep-range {
+  width: 100%;
+  margin: 2px 0 0;
+  accent-color: var(--v4-orange);
+  cursor: pointer;
+}
+.rep-range-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: var(--v4-ink-3);
+}
+
+.rep-ratios { display: flex; flex-wrap: wrap; gap: 6px; }
+.rep-ratio {
+  padding: 6px 11px;
+  border: 1px solid var(--v4-line);
+  border-radius: var(--v4-r-pill, 999px);
+  background: var(--v4-surface);
+  color: var(--v4-ink-2);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.rep-ratio:hover { color: var(--v4-ink); border-color: var(--v4-line-strong); }
+.rep-ratio.on {
+  background: var(--v4-solid-bg);
+  border-color: var(--v4-solid-bg);
+  color: var(--v4-solid-fg);
+}
+.rep-ratio:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .rep-cost {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 14px;
+  gap: 10px;
+  margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid var(--v4-line);
   font-size: 11.5px;
@@ -147,7 +232,7 @@
 }
 .rep-run:hover:not(:disabled) { transform: translateY(-1px); opacity: 0.92; }
 .rep-run:disabled { opacity: 0.4; cursor: not-allowed; }
-.rep-note { margin: 8px 0 0; font-size: 10.5px; color: var(--v4-ink-3); }
+.rep-note { margin: 8px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--v4-ink-3); }
 
 /* ---------- 右：结果 ---------- */
 .rep-results { min-width: 0; }
@@ -163,7 +248,8 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  aspect-ratio: 1 / 1;
+  /* 占位与结果都按所选比例出框：视频封面是 16:9，就不会被摆成方图 */
+  aspect-ratio: var(--rep-ar, 1 / 1);
   border: 1px dashed var(--v4-line);
   border-radius: 14px;
   background: var(--v4-surface);
@@ -187,7 +273,7 @@
 }
 .rep-card:hover { transform: translateY(-2px); box-shadow: 0 18px 32px -26px rgba(0, 0, 0, 0.5); }
 
-.rep-card-img { position: relative; aspect-ratio: 1 / 1; background: #f5f5f2; overflow: hidden; }
+.rep-card-img { position: relative; aspect-ratio: var(--rep-ar, 1 / 1); background: #f5f5f2; overflow: hidden; }
 .rep-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rep-tag {
   position: absolute;
@@ -222,7 +308,7 @@
 @keyframes repSpin { to { transform: rotate(360deg); } }
 
 .rep-card-body { padding: 12px 13px 13px; display: flex; flex-direction: column; gap: 8px; }
-.rep-card-meta { display: flex; gap: 10px; font-size: 10.5px; color: var(--v4-ink-3); }
+.rep-card-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 10.5px; color: var(--v4-ink-3); }
 .rep-card-prompt {
   margin: 0;
   font-size: 11px;
@@ -288,41 +374,129 @@
 }
 .rep-foot button:hover { color: var(--v4-ink); border-color: var(--v4-ink-3); }
 
+/* ---------- 类型弹窗 ---------- */
+.rep-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(18, 18, 16, 0.42);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: repFade 0.18s ease-out both;
+}
+@keyframes repFade { from { opacity: 0; } to { opacity: 1; } }
+.rep-modal-box {
+  width: min(880px, 100%);
+  max-height: min(86vh, 720px);
+  overflow: auto;
+  padding: 24px;
+  border-radius: 22px;
+  background: var(--v4-paper);
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  animation: repRise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes repRise { from { transform: translateY(10px); } to { transform: none; } }
+.rep-modal-head { display: flex; align-items: flex-start; gap: 16px; }
+.rep-modal-head h2 { margin: 0; font-size: 19px; font-weight: 550; letter-spacing: -0.01em; }
+.rep-modal-head p { margin: 7px 0 0; font-size: 12.5px; line-height: 1.65; color: var(--v4-ink-2); }
+.rep-modal-x {
+  margin-left: auto;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--v4-line);
+  border-radius: 50%;
+  background: var(--v4-surface);
+  color: var(--v4-ink-2);
+  cursor: pointer;
+}
+.rep-modal-x:hover { color: var(--v4-ink); border-color: var(--v4-ink-3); }
+
+.rep-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.rep-kind {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--v4-line);
+  border-radius: 16px;
+  background: var(--v4-surface);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+.rep-kind:hover { border-color: var(--v4-ink-3); transform: translateY(-2px); background: var(--v4-paper); }
+.rep-kind.on { border-color: var(--v4-ink); }
+.rep-kind-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
+  border: 1px solid var(--v4-line);
+  border-radius: 10px;
+  background: var(--v4-paper);
+  color: var(--v4-ink-2);
+}
+.rep-kind b { font-size: 13.5px; font-weight: 550; }
+.rep-kind em { font-style: normal; font-size: 11.5px; line-height: 1.55; color: var(--v4-ink-3); }
+.rep-kind-ratio {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--v4-ink-3);
+}
+
+/* ---------- 响应式 ---------- */
 @media (max-width: 1100px) {
   .rep-grid { grid-template-columns: 1fr; }
   .rep-setup { position: static; }
-  /* 左栏铺满整行后，两个上传框不能各占半屏，否则会变成两张巨型方块 */
-  .rep-drops { max-width: 680px; }
-  .rep-drop { aspect-ratio: 4 / 3; }
-  .rep-drop-ic { width: 42px; height: 42px; border-radius: 11px; }
-  .rep-drop b { font-size: 13.5px; }
-  .rep-drop-hint { font-size: 11px; max-width: 30ch; }
+  .rep-slots { max-width: 620px; }
+  .rep-thumbs { max-width: 620px; }
 }
-/* 手机断点与全站一致（≤860px）：641–860 这段以前还在用三列结果卡，
-   去掉桌面左栏后每张卡只剩 200px 出头，提示词和按钮会被挤成竖排。 */
 @media (max-width: 860px) {
   .rep-page { padding: 20px 16px calc(90px + env(safe-area-inset-bottom)); }
   .rep-cards, .rep-placeholder { grid-template-columns: 1fr; }
   .rep-card { flex-direction: row; }
-  .rep-card-img { width: 42%; flex-shrink: 0; aspect-ratio: auto; }
+  .rep-card-img { width: 42%; flex-shrink: 0; aspect-ratio: auto; min-height: 128px; }
+  .rep-ph { aspect-ratio: 3 / 4; }
   .rep-card-body { flex: 1; min-width: 0; }
-  .rep-drops { max-width: 100%; }
-  .rep-drop { aspect-ratio: 1 / 1; }
+  .rep-kinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rep-modal { padding: 14px; align-items: flex-end; }
+  .rep-modal-box { padding: 20px 16px 24px; max-height: 88vh; border-radius: 20px; }
 }
-
 /* 极窄屏（≤480px）：横排卡会把提示词和按钮挤成一条竖线，改回上下结构 */
 @media (max-width: 480px) {
-  .rep-head h1 { font-size: 24px; }
+  .rep-head h1 { font-size: 23px; }
   .rep-card { flex-direction: column; }
-  .rep-card-img { width: 100%; aspect-ratio: 1 / 1; }
+  .rep-card-img { width: 100%; aspect-ratio: 1 / 1; min-height: 0; }
   .rep-card-actions .primary { margin-left: 0; }
-  .rep-drop-label { font-size: 10px; }
-  .rep-drop-hint { display: none; }
-  .rep-drop b { font-size: 11.5px; }
   .rep-placeholder { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .rep-ph { aspect-ratio: 3 / 4; padding: 8px 4px; text-align: center; }
   .rep-ph span { font-size: 11px; }
   .rep-ph em { display: none; }
   .rep-foot { justify-content: stretch; }
   .rep-foot button { justify-content: center; width: 100%; }
+  .rep-kinds { gap: 8px; }
+  .rep-kind { padding: 13px 12px 12px; border-radius: 14px; }
+  .rep-kind b { font-size: 12.5px; }
+  .rep-kind em { font-size: 10.5px; }
+  .rep-kind-ratio { display: none; }
 }

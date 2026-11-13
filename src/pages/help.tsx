@@ -178,13 +178,6 @@ function buildGroups(t: TFn): Group[] {
           </>,
         },
         {
-          q: t('审美市场里的站点打不开？', 'A site in the Aesthetic Index will not open?'),
-          a: <>
-            {t('访问条件是按日期逐站实测的连通结果，不是永久承诺：标「国内外可访问」的当时能直连；标「需海外网络」的在国内需自备合规的国际网络；域名失效或改版的会在详情页单独写明。打不开属于网络可达性问题，不等于站点下线。',
-              'Access labels come from testing each site by date — a snapshot, not a promise. “Accessible worldwide” opened directly at the time; “Needs overseas network” requires a compliant international connection from mainland China; dead domains or moved sections are noted on the detail page. A failure is a reachability issue, not a dead site.')}
-          </>,
-        },
-        {
           q: t('页面白屏 / 一直转圈怎么办？', 'Blank page or endless spinner?'),
           a: <>
             {t('绝大多数是浏览器缓存了旧版本，而旧版本的脚本已经被新版本替换。现在出现这种情况会自动提示并重新加载一次；如果仍然空白，手动刷新（Mac 用 ⌘⇧R）即可。你的草稿在 IndexedDB 里，刷新不会丢。',
@@ -207,8 +200,8 @@ function buildUpdates(t: TFn) {
     {
       date: '11-09',
       title: t('界面统一为 iOS 液态玻璃', 'One iOS-style glass surface everywhere'),
-      body: t('账户信息、积分、帮助、审美市场与 Luna 侧栏换成同一套玻璃材质；账户信息合并了原来的「个人资料」与「账号安全」。',
-        'Account, credits, help, the Aesthetic Index and the Luna sidebar now share one glass material; Account also absorbed the old Profile and Security pages.'),
+      body: t('账户信息、积分、帮助与 Luna 侧栏换成同一套玻璃材质；账户信息合并了原来的「个人资料」与「账号安全」。',
+        'Account, credits, help and the Luna sidebar now share one glass material; Account also absorbed the old Profile and Security pages.'),
     },
     {
       date: '11-09',
@@ -218,9 +211,9 @@ function buildUpdates(t: TFn) {
     },
     {
       date: '11-06',
-      title: t('审美市场上线', 'The Aesthetic Index is live'),
-      body: t('107 个站点索引、14 个国家、26 种风格，逐站实测访问条件；可收藏，也能把某个方向直接带进创作。',
-        '107 indexed sites, 14 countries and 26 styles, with access tested site by site. Save favourites and carry a direction straight into a design.'),
+      title: t('复刻功能上线', 'Recreate is live'),
+      body: t('上传参考图与自己的素材图，选定类型（主图 / 详情页 / 海报 / 视频封面 / 包装 / 周边），调好复刻度，一次出三张方案。',
+        'Upload references and your own assets, pick a format (main image, detail page, poster, video cover, packaging, merch), set how closely to follow it, and get three takes at once.'),
     },
   ];
 }
@@ -229,7 +222,7 @@ function buildLinks(t: TFn): { label: string; desc: string; path: string; icon: 
   return [
     { label: t('开始一个设计', 'Start a design'), desc: t('四步出图', 'Four steps to images'), path: '/new', icon: 'spark' },
     { label: t('积分', 'Credits'), desc: t('余额与签到', 'Balance & check-in'), path: '/credits', icon: 'folder' },
-    { label: t('审美市场', 'Aesthetic Index'), desc: t('找参考方向', 'Find a direction'), path: '/market', icon: 'grid' },
+    { label: t('复刻', 'Recreate'), desc: t('按参考图出新图', 'Recreate from a reference'), path: '/replicate', icon: 'grid' },
     { label: t('账户信息', 'Account'), desc: t('密码与邮箱', 'Password & email'), path: '/account', icon: 'user' },
   ];
 }

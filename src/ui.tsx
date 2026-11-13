@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from './cloud/auth';
 import { useSubscription } from './cloud/subscription';
 import { useProfile } from './cloud/profile';
-import { useApp } from './store';
+import { useApp, visibleProjects } from './store';
 import { useLang } from './i18n';
 import { applyTheme, readTheme, saveTheme, type Theme } from './theme';
 
@@ -30,10 +30,9 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
  *  顶级导航不允许再出现重复的「登录」「订阅」按钮。 */
 const NAV_ITEMS = [
   { zh: '开始', en: 'Start', enShort: 'Start', path: '/' },
-  /* 与桌面左栏保持同名；窄屏用短标签，避免 4 个入口挤成省略号 */
+  /* 与桌面左栏保持同名；窄屏用短标签，避免入口挤成省略号 */
   { zh: 'Luna Ai', en: 'Luna AI', enShort: 'Luna', path: '/luna' },
   { zh: '工作台', en: 'Workspace', enShort: 'Work', path: '/workspace' },
-  { zh: '审美市场', en: 'Aesthetic Index', enShort: 'Index', path: '/market' },
 ];
 
 export function Nav({ onLogin }: { onLogin: () => void }) {
@@ -95,15 +94,15 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   ];
   const isAdmin = auth.user?.email === 'solyoungwork@gmail.com';
 
-  /* 桌面左栏「新建设计 / 项目 / 复制」的移动端对应入口。
+  /* 桌面左栏「新建设计 / 项目 / 复刻」的移动端对应入口。
      手机没有常驻左栏，全部收进汉堡抽屉，功能不缺项。 */
   const mobileWork: { label: string; path: string; on: boolean; count?: number }[] = [
     { label: t('新建设计', 'New design'), path: '/new?fresh=1', on: path.startsWith('/new') },
     {
       label: t('项目', 'Projects'), path: '/workspace?tab=all',
-      on: path === '/workspace' || path === '/projects', count: s.projects.length,
+      on: path === '/workspace' || path === '/projects', count: visibleProjects(s.projects).length,
     },
-    { label: t('复制', 'Replicate'), path: '/replicate', on: path === '/replicate' },
+    { label: t('复刻', 'Recreate'), path: '/replicate', on: path === '/replicate' },
   ];
 
   return <header className="v4-nav">

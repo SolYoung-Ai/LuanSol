@@ -1,17 +1,23 @@
 /* ============================================================
- * 复制（Replicate）· 双图复刻
+ * 复刻（Recreate / #/replicate）
  * ------------------------------------------------------------
- * 用户分别上传两张图：
- *   A 风格参考图 —— 提供配色、字体气质、材质、构图骨架；
- *   B 自己的产品图 —— 提供必须保留的容器形状、标签排版、品牌文字。
- * 底层两张图都要真正参与生成，不是摆两个上传框只发一张：
- *   1. callImage 同时发 `images: [A, B]`（真·多图）与 `image: 拼接参考板`
- *      （旧云函数 / 上游不支持多图时的降级输入）；
- *   2. 云函数把多图透传给方舟 Seedream / B.AI edits，4xx 时自动降级到拼接板重试；
- *   3. 提示词明确 A 只给风格、B 给产品主体，并禁止画面出现分栏拼接；
- *   4. 「用它开始」把两张图都写进项目草稿的 referenceImages，不是只留一张。
+ * 为什么不是一个上传框加一个下拉，而是「先选类型」：
+ * 主图、详情页、海报、视频封面、包装、周边，这六种东西的
+ * 画面规则、默认比例、可容忍的发挥空间完全不同——同一个提示词
+ * 出不来能用的详情页，也出不来能当封面的 16:9 图。
+ * 所以第一步是选类型（弹窗卡片），类型决定了后面的场景规则与默认尺寸。
  *
- * 其他口径不变：三张按一张档位的价扣、先查余额再发请求、可单张重新生成。
+ * 每种类型的流程完全一致：
+ *   1. 参考图（可多张）+ 我的素材图（可多张）——两张都要真参与生成；
+ *   2. 补充提示词、选模型、选尺寸、拖「复刻度」；
+ *   3. 一次出三张，可单张重来、可改提示词换模型重来、可整组重来。
+ *
+ * 多图是真的多图，不是摆几个上传框只发第一张：
+ *   · 前端同时发 `images: [参考…, 素材…]` 与 `image: 拼贴参考板`；
+ *   · 云函数把 images 透传给方舟 Seedream / B.AI edits，4xx 时降到拼贴板重试；
+ *   · 拼贴板按同一顺序编号，降级了信息也不会串位。
+ * 上游单次最多读 4 张参考图，所以这里两栏合计上限就是 4 张，界面明写，
+ * 不做「传了 6 张只发 4 张」这种悄悄丢图的事。
  * ============================================================ */
 import React, { useRef, useState } from 'react';
 import { go } from '../ui';
@@ -19,46 +25,133 @@ import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, recordUsage } from '../cloud/subscription';
 import { callImage } from '../engine/seedream';
-import { OPEN_IMAGE_MODELS, imageCost, imageLabel, resolveTier } from '../cloud/models';
+import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageModel, resolveTier } from '../cloud/models';
 import { compressImageForUpload } from '../workflow/imageUtils';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { Icon } from '../components/icons';
+import type { IconName } from '../components/icons';
 import { useLang } from '../i18n';
 import { emptyProductInfo } from '../types';
 import type { ConceptImage, ImageTier, ReferenceImage, ReferenceRole } from '../types';
 import '../replicate.css';
 
 type L = { zh: string; en: string };
-type Uploaded = { src: string; w: number; h: number; name: string };
-type DropKind = 'ref' | 'product';
+type Uploaded = { id: string; src: string; w: number; h: number; name: string };
+type Slot = 'ref' | 'mat';
 
-/** 三种风格：都基于同一组参考图，只改「改动幅度」 */
-const STYLES: { id: string; label: L; hint: string; dark: boolean }[] = [
+/** 上游（方舟 / B.AI）单次最多接收 4 张参考图，两栏共用这个额度 */
+const MAX_IMAGES = 4;
+/** 一次出几张 */
+const BATCH = 3;
+
+const RATIOS: { id: string; label: string; size: string }[] = [
+  { id: '1:1', label: '1:1', size: '1024x1024' },
+  { id: '3:4', label: '3:4', size: '864x1152' },
+  { id: '4:3', label: '4:3', size: '1152x864' },
+  { id: '16:9', label: '16:9', size: '1280x720' },
+  { id: '9:16', label: '9:16', size: '720x1280' },
+];
+
+interface KindDef {
+  id: string;
+  name: L;
+  desc: L;
+  icon: IconName;
+  /** 默认比例：详情页/海报竖版，视频封面 16:9，其余方图 */
+  ratio: string;
+  /** 该类型的画面规则，会被拼进提示词（生图提示词保持中文，不随界面语言走） */
+  scene: string;
+  /** 素材图的默认角色，写进项目草稿的 referenceImages */
+  role: ReferenceRole;
+}
+
+export const KINDS: KindDef[] = [
   {
-    id: 'faithful',
-    label: { zh: '忠实复刻', en: 'Faithful' },
-    hint: '严格沿用风格参考图的配色、字体气质与构图骨架，不做风格改写',
-    dark: false,
+    id: 'main',
+    name: { zh: '主图', en: 'Main image' },
+    desc: { zh: '电商首图，白底或极简场景', en: 'Storefront hero on a clean backdrop' },
+    icon: 'image',
+    ratio: '1:1',
+    role: 'product',
+    scene: '输出电商主图：单个主体居中，占画面 70%–85%，背景为纯白或极简浅色场景，光线均匀，四周留安全边距，不出现多余文字、水印、多件产品或拼贴',
   },
   {
-    id: 'minimal',
-    label: { zh: '现代极简', en: 'Minimal' },
-    hint: '保留风格参考图的色彩关系，改为大面积留白、无衬线字体、极简几何，去掉装饰性纹理，信息层级更克制',
-    dark: false,
+    id: 'detail',
+    name: { zh: '详情页', en: 'Detail page' },
+    desc: { zh: '竖版单屏信息图，标题 + 卖点 + 细节', en: 'Vertical info panel: headline, selling points, detail' },
+    icon: 'layers',
+    ratio: '3:4',
+    role: 'product',
+    scene: '输出竖版详情页的单屏画面：清晰的上下信息层级，可包含一句主标题、两到三条卖点短语与一处产品细节特写，排版留白充足，中文文字清晰可读、不糊字',
   },
   {
-    id: 'bold',
-    label: { zh: '大胆实验', en: 'Bold' },
-    hint: '放大风格参考图里最强烈的视觉元素，改用高对比撞色、超大字号与强图形感，让货架上第一眼被看到',
-    dark: true,
+    id: 'poster',
+    name: { zh: '海报', en: 'Poster' },
+    desc: { zh: '强对比、大标题留白，可独立张贴', en: 'High contrast with room for a headline' },
+    icon: 'text',
+    ratio: '3:4',
+    role: 'product',
+    scene: '输出商业海报：单一视觉中心、强对比、明确的大标题留白区，构图完整可独立张贴，画面内文字精简且中文字形正确',
+  },
+  {
+    id: 'cover',
+    name: { zh: '视频封面', en: 'Video cover' },
+    desc: { zh: '16:9 横版，缩略图里也看得清', en: '16:9, legible as a thumbnail' },
+    icon: 'fullscreen',
+    ratio: '16:9',
+    role: 'product',
+    scene: '输出 16:9 视频封面：主体偏一侧，另一侧留出大标题文字区，强对比高饱和，在缩略图尺寸下仍然可辨识',
+  },
+  {
+    id: 'packaging',
+    name: { zh: '包装', en: 'Packaging' },
+    desc: { zh: '保留容器形状与标签文字的正面效果图', en: 'Front mockup that keeps shape and label copy' },
+    icon: 'shape',
+    ratio: '1:1',
+    role: 'packaging',
+    scene: '输出包装正面商业效果图：保留素材图的容器形状、标签排版、品牌文字与净含量信息，纯色或极简背景，单个产品居中，材质与光泽真实',
+  },
+  {
+    id: 'merch',
+    name: { zh: '周边', en: 'Merch' },
+    desc: { zh: '帆布袋 / 杯子 / 贴纸 / T恤 等物料图', en: 'Tote, mug, sticker or tee mockup' },
+    icon: 'grid',
+    ratio: '1:1',
+    role: 'material',
+    scene: '输出周边物料效果图：从帆布袋、马克杯、贴纸、T恤、徽章中选最贴合素材的一种，主体居中，背景干净，织物或陶瓷质感真实，阴影自然',
   },
 ];
 
-const TAIL = '包装正面商业效果图，单个产品居中，纯色或极简背景，高分辨率，中文排版清晰可读，无任何水印与拼接痕迹';
-/** 双图分工规则。生图提示词保持中文（内容不译），英文界面也用这一份。
- *  同时兼容两种下发形态：新版云函数用 images[0]=A / images[1]=B 真·多图，
- *  降级时用 A/B 拼接参考板，所以两条描述都写清楚。 */
-const DUAL_RULE = '输入图 A（第一张，拼接参考板时为左半）只提供配色、字体气质、材质与构图骨架；输入图 B（第二张，拼接参考板时为右半）是必须套用的真实产品，要保留 B 的容器形状、标签排版、品牌文字与净含量信息，只把视觉风格换成 A 的气质。最终只输出一张完整包装商业效果图，画面里不要出现 A/B 分栏、拼接线、说明文字、水印或多个产品';
+const TAIL = '高分辨率商业级出图，画面干净，无拼贴、无分栏、无水印、无多余产品，中文文字排版正确';
+
+/** 复刻度 → 一句可执行的指令。100% 就是「一比一照着做」，越低给模型的发挥空间越大。 */
+function fidelityRule(r: number): string {
+  if (r >= 95) return '复刻度 100%：构图、元素位置、比例、配色、字体气质与留白层级全部按参考图一比一还原，只把画面主体替换成我的素材';
+  if (r >= 75) return `复刻度 ${r}%：沿用参考图的构图骨架、配色关系与字体气质，仅在纹理、装饰细节与辅助元素上做小幅调整`;
+  if (r >= 45) return `复刻度 ${r}%：保留参考图的整体气质与配色方向，版式与元素可以重新组织，让主体更突出`;
+  return `复刻度 ${r}%：参考图只作为风格灵感，构图、版式与元素全部重新设计，只保留色彩与气质倾向`;
+}
+
+/** 两栏各自的职责。缺哪一栏就换一句，不能把缺失的那栏写进提示词里。 */
+function roleRule(hasRef: boolean, hasMat: boolean): string {
+  if (hasRef && hasMat) return '输入图中的参考图只提供配色、字体气质、材质与构图骨架；素材图是必须出现在画面里的真实主体，保留它的造型、结构、标签排版与品牌文字，不要改变它的身份';
+  if (hasRef) return '输入图是参考图：按它复刻构图与视觉风格，画面主体取自参考图本身，允许替换其中的文案与产品信息';
+  return '输入图是我的素材：作为画面主体，必须保留它的造型、结构、标签文字与品牌信息；画面风格按下述要求重新设计';
+}
+
+function buildPrompt(kind: KindDef, r: number, extra: string, hasRef: boolean, hasMat: boolean): string {
+  return [fidelityRule(r), kind.scene, roleRule(hasRef, hasMat), extra.trim(), TAIL]
+    .filter(Boolean).join('，');
+}
+
+/** 报错文案：浏览器的 TypeError 只会说 "Failed to fetch"，
+ *  对用户等于没说。网络类错误统一换成一句人能看懂的话。 */
+function readableError(e: unknown, fallback: string, offline: string): string {
+  const m = e instanceof Error ? e.message : '';
+  if (!m) return fallback;
+  if (/failed to fetch|network|load failed|fetch failed/i.test(m)) return offline;
+  return m;
+}
 
 function naturalSize(src: string): Promise<{ w: number; h: number }> {
   return new Promise((resolve) => {
@@ -69,96 +162,93 @@ function naturalSize(src: string): Promise<{ w: number; h: number }> {
   });
 }
 
-/** 上传的图在本机压到 1280 长边：两张原图 + 拼接板都要塞进云函数 6MB 的请求体 */
+/** 每张压到 1280 长边 / 520KB：最多 4 张 + 拼贴板要塞进云函数 6MB 的请求体 */
 async function readImage(file: File): Promise<Uploaded> {
-  const c = await compressImageForUpload(file, { maxEdge: 1280, maxBytes: 700 * 1024 });
-  return { src: c.dataUrl, w: c.width, h: c.height, name: file.name };
+  const c = await compressImageForUpload(file, { maxEdge: 1280, maxBytes: 520 * 1024 });
+  return {
+    id: `up_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    src: c.dataUrl, w: c.width, h: c.height, name: file.name,
+  };
 }
 
 /**
- * 生成「A 风格 / B 产品」拼接参考板。
- * 这不是给最终画面用的拼贴图，只是发给模型的输入参考：新版云函数走 `images` 真·多图，
- * 万一上游不认多图 / 云函数还是旧版，就用这张板兜底，两张信息都不会丢。
+ * 拼贴参考板：按 [参考…, 素材…] 的同一顺序排成一张图。
+ * 只在「上游不认多图」时作为降级输入，编号与真·多图顺序严格一致，
+ * 否则降级后会变成「把参考图当产品用」这种整张图都错的输出。
  */
-async function buildBoard(styleSrc: string, productSrc: string, lang: string): Promise<string> {
+async function buildBoard(items: { src: string; label: string }[]): Promise<string> {
   const load = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error('decode'));
     img.src = src;
   });
-  const [a, b] = await Promise.all([load(styleSrc), load(productSrc)]);
-  const W = 1024;
-  const H = 576;
-  const PAD = 18;
-  const GAP = 18;
-  const HEAD = 36;
-  const cellW = (W - PAD * 2 - GAP) / 2;
-  const cellH = H - PAD * 2 - HEAD;
+  const imgs = await Promise.all(items.map((it) => load(it.src)));
+  const n = items.length;
+  const cols = n <= 2 ? n : 2;
+  const rows = Math.ceil(n / cols);
+  const W = 1280;
+  const cellW = Math.floor((W - 24 * 2) / cols);
+  const cellH = Math.round(cellW * 0.78);
+  const HEAD = 30;
+  const H = 24 * 2 + rows * cellH + (rows - 1) * 14 + HEAD;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d');
-  if (!ctx) return styleSrc;
+  if (!ctx) return items[0].src;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#e6e6e2';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(PAD, PAD + HEAD, cellW, cellH);
-  ctx.strokeRect(PAD + cellW + GAP, PAD + HEAD, cellW, cellH);
   ctx.fillStyle = '#1b1b1a';
   ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textBaseline = 'top';
-  ctx.fillText(lang === 'en' ? 'A  STYLE REFERENCE' : 'A  风格参考', PAD, PAD + 4);
-  ctx.fillText(lang === 'en' ? 'B  YOUR PRODUCT' : 'B  我的产品', PAD + cellW + GAP, PAD + 4);
-  const fit = (img: HTMLImageElement, x: number) => {
-    const s = Math.min(cellW / Math.max(1, img.naturalWidth), cellH / Math.max(1, img.naturalHeight));
+  ctx.fillText('INPUT IMAGES · 1 → ' + n, 24, 20);
+  ctx.textBaseline = 'alphabetic';
+  imgs.forEach((img, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = 24 + col * (cellW + 14);
+    const y = 24 + HEAD + row * (cellH + 14);
+    ctx.strokeStyle = '#e6e6e2';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, cellW, cellH);
+    const s = Math.min((cellW - 12) / Math.max(1, img.naturalWidth), (cellH - 34) / Math.max(1, img.naturalHeight));
     const w = img.naturalWidth * s;
     const h = img.naturalHeight * s;
-    ctx.drawImage(img, x + (cellW - w) / 2, PAD + HEAD + (cellH - h) / 2, w, h);
-  };
-  fit(a, PAD);
-  fit(b, PAD + cellW + GAP);
-  return c.toDataURL('image/jpeg', 0.86);
+    ctx.drawImage(img, x + (cellW - w) / 2, y + 8 + ((cellH - 34) - h) / 2, w, h);
+    ctx.fillStyle = '#1b1b1a';
+    ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(`${i + 1}  ${items[i].label}`, x + 6, y + cellH - 8);
+  });
+  return c.toDataURL('image/jpeg', 0.85);
 }
 
-/** 复制页必然带两张参考图，「文字输入」档不能出现：
- *  云函数对带图的 gpt2-text 直接返回 400（否则会按文字档扣费却走改图档）。
- *  判断条件用 provider + needsRef，不硬编码 id，日后加档位不会漏。 */
-const REPLICATE_MODELS = OPEN_IMAGE_MODELS.filter((m) => !(m.provider === 'bai' && !m.needsRef));
+/** 「文字输入」档不能出现在这里：带参考图会被云函数判 400（按文字档扣费却走改图档） */
+const RECREATE_MODELS = OPEN_IMAGE_MODELS.filter((m) => !(m.provider === 'bai' && !m.needsRef));
 
-/** 生图档位选择：价格与扣分同源 */
-function ImageModelPicker({ value, onChange, disabled }: {
-  value: ImageTier;
-  onChange: (v: ImageTier) => void;
-  disabled?: boolean;
+/**
+ * B.AI（GPT Image 2）只认 1024×1024 / 1536×1024 / 1024×1536 三种尺寸，
+ * 传 16:9 的 1280×720 会被上游直接拒。这里按方向就近吸附，
+ * 方舟 Seedream 则用它自己那套更宽的尺寸，不做吸附。
+ * 不吸附的后果是：用户付了 GPT Image 2 的钱，却拿到一句「图像生成失败」。
+ */
+function sizeForTier(tier: ImageTier, ratio: { id: string; size: string }): string {
+  if (imageModel(tier).provider !== 'bai') return ratio.size;
+  if (ratio.id === '1:1') return '1024x1024';
+  if (ratio.id === '4:3' || ratio.id === '16:9') return '1536x1024';
+  return '1024x1536';
+}
+
+function ModelPicker({ value, onChange, disabled }: {
+  value: ImageTier; onChange: (v: ImageTier) => void; disabled?: boolean;
 }) {
   const { t } = useLang();
   return <select className="rep-select" value={value} disabled={disabled}
     onChange={(e) => onChange(e.target.value as ImageTier)}>
-    {REPLICATE_MODELS.map((m) => {
-      return <option key={m.id} value={m.id}>
-        {imageLabel(m.id as ImageTier)} · {imageCost(m.id as ImageTier)} {t('积分', 'credits')}
-      </option>;
-    })}
+    {RECREATE_MODELS.map((m) => <option key={m.id} value={m.id}>
+      {imageLabel(m.id as ImageTier)} · {imageCost(m.id as ImageTier)} {t('积分', 'credits')}
+    </option>)}
   </select>;
-}
-
-/** 系统提示词统一由这里拼回：用户改完提示词重新生成时，双图分工规则不能丢。
- *  否则「改提示词」会退化成普通的单图生图，B 的容器形状和文字就保不住了。 */
-function withSystemRules(userText: string): string {
-  return [userText.trim(), DUAL_RULE, TAIL].filter(Boolean).join('，');
-}
-
-function buildPrompt(style: (typeof STYLES)[number], extra: string): string {
-  return withSystemRules([style.hint, extra.trim()].filter(Boolean).join('，'));
-}
-
-/** 卡片与编辑框只展示「风格描述 + 用户补充」，
- *  双图规则和画质后缀属于系统提示词，编辑时自动拼回，不让用户在文本框里看到一长串。 */
-function userPartOf(p: string): string {
-  return p.replace(TAIL, '').replace(DUAL_RULE, '')
-    .replace(/，{2,}/g, '，').replace(/^，+|，+$/g, '').trim();
 }
 
 let seq = 0;
@@ -169,40 +259,79 @@ export default function Replicate() {
   const sub = useSubscription();
   const { setToast, createWorkflowProject, patchWorkflow } = useApp();
 
-  const [ref, setRef] = useState<Uploaded | null>(null);
-  const [product, setProduct] = useState<Uploaded | null>(null);
-  const [dragKey, setDragKey] = useState<DropKind | null>(null);
-  const [prompt, setPrompt] = useState('');
+  const [kind, setKind] = useState<KindDef | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(true);
+
+  const [refs, setRefs] = useState<Uploaded[]>([]);
+  const [mats, setMats] = useState<Uploaded[]>([]);
+  const [dragSlot, setDragSlot] = useState<Slot | null>(null);
+  const [extra, setExtra] = useState('');
   const [tier, setTier] = useState<ImageTier>('flash');
+  const [ratioId, setRatioId] = useState('1:1');
+  const [fidelity, setFidelity] = useState(80);
   const [busy, setBusy] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
 
-  const [items, setItems] = useState<{ id: string; styleId: string; src: string; prompt: string; tier: ImageTier; w: number; h: number }[]>([]);
+  const [items, setItems] = useState<{ id: string; src: string; extra: string; prompt: string; tier: ImageTier; fid: number; w: number; h: number }[]>([]);
   const [regenId, setRegenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftPrompt, setDraftPrompt] = useState('');
+  const [draftExtra, setDraftExtra] = useState('');
   const [draftTier, setDraftTier] = useState<ImageTier>('flash');
 
   const refInput = useRef<HTMLInputElement>(null);
-  const productInput = useRef<HTMLInputElement>(null);
-  const safeTier = resolveTier(tier, sub.isPro);
-  /* 与「设计方案」整批同口径：三张按一张档位的价扣，不分三倍 */
-  const batchCost = imageCost(safeTier);
-  const label = (s: L) => (lang === 'en' ? s.en : s.zh);
-  const ready = !!ref && !!product;
+  const matInput = useRef<HTMLInputElement>(null);
 
-  const pick = async (kind: DropKind, file?: File | null) => {
-    if (!file) return;
-    try {
-      const img = await readImage(file);
-      if (kind === 'ref') setRef(img); else setProduct(img);
-      setItems([]);
-    } catch (e) {
-      const tooLarge = e instanceof Error && e.message === 'TOO_LARGE';
-      setToast(tooLarge
-        ? t('图片超过 30MB，请先压缩或换一张', 'This image is over 30 MB — compress it or pick another one')
-        : t('这张图读不出来，换一张试试', 'That image could not be read'));
+  const safeTier = resolveTier(tier, sub.isPro);
+  /** 与「设计方案」同口径：三张按一张档位的价扣，不收三倍 */
+  const batchCost = imageCost(safeTier);
+  const ratio = RATIOS.find((r) => r.id === ratioId) || RATIOS[0];
+  /** 结果卡与占位卡按所选比例出框，16:9 的封面不会被裁成方图 */
+  const cssRatio = ratio.id.replace(':', ' / ');
+  const total = refs.length + mats.length;
+  const ready = refs.length > 0 && mats.length > 0;
+  const nm = (k: KindDef) => (lang === 'en' ? k.name.en : k.name.zh);
+  const kd = (k: KindDef) => (lang === 'en' ? k.desc.en : k.desc.zh);
+
+  const reset = () => { setItems([]); setEditingId(null); };
+
+  const pickKind = (k: KindDef) => {
+    setKind(k);
+    setRatioId(k.ratio);
+    setPickerOpen(false);
+    reset();
+  };
+
+  const addFiles = async (slot: Slot, files: FileList | null | undefined) => {
+    if (!files || !files.length) return;
+    const room = MAX_IMAGES - refs.length - mats.length;
+    if (room <= 0) {
+      setToast(t(`最多 ${MAX_IMAGES} 张（模型单次能读的上限）`, `Up to ${MAX_IMAGES} images in total`));
+      return;
     }
+    const list = Array.from(files).slice(0, room);
+    const added: Uploaded[] = [];
+    for (const f of list) {
+      try {
+        added.push(await readImage(f));
+      } catch (e) {
+        const tooLarge = e instanceof Error && e.message === 'TOO_LARGE';
+        setToast(tooLarge
+          ? t('图片超过 30MB，请先压缩或换一张', 'This image is over 30 MB — compress it or pick another one')
+          : t('这张图读不出来，换一张试试', 'That image could not be read'));
+      }
+    }
+    if (!added.length) return;
+    if (slot === 'ref') setRefs((p) => [...p, ...added]); else setMats((p) => [...p, ...added]);
+    reset();
+    if (files.length > list.length) {
+      setToast(t(`只加了前 ${list.length} 张，合计上限 ${MAX_IMAGES} 张`, `Added ${list.length} — ${MAX_IMAGES} images max`));
+    }
+  };
+
+  const removeAt = (slot: Slot, id: string) => {
+    if (slot === 'ref') setRefs((p) => p.filter((x) => x.id !== id));
+    else setMats((p) => p.filter((x) => x.id !== id));
+    reset();
   };
 
   const ensureQuota = (need: number) => {
@@ -222,16 +351,20 @@ export default function Replicate() {
     }
   };
 
-  /** 两张图一起送进模型：真·多图 + 拼接板兜底 */
+  /** 真·多图 + 拼贴板兜底，顺序都是「参考… → 素材…」 */
   const imageInputs = async () => {
-    if (!ref || !product) throw new Error(t('请先上传参考图和产品图', 'Upload both images first'));
-    const board = await buildBoard(ref.src, product.src, lang);
-    return { referenceImage: board, referenceImages: [ref.src, product.src] };
+    const all = [
+      ...refs.map((r, i) => ({ src: r.src, label: `${t('参考', 'REF')} ${i + 1}` })),
+      ...mats.map((m, i) => ({ src: m.src, label: `${t('素材', 'ASSET')} ${i + 1}` })),
+    ];
+    const board = all.length > 1 ? await buildBoard(all) : all[0].src;
+    return { referenceImage: board, referenceImages: all.map((a) => a.src) };
   };
 
-  const generate = async () => {
+  const generateAll = async () => {
+    if (!kind) { setPickerOpen(true); return; }
     if (!ready) {
-      setToast(t('先上传风格参考图和自己的产品图', 'Upload a style reference and your product photo first'));
+      setToast(t('参考图和素材图各至少要 1 张', 'Add at least one reference and one asset image'));
       return;
     }
     if (!ensureQuota(batchCost)) return;
@@ -240,13 +373,13 @@ export default function Replicate() {
     try {
       const uid = auth.user?.id;
       const inputs = await imageInputs();
-      const settled = await Promise.allSettled(STYLES.map(async (st) => {
-        const p = buildPrompt(st, prompt);
-        const src = await callImage(p, { tier: safeTier, ...inputs, uid });
+      const prompt = buildPrompt(kind, fidelity, extra, refs.length > 0, mats.length > 0);
+      const settled = await Promise.allSettled(Array.from({ length: BATCH }, async () => {
+        const src = await callImage(prompt, { tier: safeTier, size: sizeForTier(safeTier, ratio), ...inputs, uid });
         const size = await naturalSize(src);
-        return { id: `rep_${Date.now()}_${seq++}`, styleId: st.id, src, prompt: p, tier: safeTier, w: size.w, h: size.h };
+        return { id: `rec_${Date.now()}_${seq++}`, src, extra, prompt, tier: safeTier, fid: fidelity, w: size.w, h: size.h };
       }));
-      const ok = settled.filter((r): r is PromiseFulfilledResult<NonNullable<(typeof items)[number]>> => r.status === 'fulfilled').map((r) => r.value);
+      const ok = settled.filter((r): r is PromiseFulfilledResult<(typeof items)[number]> => r.status === 'fulfilled').map((r) => r.value);
       if (!ok.length) {
         const fail = settled.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
         throw new Error(fail?.reason?.message || t('生成失败，请稍后重试', 'Generation failed, try again'));
@@ -254,40 +387,42 @@ export default function Replicate() {
       setItems(ok);
       await charge(batchCost);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : t('生成失败', 'Generation failed'));
+      setToast(readableError(e, t('生成失败', 'Generation failed'), t('网络不通，检查网络后再试一次', 'Network request failed — check your connection and try again')));
     } finally {
       setBusy(false);
     }
   };
 
-  const regenerate = async (id: string, nextPrompt: string, nextTier: ImageTier) => {
+  const regenerateOne = async (id: string, nextExtra: string, nextTier: ImageTier) => {
     const item = items.find((x) => x.id === id);
-    if (!item || !ref || !product) return;
-    const style = STYLES.find((s) => s.id === item.styleId) || STYLES[0];
+    if (!item || !kind || !ready) return;
     const cost = imageCost(resolveTier(nextTier, sub.isPro));
     if (!ensureQuota(cost)) return;
     setRegenId(id);
     try {
       const uid = auth.user?.id;
       const inputs = await imageInputs();
-      // nextPrompt 是「用户可见部分」（风格描述 + 补充要求），系统规则在这里补回，
-      // 编辑过提示词也依然按 A 给风格 / B 给产品的双图口径出图。
-      const p = withSystemRules(nextPrompt.trim() || userPartOf(item.prompt) || style.hint);
-      const src = await callImage(p, { tier: resolveTier(nextTier, sub.isPro), ...inputs, uid });
+      // 系统规则（复刻度 / 场景 / 两栏职责）在每次重生成时都重新拼回，
+      // 否则「改提示词」会退化成普通的单图生图，素材图的文字就保不住了。
+      const p = buildPrompt(kind, fidelity, nextExtra, refs.length > 0, mats.length > 0);
+      const nextSafe = resolveTier(nextTier, sub.isPro);
+      const src = await callImage(p, { tier: nextSafe, size: sizeForTier(nextSafe, ratio), ...inputs, uid });
       const size = await naturalSize(src);
-      setItems((prev) => prev.map((x) => (x.id === id ? { ...x, src, prompt: p, tier: resolveTier(nextTier, sub.isPro), w: size.w, h: size.h } : x)));
+      setItems((prev) => prev.map((x) => (x.id === id
+        ? { ...x, src, extra: nextExtra, prompt: p, tier: nextSafe, fid: fidelity, w: size.w, h: size.h }
+        : x)));
       setEditingId(null);
       await charge(cost);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : t('重新生成失败', 'Regeneration failed'));
+      setToast(readableError(e, t('重新生成失败', 'Regeneration failed'), t('网络不通，检查网络后再试一次', 'Network request failed — check your connection and try again')));
     } finally {
       setRegenId(null);
     }
   };
 
-  /** 把这张图带走：建项目 → 两张参考图与选中方案都写进 concepts 阶段 → 进流程 */
+  /** 把这张图带走：建项目 → 所有参考图与选中方案都写进草稿，进流程 */
   const useResult = (item: (typeof items)[number]) => {
-    if (!ref || !product) return;
+    if (!kind) return;
     if (!auth.user) { setLoginOpen(true); return; }
     const toRef = (img: Uploaded, role: ReferenceRole, note: string): ReferenceImage => ({
       id: `ref_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
@@ -311,16 +446,16 @@ export default function Replicate() {
       at: Date.now(),
       naturalW: item.w,
       naturalH: item.h,
-      hint: STYLES.find((s) => s.id === item.styleId)?.hint || '',
+      hint: kind.scene,
     };
     const project = createWorkflowProject({
       mode: 'referenceStyle',
       productInfo: emptyProductInfo(),
       referenceImages: [
-        toRef(ref, 'packaging', t('风格参考图', 'Style reference')),
-        toRef(product, 'product', t('我的产品图', 'Your product')),
+        ...refs.map((r, i) => toRef(r, kind.role === 'packaging' ? 'packaging' : 'competitor', t('风格参考', 'Style reference') + ` ${i + 1}`)),
+        ...mats.map((m, i) => toRef(m, kind.role, t('我的素材', 'My asset') + ` ${i + 1}`)),
       ],
-      name: t('参考复刻', 'Reference replication'),
+      name: t(`${nm(kind)}复刻`, `${nm(kind)} recreation`),
     });
     patchWorkflow(project.id, {
       stage: 'concepts',
@@ -331,116 +466,146 @@ export default function Replicate() {
     go('/new');
   };
 
-  const renderDrop = (kind: DropKind) => {
-    const isRef = kind === 'ref';
-    const img = isRef ? ref : product;
-    const input = isRef ? refInput : productInput;
-    const title = isRef ? t('A · 风格参考图', 'A · Style reference') : t('B · 我的产品图', 'B · Your product');
-    const short = isRef ? t('拖入喜欢的包装', 'Drop a package you like') : t('拖入自己的产品', 'Drop your product');
-    return <div className="rep-drop-wrap" key={kind}>
-      <span className="rep-drop-label">{title}</span>
-      <div
-        className={`rep-drop ${dragKey === kind ? 'over' : ''} ${img ? 'has' : ''}`}
-        onClick={() => input.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragKey(kind); }}
-        onDragLeave={() => setDragKey(null)}
-        onDrop={(e) => { e.preventDefault(); setDragKey(null); void pick(kind, e.dataTransfer.files?.[0]); }}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') input.current?.click(); }}
-      >
-        {img
-          ? <img src={img.src} alt={img.name} />
-          : <>
-            <span className="rep-drop-ic"><Icon name="image" size={18} /></span>
-            <b>{short}</b>
-            <span className="rep-drop-hint">{t('或点击选择 · 本机压缩，不传第三方', 'Or click · resized locally')}</span>
-          </>}
-        <input ref={input} type="file" accept="image/*" hidden
-          onChange={(e) => { void pick(kind, e.target.files?.[0]); e.currentTarget.value = ''; }} />
+  const renderSlot = (slot: Slot) => {
+    const list = slot === 'ref' ? refs : mats;
+    const input = slot === 'ref' ? refInput : matInput;
+    const title = slot === 'ref' ? t('参考图', 'Reference images') : t('我的素材图', 'My assets');
+    const hint = slot === 'ref'
+      ? t('想要的那种感觉 · 配色 / 版式 / 气质', 'The look you want — colour, layout, mood')
+      : t('必须出现的主体 · 产品 / 包装 / 人物', 'What must appear — product, package, person');
+    const empty = slot === 'ref' ? t('拖入参考图', 'Drop references') : t('拖入素材图', 'Drop your assets');
+    return <div className="rep-slot" key={slot}>
+      <div className="rep-slot-head">
+        <span className="rep-slot-title">{title}</span>
+        <span className="rep-slot-n">{list.length}</span>
+      </div>
+      <p className="rep-slot-hint">{hint}</p>
+      <div className={`rep-thumbs ${list.length ? 'has' : ''}`}>
+        {list.map((img) => <div className="rep-thumb" key={img.id}>
+          <img src={img.src} alt={img.name} />
+          <button className="rep-thumb-x" onClick={() => removeAt(slot, img.id)} title={t('移除', 'Remove')} aria-label={t('移除', 'Remove')}>
+            <Icon name="close" size={11} />
+          </button>
+        </div>)}
+        {total < MAX_IMAGES && <button
+          className={`rep-add ${dragSlot === slot ? 'over' : ''}`}
+          onClick={() => input.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragSlot(slot); }}
+          onDragLeave={() => setDragSlot(null)}
+          onDrop={(e) => { e.preventDefault(); setDragSlot(null); void addFiles(slot, e.dataTransfer.files); }}
+        >
+          <Icon name="plus" size={16} />
+          <b>{empty}</b>
+          <span>{t('可多张 · 本机压缩', 'Multiple · resized locally')}</span>
+        </button>}
+        <input ref={input} type="file" accept="image/*" multiple hidden
+          onChange={(e) => { void addFiles(slot, e.target.files); e.currentTarget.value = ''; }} />
       </div>
     </div>;
   };
 
   return <div className="page rep-page">
     <div className="rep-head">
-      <div className="rep-kicker">REPLICATE</div>
-      <h1>{t('把喜欢的风格套到你的产品上', 'Restyle your product from a reference')}</h1>
-      <p>{t('分别上传一张喜欢的包装（风格参考）和你自己的产品图。AI 会保留你产品的形状与文字，把参考图的配色、字体气质和构图套过来，一次给出三种改动幅度的方案。',
-        'Upload a package you like as the style reference, plus a photo of your own product. We keep your product shape and copy, then apply the reference\'s colours, type and composition in three takes.')}</p>
+      <div className="rep-kicker">RECREATE</div>
+      <h1>{kind ? t(`复刻 · ${nm(kind)}`, `Recreate · ${nm(kind)}`) : t('把喜欢的风格复刻成自己的作品', 'Recreate a look as your own work')}</h1>
+      <p>{kind
+        ? t('上传参考图与自己的素材图，定好复刻度、尺寸和模型，一次给你三张。挑一张进编辑器，或者改完提示词再来一组。',
+          'Add references and your own assets, set how closely to follow them plus size and model, and get three takes. Keep one in the editor, or adjust the prompt and run again.')
+        : t('先选要做什么：主图、详情页、海报、视频封面、包装、周边。每种类型的画面规则和默认尺寸不同，选好以后还能改。',
+          'Pick a format first — main image, detail page, poster, video cover, packaging or merch. Each has its own layout rules and default size, and you can change them later.')}</p>
+      {kind && <button className="rep-switch" onClick={() => setPickerOpen(true)}>
+        <Icon name="grid" size={13} />{t('换个类型', 'Change format')}
+      </button>}
     </div>
 
-    <div className="rep-grid">
+    {kind && <div className="rep-grid">
       {/* 左：设置 */}
       <aside className="rep-setup">
-        <div className="rep-drops">
-          {renderDrop('ref')}
-          {renderDrop('product')}
+        <div className="rep-slots">
+          {renderSlot('ref')}
+          {renderSlot('mat')}
+        </div>
+        <p className="rep-cap">{t(`已选 ${total} / ${MAX_IMAGES} 张 · 模型单次最多读 ${MAX_IMAGES} 张`, `${total} / ${MAX_IMAGES} images · models read up to ${MAX_IMAGES}`)}</p>
+
+        <label className="rep-label" htmlFor="rep-extra">{t('补充提示词（可选）', 'Extra instructions (optional)')}</label>
+        <textarea id="rep-extra" className="rep-textarea" rows={3} value={extra}
+          onChange={(e) => setExtra(e.target.value)}
+          placeholder={t('例如：主色改成深绿、文案换成「冷萃 250ml」、背景加一块亚麻布',
+            'e.g. deep green as the base colour, copy reads “Cold Brew 250ml”, add linen in the background')} />
+
+        <label className="rep-label" htmlFor="rep-fid">
+          {t('复刻度', 'How closely to follow')} <b className="rep-fid-val">{fidelity}%</b>
+        </label>
+        <input id="rep-fid" className="rep-range" type="range" min={20} max={100} step={5}
+          value={fidelity} onChange={(e) => setFidelity(Number(e.target.value))} />
+        <div className="rep-range-ends">
+          <span>{t('只借个感觉', 'Loose inspiration')}</span>
+          <span>{t('一比一照做', 'One to one')}</span>
         </div>
 
-        <label className="rep-label" htmlFor="rep-prompt">{t('补充要求（可选）', 'Extra instructions (optional)')}</label>
-        <textarea id="rep-prompt" className="rep-textarea" rows={3} value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder={t('例如：换成中文文案、主色改成深绿、加上「净含量 250g」',
-            'e.g. switch copy to English, change the base colour to deep green, add “Net 250g”')} />
-
         <label className="rep-label">{t('生图模型', 'Image model')}</label>
-        <ImageModelPicker value={tier} onChange={(v) => setTier(v)} disabled={busy} />
+        <ModelPicker value={tier} onChange={setTier} disabled={busy} />
+
+        <label className="rep-label">{t('尺寸', 'Size')}</label>
+        <div className="rep-ratios">
+          {RATIOS.map((r) => <button key={r.id} className={`rep-ratio ${r.id === ratioId ? 'on' : ''}`}
+            onClick={() => setRatioId(r.id)} disabled={busy}>{r.label}</button>)}
+        </div>
 
         <div className="rep-cost">
-          <span>{t(`本次 ${STYLES.length} 张`, `${STYLES.length} images`)}</span>
+          <span>{t(`本次 ${BATCH} 张 · ${ratio.label}`, `${BATCH} images · ${ratio.label}`)}</span>
           <b>{batchCost} {t('积分', 'credits')}</b>
         </div>
 
-        <button className="rep-run" onClick={() => void generate()} disabled={busy || !ready}>
-          {busy ? t('正在生成…', 'Generating…') : t('开始复制', 'Replicate')}
+        <button className="rep-run" onClick={() => void generateAll()} disabled={busy || !ready}>
+          {busy ? t('正在生成…', 'Generating…') : t('开始复刻', 'Recreate')}
         </button>
-        {!ready && <p className="rep-note">{t('两张图都上传后才能开始复制。', 'Both images are required to start.')}</p>}
+        {!ready && <p className="rep-note">{t('参考图和素材图各上传至少 1 张后才能开始。', 'Add at least one reference and one asset to start.')}</p>}
         {ready && !auth.user && <p className="rep-note">{t('未登录会先弹登录，登录后积分才开始计。', 'You will be asked to sign in first.')}</p>}
       </aside>
 
       {/* 右：结果 */}
       <section className="rep-results">
         {items.length === 0 && <div className="rep-placeholder">
-          {STYLES.map((st) => <div className="rep-ph" key={st.id}>
-            <span>{label(st.label)}</span>
+          {Array.from({ length: BATCH }, (_, i) => <div className="rep-ph" key={i} style={{ '--rep-ar': cssRatio } as React.CSSProperties}>
+            <span>{t('方案', 'Take')} {String.fromCharCode(65 + i)}</span>
             <em>{busy ? t('生成中…', 'Generating…') : t('等待生成', 'Waiting')}</em>
           </div>)}
         </div>}
 
         {items.length > 0 && <div className="rep-cards">
-          {items.map((it) => {
-            const st = STYLES.find((s) => s.id === it.styleId) || STYLES[0];
+          {items.map((it, i) => {
             const isEditing = editingId === it.id;
             return <article className="rep-card" key={it.id}>
-              <div className="rep-card-img">
-                <img src={it.src} alt={label(st.label)} />
-                <span className="rep-tag">{label(st.label)}</span>
+              <div className="rep-card-img" style={{ '--rep-ar': cssRatio } as React.CSSProperties}>
+                <img src={it.src} alt={`${nm(kind)} ${i + 1}`} />
+                <span className="rep-tag">{t('方案', 'Take')} {String.fromCharCode(65 + i)}</span>
                 {regenId === it.id && <div className="rep-loading"><i />{t('重新生成中…', 'Regenerating…')}</div>}
               </div>
               <div className="rep-card-body">
                 <div className="rep-card-meta">
                   <span>{imageLabel(it.tier)}</span>
                   <span>{it.w}×{it.h}</span>
+                  <span>{it.fid}%</span>
                 </div>
-                {!isEditing && <p className="rep-card-prompt">{userPartOf(it.prompt)}</p>}
+                <p className="rep-card-prompt">{it.extra || t('按参考图与素材图复刻', 'Recreated from your images')}</p>
 
                 {isEditing && <div className="rep-edit">
-                  <textarea className="rep-textarea" rows={3} value={draftPrompt} onChange={(e) => setDraftPrompt(e.target.value)} />
-                  <ImageModelPicker value={draftTier} onChange={(v) => setDraftTier(v)} />
+                  <textarea className="rep-textarea" rows={3} value={draftExtra} onChange={(e) => setDraftExtra(e.target.value)}
+                    placeholder={t('补充提示词', 'Extra instructions')} />
+                  <ModelPicker value={draftTier} onChange={setDraftTier} />
                   <div className="rep-edit-actions">
                     <button onClick={() => setEditingId(null)}>{t('取消', 'Cancel')}</button>
-                    <button className="on" onClick={() => void regenerate(it.id, draftPrompt, draftTier)} disabled={regenId === it.id}>
-                      {t('用这个重新生成', 'Regenerate')}
-                    </button>
+                    <button className="on" onClick={() => void regenerateOne(it.id, draftExtra, draftTier)}
+                      disabled={regenId === it.id}>{t('用这个重新生成', 'Regenerate')}</button>
                   </div>
                 </div>}
 
                 {!isEditing && <div className="rep-card-actions">
-                  <button onClick={() => void regenerate(it.id, userPartOf(it.prompt), it.tier)} disabled={regenId === it.id}>
+                  <button onClick={() => void regenerateOne(it.id, it.extra, it.tier)} disabled={regenId === it.id}>
                     <Icon name="refresh" size={13} />{t('重新生成', 'Regenerate')}
                   </button>
-                  <button onClick={() => { setEditingId(it.id); setDraftPrompt(userPartOf(it.prompt)); setDraftTier(it.tier); }}>
+                  <button onClick={() => { setEditingId(it.id); setDraftExtra(it.extra); setDraftTier(it.tier); }}>
                     <Icon name="edit" size={13} />{t('改提示词', 'Edit prompt')}
                   </button>
                   <button className="primary" onClick={() => useResult(it)}>
@@ -453,12 +618,36 @@ export default function Replicate() {
         </div>}
 
         {items.length > 0 && <div className="rep-foot">
-          <button onClick={() => void generate()} disabled={busy}>
+          <button onClick={() => void generateAll()} disabled={busy}>
             <Icon name="refresh" size={13} />{t(`三张全部重来（${batchCost} 积分）`, `Regenerate all three (${batchCost} credits)`)}
           </button>
         </div>}
       </section>
-    </div>
+    </div>}
+
+    {/* 类型弹窗：第一次进来必选；已有类型时可以从「换个类型」再打开 */}
+    {pickerOpen && <div className="rep-modal" role="dialog" aria-modal="true" aria-label={t('选择复刻类型', 'Choose a format')}>
+      <div className="rep-modal-box">
+        <div className="rep-modal-head">
+          <div>
+            <h2>{t('要复刻成什么？', 'What are we making?')}</h2>
+            <p>{t('不同类型对应不同的画面规则与默认尺寸，选好之后都可以再调整。',
+              'Each format has its own layout rules and default size — everything stays adjustable.')}</p>
+          </div>
+          {kind && <button className="rep-modal-x" onClick={() => setPickerOpen(false)} aria-label={t('关闭', 'Close')}>
+            <Icon name="close" size={15} />
+          </button>}
+        </div>
+        <div className="rep-kinds">
+          {KINDS.map((k) => <button key={k.id} className={`rep-kind ${kind?.id === k.id ? 'on' : ''}`} onClick={() => pickKind(k)}>
+            <span className="rep-kind-ic"><Icon name={k.icon} size={17} /></span>
+            <b>{nm(k)}</b>
+            <em>{kd(k)}</em>
+            <span className="rep-kind-ratio">{RATIOS.find((r) => r.id === k.ratio)?.label}</span>
+          </button>)}
+        </div>
+      </div>
+    </div>}
 
     <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
   </div>;
