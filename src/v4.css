@@ -741,24 +741,43 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
   .v4-nav-item { font-size: 12px; }
 }
 
-/* 汉堡按钮：默认隐藏（桌面端），手机端显示 */
-.v4-burger { display: none; background: none; border: none; cursor: pointer; padding: 6px; }
+/* 汉堡按钮：桌面隐藏；≤860px 统一走抽屉。
+   以前只有 ≤640px 用抽屉，641–860 那段仍是四个入口挤在中间一行，
+   既放不下桌面新增的「新建设计 / 项目 / 复制」，英文长标签也容易溢出。 */
+.v4-burger { display: none; background: none; border: none; cursor: pointer; padding: 6px; color: var(--v4-ink); }
 .v4-mobile-nav { display: none; }
 
-@media (max-width: 640px) {
+@media (max-width: 860px) {
   .v4-burger { display: inline-flex; }
   .v4-nav-center { display: none; }
+  /* 中间那列被隐藏后，网格只用在流内的「品牌/汉堡」与「右侧工具」两列 */
+  .v4-nav-inner { grid-template-columns: 1fr auto; }
   .v4-mobile-nav {
-    display: flex; flex-direction: column; position: fixed; top: var(--v4-nav-h, 64px); left: 0; right: 0;
-    background: #fff; border-bottom: 1px solid #e5e5e5; box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-    padding: 8px 16px; z-index: 99;
+    display: flex; flex-direction: column;
+    position: fixed; top: var(--v4-nav-h, 64px); left: 0; right: 0;
+    /* 矮屏（iPhone SE 一类）也要能滚到最下面一项，并避开底部安全区 */
+    max-height: calc(100dvh - var(--v4-nav-h, 64px));
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    background: var(--v4-paper);
+    border-bottom: 1px solid var(--v4-line);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    padding: 8px 16px calc(12px + env(safe-area-inset-bottom));
+    z-index: 99;
+  }
+  .v4-mobile-nav-label {
+    padding: 12px 8px 4px;
+    font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--v4-ink-3);
   }
   .v4-mobile-nav-item {
-    padding: 12px 8px; text-align: left; background: none; border: none;
-    font-size: 15px; cursor: pointer; border-bottom: 1px solid #f0f0f0;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; padding: 12px 8px; text-align: left;
+    background: none; border: none; border-bottom: 1px solid var(--v4-line);
+    font: inherit; font-size: 15px; color: var(--v4-ink); cursor: pointer;
   }
   .v4-mobile-nav-item:last-child { border-bottom: none; }
-  .v4-mobile-nav-item.active { color: #2f5d4a; font-weight: 600; }
+  .v4-mobile-nav-item.active { color: var(--v4-orange); font-weight: 600; }
+  .v4-mobile-nav-count { font-style: normal; font-size: 12px; font-weight: 400; color: var(--v4-ink-3); }
 }
 img, svg, video, canvas { max-width: 100%; }
 
@@ -792,11 +811,11 @@ img, svg, video, canvas { max-width: 100%; }
 /* <=384px（iPhone SE / mini 一档）：导航里让出字标位置，优先保证
    三个主入口和三个工具按钮都点得到；首页仍以大字标呈现品牌。 */
 @media (max-width: 384px) {
-  /* 字标让位后网格只剩两个子元素，必须同步改成两列，
-     否则三入口会掉到第一列、工具区掉到第二列，重叠在一起。 */
-  .v4-nav-brand { display: none; }
+  /* 极窄屏让字标退场，但汉堡按钮必须留下：
+     以前整块 .v4-nav-brand 被 display:none，等于把唯一的导航入口也一起藏了。 */
+  .v4-nav-brand .v4-wordmark { display: none; }
+  .v4-nav-brand { display: flex; }
   .v4-nav-inner { grid-template-columns: 1fr auto; }
-  .v4-nav-center { justify-self: center; }
 }
 
 /* 「推荐」角标跟着 V4 的方形语言：不再用绿色药丸，改成实底小方块 */
@@ -3606,17 +3625,34 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 .sd-sub-item.on { color: var(--v4-orange); }
 .sd-sub-item em { font-style: normal; font-size: 10.5px; opacity: 0.75; }
 
-/* ---- 折叠：宽度与正文留白一起过渡，别「瞬间跳一格」 ---- */
+/* ---- 折叠：宽度与正文留白一起过渡，别「瞬间跳一格」 ----
+   过渡只挂在 .app.has-side：折叠时 has-side 一直在，正文留白跟着侧栏宽度
+   平滑变化。不能挂到 .app 本身——切到 Luna / 编辑器时 has-side 被摘掉，
+   留白从 244px 过渡到 0 会让 Luna 自带的侧栏横向滑 0.3s，反而像整页在晃；
+   那类切换交给上面的淡入，位置一帧到位。 */
 .sd-nav { transition: width 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), padding 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }
 @media (min-width: 861px) {
   .app.has-side { transition: padding-left 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }
 }
 
-/* ---- 导航页切换：往下走从上方滑下来，往上走从下方顶上来 ---- */
-@keyframes navInDown { from { transform: translateY(-5vh); opacity: 0.45; } to { transform: none; opacity: 1; } }
-@keyframes navInUp { from { transform: translateY(5vh); opacity: 0.45; } to { transform: none; opacity: 1; } }
-.main.nav-in-down { animation: navInDown 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
-.main.nav-in-up { animation: navInUp 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+/* ---- 导航页切换：保留上下方向感，但不再让整页弹一下 ----
+   旧版给 .main 加 translateY(±5vh) + opacity .45，整块页面（含 Luna 的
+   贴底输入栏、侧栏）一起上下弹；而 transform 会让 .main 成为 fixed 元素的
+   包含块，手机端 Luna 抽屉在动画期间会相对 .main 定位而错位。
+   现在：位移 8px / 0.26s；整屏工作区与手机端只做淡入。 */
+@keyframes navInDown { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes navInUp { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes navFade { from { opacity: 0; } to { opacity: 1; } }
+.main.nav-in-down { animation: navInDown 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.main.nav-in-up { animation: navInUp 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+/* Luna / 编辑器：内部有 fixed 抽屉、贴底输入栏，只淡入不位移 */
+.app.is-fullbleed .main.nav-in-down,
+.app.is-fullbleed .main.nav-in-up { animation: navFade 0.2s ease-out both; }
+/* 手机端：抽屉、顶栏都是 fixed，同样只淡入；小屏 5vh 的位移尤其晃眼 */
+@media (max-width: 860px) {
+  .app .main.nav-in-down,
+  .app .main.nav-in-up { animation: navFade 0.2s ease-out both; }
+}
 @media (prefers-reduced-motion: reduce) {
   .main.nav-in-down, .main.nav-in-up { animation: none !important; }
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from './cloud/auth';
 import { useSubscription } from './cloud/subscription';
 import { useProfile } from './cloud/profile';
+import { useApp } from './store';
 import { useLang } from './i18n';
 import { applyTheme, readTheme, saveTheme, type Theme } from './theme';
 
@@ -10,7 +11,10 @@ export function useHash() {
   useEffect(() => { const h = () => setHash(window.location.hash.replace(/^#/, '') || '/'); window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h); }, []);
   return hash;
 }
-export const go = (path: string) => { window.location.hash = path.startsWith('/') ? path : `/${path}`; window.scrollTo({ top: 0, behavior: 'smooth' }); };
+/* 切换路由时立刻归零，不做平滑滚动：smooth 动画会和 App 里 [hash] 的
+   即时归零、以及 Luna 页的 body overflow:hidden 抢滚动位置，中途会看到
+   页面「抽一下」。方向感交给页面淡入过渡，不交给滚动条。 */
+export const go = (path: string) => { window.location.hash = path.startsWith('/') ? path : `/${path}`; window.scrollTo(0, 0); };
 
 export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?: () => void }) {
   const { t } = useLang();
@@ -26,7 +30,8 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
  *  顶级导航不允许再出现重复的「登录」「订阅」按钮。 */
 const NAV_ITEMS = [
   { zh: '开始', en: 'Start', enShort: 'Start', path: '/' },
-  { zh: 'Luna', en: 'Luna', enShort: 'Luna', path: '/luna' },
+  /* 与桌面左栏保持同名；窄屏用短标签，避免 4 个入口挤成省略号 */
+  { zh: 'Luna Ai', en: 'Luna AI', enShort: 'Luna', path: '/luna' },
   { zh: '工作台', en: 'Workspace', enShort: 'Work', path: '/workspace' },
   { zh: '审美市场', en: 'Aesthetic Index', enShort: 'Index', path: '/market' },
 ];
@@ -36,6 +41,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   const auth = useAuth();
   const sub = useSubscription();
   const profile = useProfile();
+  const { s } = useApp();
   const { lang, setLang, t } = useLang();
   const [open, setOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -51,6 +57,9 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
   }, [open]);
+
+  // 抽屉是固定定位的，从侧栏或页面内部改 hash 时也要收起，别让它盖在下一页上
+  useEffect(() => { setMobileNavOpen(false); }, [hash]);
 
   const toggleTheme = () => {
     const next: Theme = theme === 'dark' ? 'light' : 'dark';
@@ -86,6 +95,17 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   ];
   const isAdmin = auth.user?.email === 'solyoungwork@gmail.com';
 
+  /* 桌面左栏「新建设计 / 项目 / 复制」的移动端对应入口。
+     手机没有常驻左栏，全部收进汉堡抽屉，功能不缺项。 */
+  const mobileWork: { label: string; path: string; on: boolean; count?: number }[] = [
+    { label: t('新建设计', 'New design'), path: '/new?fresh=1', on: path.startsWith('/new') },
+    {
+      label: t('项目', 'Projects'), path: '/workspace?tab=all',
+      on: path === '/workspace' || path === '/projects', count: s.projects.length,
+    },
+    { label: t('复制', 'Replicate'), path: '/replicate', on: path === '/replicate' },
+  ];
+
   return <header className="v4-nav">
     <div className="v4-nav-inner">
       <div className="v4-nav-brand">
@@ -109,9 +129,17 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
 
       {mobileNavOpen && (
         <div className="v4-mobile-nav" ref={mobileNavRef}>
+          <div className="v4-mobile-nav-label">{t('导航', 'Navigate')}</div>
           {NAV_ITEMS.map((n) => (
             <button key={n.path} className={`v4-mobile-nav-item ${active(n.path) ? 'active' : ''}`} onClick={() => { setMobileNavOpen(false); go(n.path); }}>
-              {lang === 'en' ? n.en : n.zh}
+              <span>{lang === 'en' ? n.en : n.zh}</span>
+            </button>
+          ))}
+          <div className="v4-mobile-nav-label">{t('工作台', 'Workspace')}</div>
+          {mobileWork.map((n) => (
+            <button key={n.path} className={`v4-mobile-nav-item ${n.on ? 'active' : ''}`} onClick={() => { setMobileNavOpen(false); go(n.path); }}>
+              <span>{n.label}</span>
+              {n.count !== undefined && <em className="v4-mobile-nav-count">{n.count}</em>}
             </button>
           ))}
         </div>

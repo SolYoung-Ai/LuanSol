@@ -84,6 +84,23 @@ export default function App() {
   }, [hash]);
 
   const path = hash.split('?')[0];
+  // 自带整屏工作区的页面：内部有 fixed 抽屉与贴底输入栏。
+  // 给 .main 加 transform 会把 .main 变成这些 fixed 元素的包含块，动画期间抽屉会错位，
+  // 所以这两页的切换过渡只允许淡入，不允许位移。
+  const isFullBleed = path.startsWith('/luna') || path.startsWith('/studio');
+
+  /* 预取主入口页面的 chunk。懒加载 fallback 是一整屏高的字标，
+     首次点进 Luna 时「loader → 真实页面」的高度变化也会被看成整页跳一下。
+     空闲后提前取回，切换时直接渲染真实页面。 */
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void import('./pages/luna');
+      void import('./pages/start');
+      void import('./pages/workspace');
+      void import('./pages/replicate');
+    }, 1400);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   /* 主入口按固定顺序排列，切换时按「从上往下 / 从下往上」决定滑入方向 */
   const prevNav = useRef<number>(-1);
@@ -106,7 +123,7 @@ export default function App() {
     main.classList.remove('nav-in-down', 'nav-in-up');
     void main.offsetWidth;
     main.classList.add(cls);
-    const timer = window.setTimeout(() => main.classList.remove(cls), 420);
+    const timer = window.setTimeout(() => main.classList.remove(cls), 320);
     return () => window.clearTimeout(timer);
     // order 只用于判定顺序，不参与依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,7 +194,7 @@ export default function App() {
     <CloudSyncProvider>
       <ProfileProvider>
         <ChatStoreProvider>
-          <div className={`app ${path.startsWith('/luna') ? '' : path.startsWith('/studio') ? 'no-side' : 'has-side'}`}>
+          <div className={`app ${path.startsWith('/luna') ? '' : path.startsWith('/studio') ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''}`}>
             <Nav onLogin={requestLogin} />
             {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
                 其中 /studio 保留顶部条，避免工具栏页连导航都没有 */}
