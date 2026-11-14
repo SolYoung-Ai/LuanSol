@@ -3790,3 +3790,93 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   .app.has-side:not(.is-luna) .main > .global-back { align-self: flex-start; }
   .app.has-side:not(.is-luna) .main > .footer-min { margin-top: auto; }
 }
+
+/* ============================================================
+   15. 去掉暖底：整站改成白/中性灰
+   ------------------------------------------------------------
+   上一版为了让玻璃卡有东西可折，在 .app::before 铺了三块橙色光斑；
+   结果整页偏暖（Luna 尤其明显，四周像蒙了一层橘）。
+   左栏已经改成实心白，不再需要「背后有颜色」这个前提，
+   所以直接把光斑去掉，底色换成中性浅灰，卡片与 Luna 都是白底。
+   ============================================================ */
+.app::before { background: none; }
+
+@media (min-width: 861px) {
+  /* 中性浅灰：比纯白暗一档，白卡才有一点点边界，但不带任何暖调 */
+  body { background-color: #f6f6f5; }
+  /* Luna 是整屏工作区，不要灰底卡在中间——整片白 */
+  .app.is-luna { background-color: #fff; }
+}
+
+@media (min-width: 861px) {
+  :root[data-theme="dark"] body { background-color: #0a0a0a; }
+  [data-theme="dark"] .app.is-luna { background-color: #0f0f0f; }
+}
+
+/* ============================================================
+   15. 去掉暖底：整站改成白/中性灰
+   ------------------------------------------------------------
+   上一版为了让玻璃卡有东西可折，在 .app::before 铺了三块橙色光斑；
+   结果整页偏暖（Luna 尤其明显，四周像蒙了一层橘）。
+   左栏已经改成实心白，不再需要「背后有颜色」这个前提，
+   所以直接把光斑去掉，底色换成中性浅灰，卡片与 Luna 都是白底。
+   ============================================================ */
+.app::before { background: none; }
+
+@media (min-width: 861px) {
+  /* 中性浅灰：比纯白暗一档，白卡才有一点点边界，但不带任何暖调 */
+  body { background-color: #f6f6f5; }
+  /* Luna 是整屏工作区，不要灰底卡在中间——整片白 */
+  .app.is-luna { background-color: #fff; }
+}
+
+@media (min-width: 861px) {
+  :root[data-theme="dark"] body { background-color: #0a0a0a; }
+  [data-theme="dark"] .app.is-luna { background-color: #0f0f0f; }
+}
+
+/* Luna 的左栏与全站左栏统一：实心白 + 发丝描边 + 同圆角。
+   之前它是半透明玻璃，靠背后的橙色光斑才有"厚度"；光斑去掉后，
+   玻璃在纯白上等于隐形，导航栏看起来就消失了。 */
+@media (min-width: 861px) {
+  .lc-side {
+    background: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 1px solid rgba(32, 29, 24, 0.06);
+    border-radius: 18px;
+    box-shadow:
+      0 1px 2px -1px rgba(18, 18, 16, 0.04),
+      0 16px 40px -34px rgba(18, 18, 16, 0.22);
+  }
+}
+@media (min-width: 861px) {
+  [data-theme="dark"] .lc-side {
+    background: #141413;
+    border-color: rgba(255, 255, 255, 0.055);
+    box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 16px 40px -34px rgba(0, 0, 0, 0.7);
+  }
+}
+
+/* Luna 的左栏与全站左栏统一：实心白 + 发丝描边 + 同圆角。
+   之前它是半透明玻璃，靠背后的橙色光斑才有"厚度"；光斑去掉后，
+   玻璃在纯白上等于隐形，导航栏看起来就消失了。 */
+@media (min-width: 861px) {
+  .lc-side {
+    background: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 1px solid rgba(32, 29, 24, 0.06);
+    border-radius: 18px;
+    box-shadow:
+      0 1px 2px -1px rgba(18, 18, 16, 0.04),
+      0 16px 40px -34px rgba(18, 18, 16, 0.22);
+  }
+}
+@media (min-width: 861px) {
+  [data-theme="dark"] .lc-side {
+    background: #141413;
+    border-color: rgba(255, 255, 255, 0.055);
+    box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 16px 40px -34px rgba(0, 0, 0, 0.7);
+  }
+}
