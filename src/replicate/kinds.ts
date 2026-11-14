@@ -35,6 +35,9 @@ export interface KindDef {
   scene: string;
   /** 素材图的默认角色，写进项目草稿的 referenceImages */
   role: ReferenceRole;
+  /** 有标题类画面（封面 / 海报 / 详情页）要求用户填自己的标题；
+   *  不填就生图，模型会把参考图上的原文字照抄下来——这是实测踩过的坑。 */
+  titleField?: L;
 }
 
 export const KINDS: KindDef[] = [
@@ -55,6 +58,7 @@ export const KINDS: KindDef[] = [
     ratio: '3:4',
     role: 'product',
     scene: '输出竖版详情页的单屏画面：清晰的上下信息层级，可包含一句主标题、两到三条卖点短语与一处产品细节特写，排版留白充足，中文文字清晰可读、不糊字',
+    titleField: { zh: '页面标题', en: 'Page headline' },
   },
   {
     id: 'poster',
@@ -64,15 +68,17 @@ export const KINDS: KindDef[] = [
     ratio: '3:4',
     role: 'product',
     scene: '输出商业海报：单一视觉中心、强对比、明确的大标题留白区，构图完整可独立张贴，画面内文字精简且中文字形正确',
+    titleField: { zh: '海报标题', en: 'Poster headline' },
   },
   {
     id: 'cover',
     name: { zh: '视频封面', en: 'Video cover' },
-    desc: { zh: '16:9 横版，缩略图里也看得清', en: '16:9, legible as a thumbnail' },
+    desc: { zh: '大标题 + 强对比，缩略图里也看得清', en: 'Big type, high contrast, legible as a thumbnail' },
     icon: 'fullscreen',
     ratio: '16:9',
     role: 'product',
-    scene: '输出 16:9 视频封面：主体偏一侧，另一侧留出大标题文字区，强对比高饱和，在缩略图尺寸下仍然可辨识',
+    scene: '输出视频封面：主体偏一侧，另一侧留出大标题文字区，强对比高饱和，在缩略图尺寸下仍然可辨识',
+    titleField: { zh: '视频标题', en: 'Video title' },
   },
   {
     id: 'packaging',

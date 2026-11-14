@@ -30,10 +30,9 @@ import { compressImageForUpload } from '../workflow/imageUtils';
 import { LoginDialog } from '../cloud/LoginDialog';
 import { Icon } from '../components/icons';
 import { useLang } from '../i18n';
-import { emptyProductInfo } from '../types';
-import type { ConceptImage, ImageTier, ReferenceImage, ReferenceRole, ReplicateImage, ReplicateProject, ReplicateResult } from '../types';
+import type { ImageTier, ReplicateImage, ReplicateProject, ReplicateResult } from '../types';
 import { BATCH, KINDS, MAX_IMAGES, RATIOS, kindById, kindDesc, kindName, type KindDef } from '../replicate/kinds';
-import { FIDELITIES, buildReplicatePrompt, fidelityDef } from '../replicate/prompt';
+import { buildReplicatePrompt, fidelityDef } from '../replicate/prompt';
 import { templateById } from '../replicate/templates';
 import '../replicate.css';
 
@@ -195,6 +194,7 @@ interface Snapshot {
   refs: Uploaded[];
   mats: Uploaded[];
   items: Item[];
+  title: string;
   extra: string;
   fidelity: number;
   tier: ImageTier;
@@ -203,7 +203,7 @@ interface Snapshot {
 
 const sigOf = (x: Snapshot): string => JSON.stringify([
   x.kind.id, x.refs.map((r) => r.id), x.mats.map((m) => m.id), x.items.map((i) => i.id),
-  x.extra, x.fidelity, x.tier, x.ratioId,
+  x.title, x.extra, x.fidelity, x.tier, x.ratioId,
 ]);
 
 export default function Replicate() {
@@ -219,7 +219,7 @@ function ReplicateEditor() {
   const { t, lang } = useLang();
   const auth = useAuth();
   const sub = useSubscription();
-  const { s, setToast, createWorkflowProject, patchWorkflow, saveReplicate } = useApp();
+  const { s, setToast, saveReplicate } = useApp();
   const hash = useHash();
 
   /* 从地址栏取要编辑的草稿；没有 id 就是新建 */
@@ -241,6 +241,7 @@ function ReplicateEditor() {
   const [refs, setRefs] = useState<Uploaded[]>(opened?.refs ?? []);
   const [mats, setMats] = useState<Uploaded[]>(opened?.mats ?? []);
   const [dragSlot, setDragSlot] = useState<Slot | null>(null);
+  const [title, setTitle] = useState(opened?.title ?? '');
   const [extra, setExtra] = useState(opened?.extra ?? tpl?.prompt ?? '');
   const [tier, setTier] = useState<ImageTier>(opened?.tier ?? 'flash');
   const [ratioId, setRatioId] = useState(opened?.ratio ?? tpl?.ratio ?? '1:1');
@@ -270,20 +271,23 @@ function ReplicateEditor() {
   const safeTier = resolveTier(tier, sub.isPro);
   /** 与「设计方案」同口径：三张按一张档位的价扣，不收三倍 */
   const batchCost = imageCost(safeTier);
-  /** 复刻度档位：滑杆改成三档之后，「这一档模型会做什么」才说得清 */
+  /** 复刻度滑杆当前落在哪个语义带（一比一 / 参考版式 / 只借感觉） */
   const fidDef = fidelityDef(fidelity);
   const fidName = (v: number) => { const f = fidelityDef(v); return lang === 'en' ? f.name.en : f.name.zh; };
   const ratio = RATIOS.find((r) => r.id === ratioId) || RATIOS[0];
   /** 结果卡与占位卡按所选比例出框，16:9 的封面不会被裁成方图 */
   const cssRatio = ratio.id.replace(':', ' / ');
   const total = refs.length + mats.length;
-  const ready = refs.length > 0 && mats.length > 0;
+  /** 标题类画面（封面 / 海报 / 详情页）必须填自己的标题：不填的话模型会把
+   *  参考图上的原文字照抄下来——用户填的补充提示词压不住这个行为（实测）。 */
+  const needTitle = !!kind?.titleField;
+  const ready = refs.length > 0 && mats.length > 0 && (!needTitle || !!title.trim());
   const nm = (k: KindDef) => kindName(k, lang);
   const kd = (k: KindDef) => kindDesc(k, lang);
 
   const snapshot = (patch?: Partial<Snapshot>): Snapshot | null => {
     if (!kind) return null;
-    return { kind, refs, mats, items, extra, fidelity, tier, ratioId, ...patch };
+    return { kind, refs, mats, items, title, extra, fidelity, tier, ratioId, ...patch };
   };
 
   /* 模版预填：把模版参考图取成 data URL 放进「参考图」一栏。
@@ -325,6 +329,7 @@ function ReplicateEditor() {
       kind: snap.kind.id,
       ratio: snap.ratioId,
       fidelity: snap.fidelity,
+      title: snap.title,
       extra: snap.extra,
       tier: snap.tier,
       refs: snap.refs,
@@ -353,12 +358,12 @@ function ReplicateEditor() {
   useEffect(() => {
     const snap = snapshot();
     if (!snap) return;
-    if (!snap.refs.length && !snap.mats.length && !snap.items.length && !snap.extra.trim()) return;
+    if (!snap.refs.length && !snap.mats.length && !snap.items.length && !snap.extra.trim() && !snap.title.trim()) return;
     if (savedSigRef.current === sigOf(snap)) return;
     const timer = window.setTimeout(() => saveDraft(snap), 700);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, refs, mats, items, extra, fidelity, tier, ratioId]);
+  }, [kind, refs, mats, items, title, extra, fidelity, tier, ratioId]);
 
   const reset = () => { setItems([]); setEditingId(null); };
 
@@ -492,7 +497,7 @@ function ReplicateEditor() {
     try {
       const uid = auth.user?.id;
       const inputs = await imageInputs();
-      const prompt = buildReplicatePrompt(kind, fidelity, extra, refs.length > 0, mats.length > 0);
+      const prompt = buildReplicatePrompt(kind, fidelity, extra, refs.length > 0, mats.length > 0, title);
       const settled = await Promise.allSettled(Array.from({ length: BATCH }, async () => {
         const src = await callImage(prompt, { tier: safeTier, size: sizeForTier(safeTier, ratio), ...inputs, uid });
         const size = await naturalSize(src);
@@ -504,7 +509,7 @@ function ReplicateEditor() {
         throw new Error(fail?.reason?.message || t('生成失败，请稍后重试', 'Generation failed, try again'));
       }
       setItems(ok);
-      // 三张出完立刻写库：用户接着点「用它开始」会跳到包装设计，这一步不能等防抖
+      // 三张出完立刻写库：用户点「下载图片」或刷新页面时，结果必须已经在库里
       saveDraft(snapshot({ items: ok }));
       await charge(batchCost);
     } catch (e) {
@@ -526,7 +531,7 @@ function ReplicateEditor() {
       const inputs = await imageInputs();
       // 系统规则（复刻度 / 场景 / 两栏职责）在每次重生成时都重新拼回，
       // 否则「改提示词」会退化成普通的单图生图，素材图的文字就保不住了。
-      const p = buildReplicatePrompt(kind, fidelity, nextExtra, refs.length > 0, mats.length > 0);
+      const p = buildReplicatePrompt(kind, fidelity, nextExtra, refs.length > 0, mats.length > 0, title);
       const nextSafe = resolveTier(nextTier, sub.isPro);
       const src = await callImage(p, { tier: nextSafe, size: sizeForTier(nextSafe, ratio), ...inputs, uid });
       const size = await naturalSize(src);
@@ -544,52 +549,35 @@ function ReplicateEditor() {
     }
   };
 
-  /** 把这张图带走：建包装设计项目 → 所有参考图与选中方案都写进草稿，进流程 */
-  const useResult = (item: Item) => {
+  /** 把这张图下载到本机：复刻与包装设计是两条独立流程，出图直接带走。
+   *  生成结果是 data URL 就直接落盘；是远地址就先取成 blob 再存。 */
+  const downloadResult = async (item: Item) => {
     if (!kind) return;
-    if (!auth.user) { setLoginOpen(true); return; }
-    // 先保存复刻草稿，再跳走：跳转后本组件卸载，没落库的改动会丢
-    saveDraft(snapshot());
-    const toRef = (img: Uploaded, role: ReferenceRole, note: string): ReferenceImage => ({
-      id: `ref_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-      src: img.src,
-      name: img.name,
-      naturalW: img.w,
-      naturalH: img.h,
-      ratio: img.w / Math.max(1, img.h),
-      role,
-      note,
-      dominantColors: [],
-      createdAt: Date.now(),
-    });
-    const concept: ConceptImage = {
-      id: item.id,
-      label: 'A',
-      src: item.src,
-      prompt: item.prompt,
-      model: item.tier,
-      tier: item.tier,
-      at: Date.now(),
-      naturalW: item.w,
-      naturalH: item.h,
-      hint: kind.scene,
-    };
-    const project = createWorkflowProject({
-      mode: 'referenceStyle',
-      productInfo: emptyProductInfo(),
-      referenceImages: [
-        ...refs.map((r, i) => toRef(r, kind.role === 'packaging' ? 'packaging' : 'competitor', t('风格参考', 'Style reference') + ` ${i + 1}`)),
-        ...mats.map((m, i) => toRef(m, kind.role, t('我的素材', 'My asset') + ` ${i + 1}`)),
-      ],
-      name: t(`${nm(kind)}复刻`, `${nm(kind)} recreation`),
-    });
-    patchWorkflow(project.id, {
-      stage: 'concepts',
-      conceptImages: [concept],
-      selectedConceptImageId: concept.id,
-      autoGenPending: false,
-    });
-    go('/new');
+    const idx = items.findIndex((x) => x.id === item.id);
+    const label = String.fromCharCode(65 + Math.max(0, idx));
+    const head = item.src.slice(5, 30);
+    const ext = /png/.test(head) ? 'png' : /webp/.test(head) ? 'webp' : 'jpg';
+    const fname = `${nm(kind)}-${label}.${ext}`;
+    try {
+      let href = item.src;
+      if (!item.src.startsWith('data:')) {
+        const res = await fetch(item.src);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        href = URL.createObjectURL(await res.blob());
+      }
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (href !== item.src) window.setTimeout(() => URL.revokeObjectURL(href), 4000);
+      setToast(t(`已开始下载 ${fname}`, `Downloading ${fname}`));
+    } catch (e) {
+      setToast(readableError(e,
+        t('下载失败，可在看大图时长按或右键保存', 'Download failed — long-press or right-click the image to save'),
+        t('网络不通，检查网络后再试一次', 'Network request failed — check your connection and try again')));
+    }
   };
 
   const renderSlot = (slot: Slot) => {
@@ -685,24 +673,43 @@ function ReplicateEditor() {
         </div>
         <p className="rep-cap">{t(`已选 ${total} / ${MAX_IMAGES} 张 · 模型单次最多读 ${MAX_IMAGES} 张`, `${total} / ${MAX_IMAGES} images · models read up to ${MAX_IMAGES}`)}</p>
 
+        {/* 标题类画面：用户必须给出自己的标题，模型只把参考图当版式用，
+            文字整体替换成这一栏的内容——这是「生成出来还是原图标题」的正解。 */}
+        {kind?.titleField && <>
+          <label className="rep-label" htmlFor="rep-title">
+            {t(kind.titleField.zh, kind.titleField.en)}
+            <em className="rep-label-req">{t('必填', 'required')}</em>
+          </label>
+          <input id="rep-title" className="rep-input" type="text" value={title}
+            onChange={(e) => setTitle(e.target.value)} disabled={busy}
+            placeholder={kind.id === 'cover'
+              ? t('例如：从零代码基础，到拥有自己的 AI 产品矩阵', 'e.g. From zero code to your own AI product suite')
+              : t('替换参考图上的主标题文字', 'Replaces the headline text in the reference')} />
+          <p className="rep-fid-hint">{t('参考图上的标题会原样照抄，填了你自己的标题才会被替换。', 'The reference headline would be copied as-is — fill in yours to have it replaced.')}</p>
+        </>}
+
         <label className="rep-label" htmlFor="rep-extra">{t('补充提示词（可选）', 'Extra instructions (optional)')}</label>
         <textarea id="rep-extra" className="rep-textarea" rows={3} value={extra}
           onChange={(e) => setExtra(e.target.value)}
           placeholder={t('例如：主色改成深绿、文案换成「冷萃 250ml」、背景加一块亚麻布',
             'e.g. deep green as the base colour, copy reads “Cold Brew 250ml”, add linen in the background')} />
 
-        {/* 复刻度：三档明确选项，而不是一根 20–100 的滑杆。
-            滑杆看着精细，实际三档之外的数值对模型没有任何区别，
-            还容易让人以为「拖到 100% 就一定一比一」——现在每档都是一句
-            完全不同的指令（重做 / 沿用 / 照抄），选哪档就出哪种结果。 */}
-        <label className="rep-label">{t('复刻度', 'How closely to follow')}</label>
-        <div className="rep-fids" role="group" aria-label={t('复刻度', 'How closely to follow')}>
-          {FIDELITIES.map((f) => <button key={f.id} type="button"
-            className={`rep-fid ${f.id === fidDef.id ? 'on' : ''}`}
-            onClick={() => setFidelity(f.value)} disabled={busy}
-            aria-pressed={f.id === fidDef.id}>
-            {lang === 'en' ? f.name.en : f.name.zh}
-          </button>)}
+        {/* 复刻度：一根 30–100 的连续滑杆（2026-11-14 从三档按钮改回滑杆）。
+            很多用户不需要一模一样，但结构 / 字体 / 排版还是要复刻的，
+            只是想要更多发挥空间——三档按钮表达不了「稍微松一点」，
+            滑杆配三档锚点说明（下方刻度 + 当前档提示）两头都顾到。 */}
+        <label className="rep-label" htmlFor="rep-fid">
+          {t('复刻度', 'How closely to follow')}
+          <span className="rep-slider-val">{fidelity}%</span>
+        </label>
+        <input id="rep-fid" className="rep-slider" type="range" min={30} max={100} step={5}
+          value={fidelity} disabled={busy}
+          onChange={(e) => setFidelity(Number(e.target.value))}
+          aria-label={t('复刻度', 'How closely to follow')} />
+        <div className="rep-slider-ticks" aria-hidden>
+          <span>{t('只借感觉', 'Loose')}</span>
+          <span>{t('参考版式', 'Layout')}</span>
+          <span>{t('一比一', 'Exact')}</span>
         </div>
         <p className="rep-fid-hint">{lang === 'en' ? fidDef.hint.en : fidDef.hint.zh}</p>
 
@@ -729,7 +736,9 @@ function ReplicateEditor() {
         <button className="rep-run" onClick={() => void generateAll()} disabled={busy || !ready}>
           {busy ? t('正在生成…', 'Generating…') : t('开始复刻', 'Recreate')}
         </button>
-        {!ready && <p className="rep-note">{t('参考图和素材图各上传至少 1 张后才能开始。', 'Add at least one reference and one asset to start.')}</p>}
+        {!ready && <p className="rep-note">{needTitle && !title.trim()
+          ? t('参考图、素材图各至少 1 张，并填好标题后才能开始。', 'Add at least one reference and one asset, and fill in the title, to start.')
+          : t('参考图和素材图各上传至少 1 张后才能开始。', 'Add at least one reference and one asset to start.')}</p>}
         {ready && !auth.user && <p className="rep-note">{t('未登录会先弹登录，登录后积分才开始计。', 'You will be asked to sign in first.')}</p>}
       </aside>
 
@@ -782,8 +791,8 @@ function ReplicateEditor() {
                   <button onClick={() => { setEditingId(it.id); setDraftExtra(it.extra); setDraftTier(it.tier); }}>
                     <Icon name="edit" size={13} />{t('改提示词', 'Edit prompt')}
                   </button>
-                  <button className="primary" onClick={() => useResult(it)}>
-                    {t('用它做包装', 'Use in packaging')} <Icon name="chevronRight" size={13} />
+                  <button className="primary" onClick={() => void downloadResult(it)}>
+                    {t('下载图片', 'Download')} <Icon name="download" size={13} />
                   </button>
                 </div>}
               </div>
@@ -869,8 +878,8 @@ function ReplicateEditor() {
               <button onClick={() => { setZoomId(null); setEditingId(it.id); setDraftExtra(it.extra); setDraftTier(it.tier); }}>
                 <Icon name="edit" size={14} />{t('改提示词', 'Edit prompt')}
               </button>
-              <button className="primary" onClick={() => { setZoomId(null); useResult(it); }}>
-                {t('用它做包装', 'Use in packaging')} <Icon name="chevronRight" size={14} />
+              <button className="primary" onClick={() => void downloadResult(it)}>
+                {t('下载图片', 'Download')} <Icon name="download" size={14} />
               </button>
             </div>
           </div>

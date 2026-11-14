@@ -36,7 +36,6 @@ function buildGroups(t: TFn, lang: string): Group[] {
   const packsOnline = PRICING.creditsPacks
     .map((p) => t(`${p.points} 积分 US$${p.priceUSD}`, `${p.points} credits US$${p.priceUSD}`))
     .join(' / ');
-  const packsCode = PRICING.creditsPacks.map((p) => `${p.points} = ¥${p.priceRMB}`).join(' / ');
   const structList = STRUCTURES.map((s) => structName(s, lang)).join(' / ');
   const batchCost = imageCost('flash');
 
@@ -183,10 +182,10 @@ function buildGroups(t: TFn, lang: string): Group[] {
         },
         {
           q: t('出图之后能做什么？', 'What can I do with the results?'),
-          kw: t('大图 放大 保存 改提示词 做包装 下载', 'zoom enlarge save prompt packaging download'),
+          kw: t('大图 放大 保存 改提示词 下载图片', 'zoom enlarge save prompt download'),
           a: <>
-            {t('点任意一张图就是大图查看：← → 换下一张，Esc 退出，可以直接保存到相册，也可以改一句提示词就重出这一张；「用它做包装」会把这张图作为视觉起点带进包装设计，接着出刀模、上 3D、导出印刷文件。',
-              'Click any image for the full-size view: ← → to move between them, Esc to close, save to your device, or edit the prompt and re-render just that one. “Use it for packaging” carries the image into Packaging as the visual starting point, where you add a dieline, check it in 3D and export print files.')}
+            {t('点任意一张图就是大图查看：← → 换下一张，Esc 退出，也可以改一句提示词就重出这一张；「下载图片」把这张图直接存到本机。复刻设计与包装设计是两条独立流程，出图结果直接带走，不会写进包装项目。',
+              'Click any image for the full-size view: ← → to move between them, Esc to close, or edit the prompt and re-render just that one. “Download” saves the image straight to your device. Recreation and Packaging are independent flows — results leave with you and never write into a packaging project.')}
           </>,
         },
       ],
@@ -237,8 +236,8 @@ function buildGroups(t: TFn, lang: string): Group[] {
             <strong>Visa / Mastercard / Apple Pay / Google Pay / 支付宝（含 AlipayHK）</strong>
             {t('，由 Creem 结算，付款后自动到账，不会自动续费。中国内地用户在「积分」页微信扫码按人民币付款，或使用兑换码。',
               ', settled by Creem, credited automatically, never auto-renewed. Mainland China users can scan the WeChat code on the Credits page to pay in CNY, or use a redeem code. ')}
-            {t(`积分包在线三档：${packsOnline}；兑换码三档：${packsCode}，自定义积分按 ¥1 = ${PRICING.customPointsPerRMB} 积分折算。`,
-              `Credit packs online: ${packsOnline}. Redeem-code packs: ${packsCode}, and custom amounts are ¥1 = ${PRICING.customPointsPerRMB} credits.`)}
+            {t(`积分包在线三档：${packsOnline}；人民币通道（兑换码 / 微信）价格以微信内标价为准。`,
+              `Credit packs online: ${packsOnline}. For CNY channels (redeem code / WeChat), pricing follows what is listed in WeChat.`)}
           </>,
         },
         {
@@ -344,8 +343,8 @@ function buildUpdates(t: TFn) {
     {
       date: '11-14',
       title: t('结果图可以点开看大图', 'Results open full size'),
-      body: t('点任意一张进大图：← → 翻页、Esc 退出、直接保存，也能改提示词只重出这一张，或「用它做包装」带进包装设计。',
-        'Click any result for the full-size view: ← → to page through, Esc to close, save directly, re-render just that one with an edited prompt, or carry it into Packaging.'),
+      body: t('点任意一张进大图：← → 翻页、Esc 退出，也能改提示词只重出这一张，或「下载图片」直接存到本机。',
+        'Click any result for the full-size view: ← → to page through, Esc to close, re-render just that one with an edited prompt, or download it straight to your device.'),
     },
     {
       date: '11-14',

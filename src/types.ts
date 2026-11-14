@@ -444,6 +444,8 @@ export interface ReplicateProject {
   kind: string;
   ratio: string;
   fidelity: number;
+  /** 用户的画面标题（视频封面 / 海报 / 详情页）：生图时强制替换参考图上的文字 */
+  title?: string;
   extra: string;
   tier: ImageTier;
   refs: ReplicateImage[];

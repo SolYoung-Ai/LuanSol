@@ -209,32 +209,46 @@
 }
 .rep-textarea:focus, .rep-select:focus { outline: none; border-color: var(--v4-ink-3); }
 .rep-select { height: 34px; padding: 0 8px; }
-
-/* 复刻度三档：明确的选择按钮，选中态给足对比。
-   以前是滑杆，拖到哪都对结果没影响，等于白选。 */
-.rep-fids {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-.rep-fid {
-  padding: 8px 6px;
+/* 标题输入（单行）：样式与补充提示词同一家族，必填标识用橙色小字 */
+.rep-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 11px;
   border: 1px solid var(--v4-line);
   border-radius: 9px;
   background: var(--v4-surface);
-  color: var(--v4-ink-2);
+  color: var(--v4-ink);
   font: inherit;
-  font-size: 11.5px;
-  cursor: pointer;
-  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  font-size: 12.5px;
 }
-.rep-fid:hover:not(:disabled) { color: var(--v4-ink); border-color: var(--v4-line-strong); }
-.rep-fid.on {
-  border-color: var(--v4-ink);
-  background: var(--v4-solid-bg);
-  color: var(--v4-solid-fg);
+.rep-input:focus { outline: none; border-color: var(--v4-ink-3); }
+.rep-label-req {
+  margin-left: 5px;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--v4-orange);
 }
-.rep-fid:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* 复刻度滑杆（30–100 连续）：三档锚点只作刻度说明，
+   当前数值跟在标签右侧，拖到哪一眼可见。 */
+.rep-slider {
+  width: 100%;
+  margin: 2px 0 0;
+  accent-color: var(--v4-orange);
+}
+.rep-slider:disabled { opacity: 0.55; }
+.rep-slider-val {
+  margin-left: 6px;
+  font-weight: 700;
+  color: var(--v4-ink);
+}
+.rep-slider-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--v4-ink-3);
+}
 .rep-fid-hint { margin: 6px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--v4-ink-3); }
 
 .rep-ratios { display: flex; flex-wrap: wrap; gap: 6px; }
