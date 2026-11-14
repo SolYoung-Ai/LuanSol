@@ -185,7 +185,7 @@ export default function Workspace() {
     <div className="v4-page-head">
       <div>
         <div className="v4-kicker">PACKAGING DESIGN</div>
-        <h1 className="v4-h1">{t('包装设计', 'Packaging design')}</h1>
+        <h1 className="v4-h1">{t('包装工作台', 'Packaging workspace')}</h1>
         <p className="v4-sub">{t('你的每一个包装作品，都在这里留下记录。', 'Every package you make is kept here.')}</p>
       </div>
       <div className="v4-tools">

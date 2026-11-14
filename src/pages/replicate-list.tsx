@@ -92,7 +92,7 @@ export default function ReplicateList() {
     <div className="v4-page-head">
       <div>
         <div className="v4-kicker">RECREATE</div>
-        <h1 className="v4-h1">{t('项目', 'Projects')}</h1>
+        <h1 className="v4-h1">{t('复刻工作台', 'Recreate workspace')}</h1>
         <p className="v4-sub">{t('复刻设计的所有项目都在这里；没做完的那条也存着，随时接着做。', 'Every recreation project lives here — including the ones you have not finished yet.')}</p>
       </div>
       <div className="v4-tools" style={{ display: 'flex', gap: 10 }}>
