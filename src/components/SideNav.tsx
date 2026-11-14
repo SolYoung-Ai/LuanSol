@@ -44,6 +44,8 @@ const SIDE_LINKS: { zh: string; en: string; path: string; icon: IconName; match:
   // 复刻设计：列表页 /replicate，工作区 /replicate/new、/replicate/edit。
   // 注意不能把 '/replicate' 写进上面那条，否则点进复刻时高亮会落在「包装设计」上。
   { zh: '复刻设计', en: 'Recreate', path: '/replicate', icon: 'copy', match: ['/replicate'] },
+  // 设计台：在线设计编辑器（海报 / 视频封面），独立整屏工作区 /design
+  { zh: '设计台', en: 'Design', path: '/design', icon: 'grid', match: ['/design'] },
 ];
 
 /** 哪些路由算「在某个入口里」，分界线下方就展开对应场景区。 */
@@ -387,9 +389,9 @@ export default function SideNav({ onLogin }: { onLogin?: () => void }) {
   }, [folded]);
   useEffect(() => () => { document.body.classList.remove('sd-folded'); }, []);
 
-  // 编辑器（/studio）是整屏工作区，没有左栏可用；Luna 现在也走这条左栏，
+  // 编辑器（/studio 包装工作台、/design 设计台）都是整屏工作区，没有左栏可用；Luna 现在也走这条左栏，
   // 只是分界线下方的场景区换成会话列表（见 LunaChats）。
-  if (path.startsWith('/studio')) return null;
+  if (path.startsWith('/studio') || path.startsWith('/design')) return null;
   const isLuna = path.startsWith('/luna');
   // 分界线下方的场景区随入口切换：Luna → 会话列表；包装设计 → 新建/项目；复刻设计 → 新建/记录
   const isPackaging = inWorkbench(path);
