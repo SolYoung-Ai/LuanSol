@@ -2384,12 +2384,12 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 
 /* 兑换码价格表：中国内地用户按人民币结算，价格与美元在线价是两套。
    放在兑换入口下面，省掉「加微信问价」这一轮往返。 */
-/* 微信购买：一个外链入口，左说明右按钮；窄屏自动上下排。
-   日间是一层极浅的灰，夜间换成半透明白，跟 .gl-pack 同一套材质语言。 */
+/* 微信扫码购买：左说明 + 人民币价目，右收款码。
+   日间是一层极浅的灰，夜间换成半透明白，跟 .gl-pack 同一套材质语言；
+   但收款码那格在两套主题下都必须是白底——二维码贴在灰底上扫不出来。 */
 .gl-wxbuy {
-  margin-top: 12px; padding: 12px 14px; border-radius: 16px;
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
+  margin-top: 12px; padding: 14px; border-radius: 16px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   background: rgba(15, 15, 20, 0.028);
   box-shadow: inset 0 0 0 1px rgba(15, 15, 20, 0.05);
 }
@@ -2397,10 +2397,41 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   background: rgba(255, 255, 255, 0.045);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
-.gl-wxbuy-main { min-width: 0; }
+.gl-wxbuy-main { flex: 1 1 240px; min-width: 0; }
 .gl-wxbuy-title { font-size: 13px; font-weight: 600; color: var(--v4-ink); }
-.gl-wxbuy-text { margin-top: 3px; font-size: 11.5px; line-height: 1.65; color: var(--v4-ink-3); }
-.gl-wxbuy a { flex: 0 0 auto; text-decoration: none; }
+.gl-wxbuy-text { margin-top: 4px; font-size: 11.5px; line-height: 1.7; color: var(--v4-ink-3); }
+
+/* 价目：三档胶囊 + 自定义比例，数据来自 PRICING.creditsPacks */
+.gl-wx-price { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.gl-wx-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 9px; border-radius: 9px;
+  background: rgba(15, 15, 20, 0.05);
+}
+[data-theme="dark"] .gl-wx-chip { background: rgba(255, 255, 255, 0.08); }
+.gl-wx-chip em { font-style: normal; font-size: 10.5px; color: var(--v4-ink-3); }
+.gl-wx-chip strong { font-size: 12px; font-weight: 600; color: var(--v4-ink); font-variant-numeric: tabular-nums; }
+.gl-wx-tip { font-size: 10.5px; color: var(--v4-ink-3); padding-left: 2px; }
+
+/* 收款码：固定白底 + 内边距做静默区，深色模式下同样保持白 */
+.gl-wxbuy-code {
+  flex: 0 0 auto; margin-left: auto; width: 152px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 8px 8px 7px; border-radius: 12px; background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 15, 20, 0.08), inset 0 0 0 1px rgba(15, 15, 20, 0.08);
+}
+.gl-wxbuy-code img { display: block; width: 100%; height: auto; border-radius: 4px; }
+.gl-wxbuy-code span {
+  font-size: 9.5px; line-height: 1.4; text-align: center;
+  letter-spacing: 0.01em; color: #8a857c;
+}
+
+@media (max-width: 560px) {
+  .gl-wxbuy { flex-direction: column; align-items: stretch; }
+  /* 竖排时 flex-basis 变成高度，240px 的基数会在价目下面留一大块空白 */
+  .gl-wxbuy-main { flex: 0 0 auto; }
+  .gl-wxbuy-code { margin: 2px auto 0; width: 180px; }
+}
 
 [data-theme="dark"] .gl-wx { background: rgba(217, 96, 44, 0.22); color: #ffb98a; }
 [data-theme="dark"] .gl-wx:hover { background: rgba(217, 96, 44, 0.32); }

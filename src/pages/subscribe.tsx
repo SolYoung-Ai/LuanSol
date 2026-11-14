@@ -14,7 +14,7 @@ import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, type CreditLog } from '../cloud/subscription';
 import { startCheckout, payReturnFlag, clearPayReturnFlag, markPayKind, lastPayKind, clearPayKind } from '../cloud/pay';
-import { PRICING, WECHAT_SHOP_URL } from '../cloud/plans';
+import { PRICING, WECHAT_PAY_QR } from '../cloud/plans';
 import { imageModelNote } from '../cloud/models';
 import { IMAGE_MODELS, HYPER3D_COST } from '../cloud/models';
 import { useLang } from '../i18n';
@@ -26,6 +26,10 @@ function packTagEn(points: number): string {
   const map: Record<number, string> = { 1000: 'Starter', 2100: 'Popular', 3500: 'Best value' };
   return map[points] || String(points);
 }
+
+/** 收款码图片地址：图片放在 public/，用 BASE_URL 拼绝对路径，
+ *  GitHub Pages 的 /LuanSol/ 子路径与 CloudBase 根路径都能取到。 */
+const WX_QR_SRC = WECHAT_PAY_QR ? import.meta.env.BASE_URL + WECHAT_PAY_QR : '';
 
 export default function Credits() {
   const a = useAuth();
@@ -322,23 +326,36 @@ export default function Credits() {
         <span className={`gl-pill ${payMsg.ok ? '' : 'gl-pill-accent'}`}>{payMsg.text}</span>
       </div>}
       <p className="gl-note">
-        {t('支持 Visa / Mastercard / Apple Pay / Google Pay / 支付宝（含 AlipayHK）在线支付，付款后积分自动到账；中国内地用户可走微信购买或兑换码。积分永久有效，没有月费，也不需要续费。',
-          'Pay online with Visa / Mastercard / Apple Pay / Google Pay or Alipay (incl. AlipayHK) — credits arrive automatically. Mainland China users can buy on WeChat or use a redeem code. Credits never expire, with no monthly fee and nothing to renew.')}
+        {t('支持 Visa / Mastercard / Apple Pay / Google Pay / 支付宝（含 AlipayHK）在线支付，付款后积分自动到账；中国内地用户可微信扫码购买或使用兑换码。积分永久有效，没有月费，也不需要续费。',
+          'Pay online with Visa / Mastercard / Apple Pay / Google Pay or Alipay (incl. AlipayHK) — credits arrive automatically. Mainland China users can scan the WeChat code or use a redeem code. Credits never expire, with no monthly fee and nothing to renew.')}
       </p>
-      {/* 微信通道：链接里已经包含全部积分规格，所以只放一个「去购买」，
-          不再在这里重复列价目。地址为空时整块不渲染——宁可没有入口，
-          也不让用户点到一个没反应或有去无回的按钮。 */}
-      {WECHAT_SHOP_URL && <div className="gl-wxbuy">
+      {/* 微信通道：一张收款码 + 人民币价目，扫码后人工核对充值。
+          图片常量置空时整块不渲染——宁可不显示，也不放一张空图或死按钮。 */}
+      {WX_QR_SRC && <div className="gl-wxbuy">
         <div className="gl-wxbuy-main">
-          <div className="gl-wxbuy-title">{t('中国内地 · 微信购买', 'Mainland China · WeChat store')}</div>
+          <div className="gl-wxbuy-title">{t('中国内地 · 微信扫码购买', 'Mainland China · pay by WeChat')}</div>
           <div className="gl-wxbuy-text">
-            {t('微信小店含全部积分规格，人民币结算。下单后 1 小时内处理，最迟不超过 12 小时充值到账。',
-              'The WeChat store lists every credit pack in CNY. Orders are fulfilled within 1 hour, and never later than 12 hours.')}
+            {t('用微信扫右侧收款码，按对应金额付款，并在备注里写下你的账号邮箱。我们会在 1 小时内处理，最迟不超过 12 小时充值到账。',
+              'Scan the code with WeChat, pay the amount for your pack, and put your account email in the payment note. Credits are added within 1 hour, and never later than 12 hours.')}
+          </div>
+          <div className="gl-wx-price">
+            {PRICING.creditsPacks.map((p) => (
+              <span className="gl-wx-chip" key={p.points}>
+                <em>{t(`${p.points} 积分`, `${p.points} credits`)}</em>
+                <strong>¥{p.priceRMB}</strong>
+              </span>
+            ))}
+            <span className="gl-wx-tip">
+              {t(`自定义 ¥1 = ${PRICING.customPointsPerRMB} 积分`, `Custom ¥1 = ${PRICING.customPointsPerRMB} credits`)}
+            </span>
           </div>
         </div>
-        <a className="gl-btn gl-btn-sm" href={WECHAT_SHOP_URL} target="_blank" rel="noopener noreferrer">
-          {t('去微信购买 ↗', 'Open WeChat store ↗')}
-        </a>
+        {/* 不做外链：桌面读屏靠扫，手机在微信里靠长按识别。
+            点图跳原图反而容易让人以为「点了没反应」，所以只当一张静态图。 */}
+        <div className="gl-wxbuy-code">
+          <img src={WX_QR_SRC} alt={t('微信收款码', 'WeChat payment code')} />
+          <span>{t('微信扫码 · 长按可识别', 'Scan, or long-press')}</span>
+        </div>
       </div>}
       <button className="gl-btn gl-btn-soft gl-btn-sm" style={{ marginTop: 10 }} onClick={goRedeem}>
         {t('用兑换码充值', 'Top up with a code')}
