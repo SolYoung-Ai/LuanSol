@@ -802,13 +802,15 @@ const PAY_PUBLISHABLE_KEY = process.env.LUNASOL_PG_ANON_KEY || PAY_PUBLISHABLE_K
  *  用户点哪一档由**产品 ID**决定，绝不接受前端传来的「给我 3500 积分」——
  *  否则谁都能用 1000 积分那一档的价格买到 3500 积分。
  *
- *  内置一份当前上架的四档（产品 ID 不是密钥，它本来就会出现在结账请求里），
- *  其中 prod_5nK… 是 US$1 / 100 积分的临时体验档，下架只需从这张表删掉它，
+ *  内置一份当前上架的档位（产品 ID 不是密钥，它本来就会出现在结账请求里），
+ *  其中 prod_5nK… 是已下架的 US$1 / 100 积分体验档，只留作退款识别，不再对外出售，
  *  需要增删档位时优先改云函数环境变量 CREEM_CREDIT_PRODUCTS（JSON），不必改代码：
  *    CREEM_CREDIT_PRODUCTS={"prod_xxx":1000,"prod_yyy":2100}
  */
 const CREDIT_PACKS_DEFAULT = {
-  prod_5nKbilayRd9BPYuyE2jV5Y: 100,    // US$1.00  临时体验档（测试支付链路用）
+  // US$1 / 100 积分的体验档已从前台下架（2026-11-14 测完）。这里保留映射，
+  // 是为了这笔订单的退款 / 重投事件仍能认出产品，不至于落到「未知产品」。
+  prod_5nKbilayRd9BPYuyE2jV5Y: 100,
   prod_7NiVzlPdBAHijnv06eQ0uw: 1000,   // US$14.00
   prod_1Pu40n8LlNNn3bTOLIY0wR: 2100,   // US$28.00
   prod_TiM2kUweFHmfqUIukrEUu: 3500,    // US$43.00
@@ -844,6 +846,10 @@ function creditProductFor(points) {
     if (hit) return { productId: hit, points };
     return { productId: '', points: 0 };
   }
+  // 没带 points（旧缓存页面）时给 1000 这一档，而不是「积分最少的那个」——
+  // 最小的可能正好是临时体验档，用户以为在买标准包，实际只到账 100。
+  const standard = ids.find((id) => packs[id] === 1000);
+  if (standard) return { productId: standard, points: 1000 };
   const smallest = ids.reduce((a, b) => (packs[a] <= packs[b] ? a : b));
   return { productId: smallest, points: packs[smallest] };
 }

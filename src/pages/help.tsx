@@ -231,13 +231,13 @@ function buildGroups(t: TFn, lang: string): Group[] {
         },
         {
           q: t('怎么买积分？有月费吗？', 'How do I buy credits? Is there a monthly fee?'),
-          kw: t('购买 支付 月费 订阅 信用卡 Apple Pay Google Pay 兑换码 人民币', 'buy payment monthly subscription card redeem rmb'),
+          kw: t('购买 支付 月费 订阅 信用卡 Apple Pay Google Pay 支付宝 Alipay 兑换码 人民币', 'buy payment monthly subscription card alipay redeem rmb'),
           a: <>
             {t('没有月费，也不需要订阅。积分永久有效，用多少买多少。在线支付支持 ',
               'There is no monthly fee or subscription. Credits never expire — buy only what you need. Online payments accept ')}
-            <strong>Visa / Mastercard / Apple Pay / Google Pay</strong>
-            {t('，由 Creem 结算，付款后自动到账，不会自动续费。中国内地用户可用兑换码或加微信购买。',
-              ', settled by Creem, credited automatically, never auto-renewed. Mainland China users can use a redeem code or WeChat. ')}
+            <strong>Visa / Mastercard / Apple Pay / Google Pay / 支付宝（含 AlipayHK）</strong>
+            {t('，由 Creem 结算，付款后自动到账，不会自动续费。中国内地用户可用微信小店或兑换码购买。',
+              ', settled by Creem, credited automatically, never auto-renewed. Mainland China users can buy from our WeChat store or use a redeem code. ')}
             {t(`积分包在线三档：${packsOnline}；兑换码三档：${packsCode}，自定义积分按 ¥1 = ${PRICING.customPointsPerRMB} 积分折算。`,
               `Credit packs online: ${packsOnline}. Redeem-code packs: ${packsCode}, and custom amounts are ¥1 = ${PRICING.customPointsPerRMB} credits.`)}
           </>,
@@ -330,6 +330,12 @@ function buildGroups(t: TFn, lang: string): Group[] {
 
 function buildUpdates(t: TFn) {
   return [
+    {
+      date: '11-14',
+      title: t('在线支付支持支付宝，内地新增微信小店', 'Alipay joins checkout; a WeChat store for mainland China'),
+      body: t('收银台除卡、Apple Pay、Google Pay 外已支持支付宝（含 AlipayHK）。中国内地用户可在「积分」页点进微信小店按人民币下单，付款后 1 小时内处理，最迟不超过 12 小时到账。',
+        'Checkout now takes Alipay (incl. AlipayHK) alongside cards, Apple Pay and Google Pay. Mainland China users can order in CNY from our WeChat store on the Credits page — fulfilled within 1 hour, never later than 12 hours.'),
+    },
     {
       date: '11-14',
       title: t('复刻度改成三档，一比一真的照参考图', 'Three fidelity levels — one-to-one now really copies'),
