@@ -182,20 +182,24 @@ export default function Workspace() {
   const empty = visibleProjects(s.projects).length === 0;
 
   return <div className="v4-page">
-    <div className="v4-page-head">
-      <div>
-        <div className="v4-kicker">PACKAGING DESIGN</div>
-        <h1 className="v4-h1">{t('包装工作台', 'Packaging workspace')}</h1>
-        <p className="v4-sub">{t('你的每一个包装作品，都在这里留下记录。', 'Every package you make is kept here.')}</p>
+    {/* Canva「所有项目」式页头：居中标题 → 大搜索框 → 大新建按钮 → 最近的项目。
+        搜索和新建是这一页仅有的两个主操作，都给到「一眼看到」的体量；
+        原先藏在工具条里的小搜索框升级为页头大搜索框，搜的是自己的草稿。 */}
+    <div className="ws-hero">
+      <div className="v4-kicker">PACKAGING DESIGN</div>
+      <h1 className="v4-h1">{t('包装工作台', 'Packaging workspace')}</h1>
+      <div className="ws-search-wrap">
+        <span className="ws-search-ic"><Icon name="search" size={17} /></span>
+        <input className="ws-search" value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder={t('搜索我的项目：名称、结构、品牌…', 'Search my projects: name, structure, brand…')} />
       </div>
-      <div className="v4-tools">
-        <button className="v4-btn-dark" onClick={() => go('/new?fresh=1')}>{t('新建包装', 'New packaging')}</button>
+      <div className="ws-actions">
+        <button className="ws-new" onClick={() => go('/new?fresh=1')}>
+          <Icon name="plus" size={18} /> {t('新建包装', 'New packaging')}
+        </button>
       </div>
-    </div>
-
-    {/* 云同步：登录后在这里集中操作（同步状态 / 立即双向同步 / 取回云端项目） */}
-    <div className="v4-toolbar" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-      <div className="v4-sec-note">
+      {/* 云同步：登录后集中在这里（状态一行字 + 两个次要小按钮），不抢搜索和新建的戏 */}
+      <p className="ws-sub">
         {auth.user
           ? <>{t('已登录', 'Signed in as')} <strong>{auth.user.label}</strong> · {sync.state === 'ok'
               ? t(
@@ -205,15 +209,16 @@ export default function Workspace() {
               )
               : sync.message || t('待同步', 'Pending sync')}</>
           : t('未登录 · 作品仅保存在此设备浏览器；登录后可云端同步、多端取回', 'Not signed in · work is saved in this browser only. Sign in to sync and restore across devices')}
-      </div>
-      {auth.user && <div style={{ display: 'flex', gap: 8 }}>
+      </p>
+      {auth.user && <div className="ws-sync-btns">
         <button className="v4-btn-line" onClick={() => void sync.downloadAll()}>{t('取回云端项目', 'Restore from cloud')}</button>
         <button className="v4-btn-line" onClick={() => void sync.syncNow()}>{sync.state === 'syncing' ? t('同步中…', 'Syncing…') : t('立即双向同步', 'Sync now')}</button>
       </div>}
     </div>
 
     {!empty && <>
-      <div className="v4-toolbar">
+      <h2 className="ws-sec-title">{t('最近的项目', 'Recent projects')}</h2>
+      <div className="v4-toolbar" style={{ marginTop: 12 }}>
         <div className="v4-filters">
           {FILTERS.map((f) => <button key={f.id} className={`v4-filter ${filter === f.id ? 'active' : ''}`} onClick={() => setFilter(f.id)}>
             {lang === 'en' ? f.en : f.zh}
@@ -228,7 +233,6 @@ export default function Workspace() {
             <option value="all">{t('全部结构', 'All structures')}</option>
             {STRUCT_GROUPS.map((g) => <option key={g} value={g}>{groupName(g, lang)}</option>)}
           </select>
-          <input className="v4-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('搜索项目名称、结构、品牌', 'Search name, structure or brand')} />
           <select className="v4-select" value={sort} onChange={(e) => setSort(e.target.value as SortId)}>
             {SORTS.map((x) => <option key={x.id} value={x.id}>{lang === 'en' ? x.en : x.zh}</option>)}
           </select>

@@ -89,29 +89,32 @@ export default function ReplicateList() {
   const empty = all.length === 0;
 
   return <div className="v4-page">
-    <div className="v4-page-head">
-      <div>
-        <div className="v4-kicker">RECREATE</div>
-        <h1 className="v4-h1">{t('复刻工作台', 'Recreate workspace')}</h1>
-        <p className="v4-sub">{t('复刻设计的所有项目都在这里；没做完的那条也存着，随时接着做。', 'Every recreation project lives here — including the ones you have not finished yet.')}</p>
+    {/* Canva「所有项目」式页头：居中标题 → 大搜索框 → 大新建按钮 → 最近的项目。
+        搜索升级为页头大搜索框（搜自己的复刻草稿）；新建复刻给最大体量，
+        浏览模版是次操作，做小号线性按钮放旁边。 */}
+    <div className="ws-hero">
+      <div className="v4-kicker">RECREATE</div>
+      <h1 className="v4-h1">{t('复刻工作台', 'Recreate workspace')}</h1>
+      <div className="ws-search-wrap">
+        <span className="ws-search-ic"><Icon name="search" size={17} /></span>
+        <input className="ws-search" value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder={t('搜索我的项目：名称、类型、提示词…', 'Search my projects: name, format, prompt…')} />
       </div>
-      <div className="v4-tools" style={{ display: 'flex', gap: 10 }}>
-        {/* 模型库：参考图已经备好，用户只要上传自己的素材——比从零传两张图快得多 */}
+      <div className="ws-actions">
+        <button className="ws-new" onClick={() => go('/replicate/new')}>
+          <Icon name="plus" size={18} /> {t('新建复刻', 'New recreation')}
+        </button>
         <button className="v4-btn-line" onClick={() => go('/replicate/templates')}>{t('浏览模版', 'Browse templates')}</button>
-        <button className="v4-btn-dark" onClick={() => go('/replicate/new')}>{t('新建复刻', 'New recreation')}</button>
       </div>
-    </div>
-
-    {/* 存档位置说清楚：复刻草稿在本机浏览器，不进包装设计的云端项目表 */}
-    <div className="v4-toolbar" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-      <div className="v4-sec-note">
+      <p className="ws-sub">
         {t('项目保存在此设备（含图片）；单条的输入图与结果都会原样保留。',
           'Projects live in this browser, images included — every input and take is kept.')}
-      </div>
+      </p>
     </div>
 
     {!empty && <>
-      <div className="v4-toolbar">
+      <h2 className="ws-sec-title">{t('最近的项目', 'Recent projects')}</h2>
+      <div className="v4-toolbar" style={{ marginTop: 12 }}>
         <div className="v4-filters">
           {FILTERS.map((f) => <button key={f.id} className={`v4-filter ${filter === f.id ? 'active' : ''}`} onClick={() => setFilter(f.id)}>
             {lang === 'en' ? f.en : f.zh}
@@ -121,8 +124,6 @@ export default function ReplicateList() {
           </button>)}
         </div>
         <div className="v4-tools">
-          <input className="v4-search" value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder={t('搜索名称、类型、提示词', 'Search name, format or prompt')} />
           <select className="v4-select" value={sort} onChange={(e) => setSort(e.target.value as SortId)}>
             {SORTS.map((x) => <option key={x.id} value={x.id}>{lang === 'en' ? x.en : x.zh}</option>)}
           </select>

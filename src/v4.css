@@ -3892,3 +3892,53 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
     box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 16px 40px -34px rgba(0, 0, 0, 0.7);
   }
 }
+
+/* ============================================================
+ * 工作台页头（包装工作台 / 复刻工作台，Canva「所有项目」式）：
+ * 居中标题 → 大搜索框（搜自己的草稿）→ 大新建按钮 → 最近的项目。
+ * 搜索框和新建按钮是这一页的两个主操作，所以都给到「一眼看到」的体量。
+ * ============================================================ */
+.ws-hero { text-align: center; padding: 30px 0 0; }
+.ws-hero .v4-kicker { letter-spacing: 0.32em; }
+.ws-hero .v4-h1 { margin-top: 12px; }
+.ws-search-wrap { position: relative; max-width: 640px; margin: 22px auto 0; }
+.ws-search-ic {
+  position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
+  color: var(--v4-ink-3); display: flex; pointer-events: none;
+}
+.ws-search {
+  width: 100%; height: 52px; border-radius: 999px;
+  border: 1px solid var(--v4-line-strong);
+  background: var(--v4-surface);
+  padding: 0 22px 0 48px;
+  font: inherit; font-size: 14.5px; color: var(--v4-ink);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.ws-search::placeholder { color: var(--v4-ink-3); }
+.ws-search:focus { outline: none; border-color: var(--v4-ink); box-shadow: 0 2px 14px -8px rgba(18, 18, 16, 0.35); }
+[data-theme="dark"] .ws-search:focus { box-shadow: 0 2px 14px -8px rgba(0, 0, 0, 0.8); }
+.ws-actions { margin-top: 20px; display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.ws-new {
+  height: 50px; padding: 0 30px; border-radius: 999px;
+  background: var(--v4-solid-bg); color: var(--v4-solid-fg);
+  border: 1px solid var(--v4-solid-bg);
+  font: inherit; font-size: 15.5px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 9px;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+}
+.ws-new:hover { transform: translateY(-1px); box-shadow: 0 10px 26px -14px rgba(18, 18, 16, 0.5); }
+.ws-new:active { transform: translateY(0); }
+[data-theme="dark"] .ws-new:hover { box-shadow: 0 10px 26px -14px rgba(0, 0, 0, 0.9); }
+.ws-sub { margin: 14px auto 0; max-width: 640px; font-size: 11.5px; line-height: 1.6; color: var(--v4-ink-3); }
+.ws-sync-btns { margin-top: 10px; display: flex; gap: 8px; justify-content: center; }
+.ws-sync-btns .v4-btn-line { height: 32px; padding: 0 14px; font-size: 12px; }
+.ws-sec-title { margin: 34px 0 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: var(--v4-ink); }
+@media (max-width: 860px) {
+  .ws-hero { padding-top: 18px; }
+  .ws-search-wrap { margin-top: 16px; }
+  .ws-search { height: 46px; font-size: 14px; padding-left: 42px; }
+  .ws-actions { margin-top: 14px; }
+  .ws-new { height: 46px; padding: 0 22px; font-size: 14.5px; width: 100%; justify-content: center; }
+  .ws-sec-title { margin-top: 24px; }
+}
