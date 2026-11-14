@@ -627,7 +627,7 @@ function ReplicateEditor() {
       {/* 从模版库进来的，返回就去模版库：把人送回他刚离开的那一屏，
           而不是扔进一个他还没见过的记录列表 */}
       <button onClick={() => go(tpl ? '/replicate/templates' : '/replicate')}>
-        <Icon name="chevronLeft" size={12} />{tpl ? t('模版库', 'Templates') : t('记录', 'Records')}
+        <Icon name="chevronLeft" size={12} />{tpl ? t('模版库', 'Templates') : t('项目', 'Projects')}
       </button>
       <span className="rep-kicker">RECREATE</span>
     </div>
@@ -654,7 +654,7 @@ function ReplicateEditor() {
         {/* 如实说明存到哪儿了：复刻草稿存在本机浏览器，不进云端项目表 */}
         <span className="rep-savehint">
           <Icon name="check" size={12} />
-          {draftIdRef.current ? t('已自动存到记录', 'Saved to Records') : t('改动会自动存成一条记录', 'Changes are saved as a record')}
+          {draftIdRef.current ? t('已自动存到项目', 'Saved to Projects') : t('改动会自动存成一个项目', 'Changes are saved as a project')}
         </span>
       </div>}
     </div>

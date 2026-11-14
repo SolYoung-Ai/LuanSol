@@ -145,10 +145,10 @@ function buildGroups(t: TFn, lang: string): Group[] {
           </>,
         },
         {
-          q: t('左侧栏的「记录」和「模版」分别是什么？', 'What are Records and Templates in the sidebar?'),
-          kw: t('记录 模版 模板 草稿 上架 分类', 'records templates drafts categories'),
+          q: t('左侧栏的「项目」和「模版」分别是什么？', 'What are Projects and Templates in the sidebar?'),
+          kw: t('项目 记录 模版 模板 草稿 上架 分类', 'projects records templates drafts categories'),
           a: <>
-            {t('「记录」是复刻的草稿箱，每次复刻都存一条，可以继续改、复制、删除。「模版」是把常用的版式做成半成品：参考图已经准备好，点一下直接进工作区，只上传自己的素材图就能出图。模版库正在分批上架，主图 / 详情页 / 海报 / 视频封面 / 包装 / 周边各有分类；还没上架的分类可以先「新建复刻」自己从零开始。',
+            {t('「项目」是复刻的草稿箱，每次复刻都存一条，可以继续改、复制、删除。「模版」是把常用的版式做成半成品：参考图已经准备好，点一下直接进工作区，只上传自己的素材图就能出图。模版库正在分批上架，主图 / 详情页 / 海报 / 视频封面 / 包装 / 周边各有分类；还没上架的分类可以先「新建复刻」自己从零开始。',
               'Records is the recreation draft box — every run is saved there and can be reopened, duplicated or deleted. Templates are half-finished layouts: the reference image is already in place, so clicking one opens the workspace and you only add your own assets. The library is being published format by format (main image, detail page, poster, video cover, packaging, merch); until a category is live, use New recreation and start from scratch.')}
           </>,
         },
@@ -261,7 +261,7 @@ function buildGroups(t: TFn, lang: string): Group[] {
           q: t('我的设计存在哪里？换设备还在吗？', 'Where are my designs stored? Do they follow me across devices?'),
           kw: t('保存 本地 IndexedDB 云端 同步 清缓存 备份', 'storage local cloud sync cache backup'),
           a: <>
-            {t('本机浏览器会自动保存（IndexedDB），不登录也不会丢。登录后云端同步自动开启：作品自动上传并合并，换设备在包装设计点「取回云端项目」即可继续编辑。复刻记录只存在本机浏览器，不参与云端同步。清空浏览器数据会连同本地草稿一起清掉，重要项目建议先导出备份。',
+            {t('本机浏览器会自动保存（IndexedDB），不登录也不会丢。登录后云端同步自动开启：作品自动上传并合并，换设备在包装设计点「取回云端项目」即可继续编辑。复刻项目只存在本机浏览器，不参与云端同步。清空浏览器数据会连同本地草稿一起清掉，重要项目建议先导出备份。',
               'Everything is saved in your browser (IndexedDB), so nothing is lost even without signing in. Once you sign in, cloud sync turns on automatically: work uploads and merges, and on another device you click “Restore cloud projects”. Recreation records stay in this browser and are not synced. Clearing browser data wipes local drafts too, so export anything important first.')}
           </>,
         },
@@ -367,7 +367,7 @@ function buildUpdates(t: TFn) {
     {
       date: '11-13',
       title: t('复刻设计独立成一条产品线', 'Recreate is its own product line'),
-      body: t('「包装设计」与「复刻设计」平级并列，各有各的草稿箱：包装设计存项目，复刻设计存「记录」。',
+      body: t('「包装设计」与「复刻设计」平级并列，各有各的草稿箱：包装设计存项目，复刻设计也存「项目」。',
         'Packaging and Recreate now sit side by side, each with its own draft box: projects for packaging, records for recreations.'),
     },
     {
@@ -383,7 +383,7 @@ function buildLinks(t: TFn): { label: string; desc: string; path: string; icon: 
   return [
     { label: t('开始一个设计', 'Start a design'), desc: t('四步出图', 'Four steps to images'), path: '/start', icon: 'spark' },
     { label: t('包装设计', 'Packaging'), desc: t('项目与草稿', 'Projects and drafts'), path: '/workspace', icon: 'folder' },
-    { label: t('复刻 · 记录', 'Recreate · records'), desc: t('复刻过的都在这', 'Every recreation you made'), path: '/replicate', icon: 'grid' },
+    { label: t('复刻 · 项目', 'Recreate · projects'), desc: t('复刻过的都在这', 'Every recreation you made'), path: '/replicate', icon: 'grid' },
     { label: t('复刻 · 模版', 'Recreate · templates'), desc: t('参考图已备好，传素材就能出图', 'Reference ready — just add your assets'), path: '/replicate/templates', icon: 'grid' },
     { label: t('积分', 'Credits'), desc: t('余额、签到与流水', 'Balance, check-in and log'), path: '/credits', icon: 'folder' },
     { label: t('账户信息', 'Account'), desc: t('密码与邮箱', 'Password and email'), path: '/account', icon: 'user' },

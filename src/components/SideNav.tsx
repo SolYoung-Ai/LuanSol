@@ -160,7 +160,7 @@ export function SideRecreate({ onNavigate }: { onNavigate?: () => void }) {
 
     <button className={`sd-act ${inList ? 'on' : ''}`} onClick={() => { onNavigate?.(); if (!inList) go('/replicate'); }}>
       <span className="sd-ic"><Icon name="layers" size={16} /></span>
-      <span>{t('记录', 'Records')}</span>
+      <span>{t('项目', 'Projects')}</span>
       <em className="sd-act-n">{total}</em>
     </button>
 
