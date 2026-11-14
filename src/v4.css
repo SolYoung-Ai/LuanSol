@@ -3643,7 +3643,7 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 
   /* 页脚在卡里：不再自带白底（会把点阵截断），只用一条发丝线分界 */
   .app.has-side:not(.is-luna) .footer-min {
-    margin: 48px 0 0;
+    margin: 40px 0 0;
     background: transparent;
     border-top: 1px solid var(--v4-line);
   }
@@ -3725,7 +3725,7 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 
   /* 页脚在卡里：不再自带白底（会把点阵截断），只用一条发丝线分界 */
   .app.has-side:not(.is-luna) .footer-min {
-    margin: 48px 0 0;
+    margin: 40px 0 0;
     background: transparent;
     border-top: 1px solid var(--v4-line);
   }
@@ -3760,4 +3760,33 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
     box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 18px 44px -38px rgba(0, 0, 0, 0.8);
   }
   [data-theme="dark"] .app.has-side:not(.is-luna) .main::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); background-clip: content-box; }
+}
+
+/* 内容不足一屏时页脚贴卡片底部，内容超一屏时正常滚动：flex 列 + footer margin-top:auto。
+   两个必须补的补丁，否则 flex 会打乱原有排版：
+     · .v4-page 的 margin:0 auto 在交叉轴上会阻止 stretch —— 页面缩成内容宽并居中，
+       所以显式给 width:100%（此时 auto 边距归零，和原来 block 的观感一致）；
+     · .global-back 是普通 inline-flex，会被 stretch 拉成横贯整张卡的一条，
+       用 align-self 让它按自身内容宽收回来。 */
+@media (min-width: 861px) {
+  .app.has-side:not(.is-luna) .main { display: flex; flex-direction: column; }
+  .app.has-side:not(.is-luna) .main > * { flex: 0 0 auto; }
+  .app.has-side:not(.is-luna) .main > .v4-page,
+  .app.has-side:not(.is-luna) .main > .page { width: 100%; }
+  .app.has-side:not(.is-luna) .main > .global-back { align-self: flex-start; }
+  .app.has-side:not(.is-luna) .main > .footer-min { margin-top: auto; }
+}
+/* 内容不足一屏时页脚贴卡片底部，内容超一屏时正常滚动：flex 列 + footer margin-top:auto。
+   两个必须补的补丁，否则 flex 会打乱原有排版：
+     · .v4-page 的 margin:0 auto 在交叉轴上会阻止 stretch —— 页面缩成内容宽并居中，
+       所以显式给 width:100%（此时 auto 边距归零，和原来 block 的观感一致）；
+     · .global-back 是普通 inline-flex，会被 stretch 拉成横贯整张卡的一条，
+       用 align-self 让它按自身内容宽收回来。 */
+@media (min-width: 861px) {
+  .app.has-side:not(.is-luna) .main { display: flex; flex-direction: column; }
+  .app.has-side:not(.is-luna) .main > * { flex: 0 0 auto; }
+  .app.has-side:not(.is-luna) .main > .v4-page,
+  .app.has-side:not(.is-luna) .main > .page { width: 100%; }
+  .app.has-side:not(.is-luna) .main > .global-back { align-self: flex-start; }
+  .app.has-side:not(.is-luna) .main > .footer-min { margin-top: auto; }
 }
