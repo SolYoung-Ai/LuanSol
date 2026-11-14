@@ -14,7 +14,7 @@ import { accountKey, otpTarget, emailTarget, isEmail, rowId, projectIdOf, ownsPr
 import { LOGIN_CONFIG } from '../src/cloud/loginConfig';
 import { decideGate, usageStat, CREDIT_BUCKET_FREE } from '../src/cloud/subscription';
 import { PRICING } from '../src/cloud/plans';
-import { payReturnFlag } from '../src/cloud/pay';
+import { payReturnFlag, clearPayReturnFlag } from '../src/cloud/pay';
 import { IMAGE_MODELS, OPEN_IMAGE_MODELS, HYPER3D_COST, imageCost, imageModel, isProOnlyTier, resolveTier } from '../src/cloud/models';
 import {
   CHAT_MODELS, FALLBACK_CHAT_MODEL, FREE_CHAT_MODEL, chatModel, costOfUsage, isPeakNow,
@@ -898,6 +898,35 @@ export async function runTests(): Promise<Result[]> {
       set('#/wizard?step=3&paid=0');
       A(payReturnFlag().returned && !payReturnFlag().paid, 'paid=0 是回跳但不代表已付');
       return 'paid=1 / checkout_id / 无参 / paid=0 四种情况正确';
+    } finally { g.window = prev; }
+  });
+
+  await t('支付回跳 · 地址栏参数必须清干净（不清就会每次刷新都重新「正在确认」）', () => {
+    const g = globalThis as unknown as { window?: unknown };
+    const prev = g.window;
+    const urls: string[] = [];
+    const stub = (hash: string, search: string) => ({
+      location: { hash, search, pathname: '/' },
+      history: { replaceState: (_s: unknown, _t: unknown, u: string) => { urls.push(String(u)); } },
+    });
+    try {
+      // 1) 本站正常形态：参数在 hash 里
+      g.window = stub('#/credits?paid=1', '');
+      clearPayReturnFlag();
+      A(urls[0] === '/#/credits', `hash 里的 paid 没清掉：${urls[0]}`);
+
+      // 2) 有些渠道会把参数放在 # 之前，只清 hash 的话会一直跟着页面跑
+      urls.length = 0;
+      g.window = stub('#/credits', '?paid=1&checkout_id=ch_1');
+      clearPayReturnFlag();
+      A(urls[0] === '/#/credits', `search 里的支付参数没清掉：${urls[0]}`);
+
+      // 3) 没有支付参数时不该改写地址（会多一次无意义的历史记录）
+      urls.length = 0;
+      g.window = stub('#/credits', '');
+      clearPayReturnFlag();
+      A(urls.length === 0, '没有支付参数时不应改写地址');
+      return 'hash / search 两处的 paid 与 checkout_id 都会被清掉';
     } finally { g.window = prev; }
   });
 

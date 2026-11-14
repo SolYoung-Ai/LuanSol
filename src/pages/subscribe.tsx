@@ -13,7 +13,10 @@ import { go } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, type CreditLog } from '../cloud/subscription';
-import { startCheckout, payReturnFlag, clearPayReturnFlag, markPayKind, lastPayKind, clearPayKind } from '../cloud/pay';
+import {
+  startCheckout, payReturnFlag, clearPayReturnFlag, markPayKind, lastPayKind, clearPayKind,
+  markPayBaseline, readPayBaseline, clearPayBaseline, markPayPending, readPayPending, clearPayPending,
+} from '../cloud/pay';
 import { PRICING, WECHAT_PAY_QR } from '../cloud/plans';
 import { imageModelNote } from '../cloud/models';
 import { IMAGE_MODELS, HYPER3D_COST } from '../cloud/models';
@@ -47,23 +50,6 @@ export default function Credits() {
   const [payingKey, setPayingKey] = useState<string | null>(null);
   const [payMsg, setPayMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const paying = payingKey !== null;
-
-  /** 购买积分的对公微信号，点一下复制 */
-  const WX_ID = 'soyo-ang';
-  const copyWx = async () => {
-    try {
-      await navigator.clipboard.writeText(WX_ID);
-      setToast(t(`已复制微信号 ${WX_ID}`, `WeChat ID copied: ${WX_ID}`));
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = WX_ID;
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy'); setToast(t(`已复制微信号 ${WX_ID}`, `WeChat ID copied: ${WX_ID}`)); }
-      catch { setToast(t(`微信号：${WX_ID}`, `WeChat ID: ${WX_ID}`)); }
-      document.body.removeChild(ta);
-    }
-  };
 
   const goRedeem = () => {
     redeemRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -119,34 +105,72 @@ export default function Credits() {
     if (r.ok) setRedeemCode('');
   };
 
-  // 从 Creem 收银台回跳：webhook 到账有几秒延迟，轮询数据库最多约 24 秒，
-  // 拿到真实积分明细再收工——否则用户会看到「已付款但余额没变」，以为钱白花了。
+  // 余额的最新值：确认轮询里要拿它和付款前的快照比，闭包里直接读 useState
+  // 会一直是旧值，所以走 ref。
+  const leftRef = useRef<number | null>(null);
+  leftRef.current = sub.usedLeft;
+
+  // 从 Creem 收银台回跳：地址栏的 ?paid=1 一律立刻清掉，只留一个「待确认」标记。
+  // 以前是把参数留在地址栏里做判断，于是只要这页被重新挂载（刷新、返回、点侧栏）
+  // 就会再确认一遍——即使积分早就到账，也会一直显示「正在确认积分到账…」。
+  const [payPending, setPayPending] = useState(0);
   useEffect(() => {
-    const flag = payReturnFlag();
-    if (!flag.returned || !a.user) return;
+    if (payReturnFlag().returned) {
+      markPayPending();
+      clearPayReturnFlag();
+    }
+    const p = readPayPending();
+    if (p) setPayPending(p);
+  }, []);
+
+  // 确认到账：webhook 有几秒延迟，最多等约 30 秒。
+  // 到账判据两层：付款前的余额快照涨了（最可靠），或付款之后多了一条 recharge 明细。
+  // 无论成功、超时还是异常，都必须收尾并清掉标记，不能让提示停在「正在确认」。
+  useEffect(() => {
+    if (!payPending || !a.user) return;
     let cancelled = false;
     let tries = 0;
+    const startedAt = Date.now();
+    const baseline = readPayBaseline();
+    const leftBefore = baseline?.left ?? null;
     setPayMsg({ ok: true, text: t('支付已完成，正在确认积分到账…', 'Payment complete — confirming your credits…') });
+
+    const done = (next: { ok: boolean; text: string }) => {
+      clearPayPending(); clearPayBaseline(); clearPayKind();
+      setPayPending(0);
+      setPayMsg(next);
+    };
+
     const tick = async () => {
       if (cancelled) return;
       tries += 1;
-      // 到账标志是「近 15 分钟有一条 recharge 明细」，比对比余额更可靠：
-      // 页面重载后拿不到付款前的余额，而明细是幂等的。
-      const logs = await sub.getCreditLogs(8);
+      try {
+        const logs = await sub.getCreditLogs(10);
+        if (cancelled) return;
+        // 记录时间戳是服务器时间，本地时钟可能偏几秒，往前放 90 秒容差
+        const since = (baseline ? baseline.at : startedAt) - 90 * 1000;
+        const hit = logs.find((l) => l.change_type === 'recharge' && Date.parse(l.created_at) >= since);
+        const grew = leftBefore !== null && leftRef.current !== null && leftRef.current > leftBefore;
+        if (hit || grew) {
+          await sub.refresh();
+          if (cancelled) return;
+          done({
+            ok: true,
+            text: hit
+              ? t(`积分已到账：+${hit.amount}，余额已更新。`, `Credits added: +${hit.amount}. Balance updated.`)
+              : t('积分已到账，余额已更新。', 'Credits added — balance updated.'),
+          });
+          return;
+        }
+      } catch { /* 单次查询失败不终止，等下一轮或超时收尾 */ }
       if (cancelled) return;
-      const fresh = logs.some((l) => l.change_type === 'recharge'
-        && Date.now() - Date.parse(l.created_at) < 15 * 60 * 1000);
-      if (fresh) {
-        await sub.refresh();
-        clearPayReturnFlag(); clearPayKind();
-        setPayMsg({ ok: true, text: t('积分已到账，余额已更新。', 'Credits added — your balance is updated.') });
-        return;
-      }
-      if (tries >= 8) {
-        setPayMsg({
+      if (Date.now() - startedAt > 30000 || tries >= 10) {
+        await sub.refresh().catch(() => {});
+        if (cancelled) return;
+        done({
           ok: false,
-          text: t('暂未收到积分到账确认。若已扣款，通常 1 分钟内到账，稍后刷新即可；超过 10 分钟仍未到账请联系客服。',
-            'Credits not confirmed yet. If you were charged, they normally arrive within a minute — refresh shortly. Contact us if it takes more than 10 minutes.'),
+          text: t(`已收到付款回执，积分通常 1 分钟内到账。若余额一直没有变化，把付款截图发到 ${PRICING.supportEmail}，我们人工核对补发。`,
+            `Payment receipt received — credits normally land within a minute. If your balance never changes, send the receipt to ${PRICING.supportEmail} and we will fix it manually.`),
         });
         return;
       }
@@ -155,7 +179,7 @@ export default function Credits() {
     void tick();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [a.user?.id]);
+  }, [payPending, a.user?.id]);
 
   const doPay = async (points: number) => {
     if (!a.user) {
@@ -167,6 +191,8 @@ export default function Credits() {
     const key = `credits:${points}`;
     setPayingKey(key); setPayMsg(null);
     markPayKind(lastPayKind());
+    // 回跳后页面整页重载，只能靠这份快照判断「余额是不是真涨了」
+    markPayBaseline(leftRef.current);
     const r = await startCheckout({ uid: a.user.id, email: a.user.email, name: a.user.label, points });
     if (!r.ok) { setPayingKey(null); setPayMsg({ ok: false, text: r.message }); return; }
     // 不复位 payingKey：用户可能点浏览器返回，按钮维持「确认中」比闪回可点更诚实
@@ -326,8 +352,8 @@ export default function Credits() {
         <span className={`gl-pill ${payMsg.ok ? '' : 'gl-pill-accent'}`}>{payMsg.text}</span>
       </div>}
       <p className="gl-note">
-        {t('支持 Visa / Mastercard / Apple Pay / Google Pay / 支付宝（含 AlipayHK）在线支付，付款后积分自动到账；中国内地用户可微信扫码购买或使用兑换码。积分永久有效，没有月费，也不需要续费。',
-          'Pay online with Visa / Mastercard / Apple Pay / Google Pay or Alipay (incl. AlipayHK) — credits arrive automatically. Mainland China users can scan the WeChat code or use a redeem code. Credits never expire, with no monthly fee and nothing to renew.')}
+        {t('支持 Visa / Mastercard / Apple Pay / Google Pay / 支付宝（含 AlipayHK）在线支付，付款后积分自动到账；',
+          'Pay online with Visa / Mastercard / Apple Pay / Google Pay or Alipay (incl. AlipayHK) — credits arrive automatically.')}
       </p>
       {/* 微信通道：一张收款码 + 人民币价目，扫码后人工核对充值。
           图片常量置空时整块不渲染——宁可不显示，也不放一张空图或死按钮。 */}
@@ -335,19 +361,8 @@ export default function Credits() {
         <div className="gl-wxbuy-main">
           <div className="gl-wxbuy-title">{t('中国内地 · 微信扫码购买', 'Mainland China · pay by WeChat')}</div>
           <div className="gl-wxbuy-text">
-            {t('用微信扫右侧收款码，按对应金额付款，并在备注里写下你的账号邮箱。我们会在 1 小时内处理，最迟不超过 12 小时充值到账。',
-              'Scan the code with WeChat, pay the amount for your pack, and put your account email in the payment note. Credits are added within 1 hour, and never later than 12 hours.')}
-          </div>
-          <div className="gl-wx-price">
-            {PRICING.creditsPacks.map((p) => (
-              <span className="gl-wx-chip" key={p.points}>
-                <em>{t(`${p.points} 积分`, `${p.points} credits`)}</em>
-                <strong>¥{p.priceRMB}</strong>
-              </span>
-            ))}
-            <span className="gl-wx-tip">
-              {t(`自定义 ¥1 = ${PRICING.customPointsPerRMB} 积分`, `Custom ¥1 = ${PRICING.customPointsPerRMB} credits`)}
-            </span>
+            {t('用微信扫右侧二维码付款，并在付款备注里写下你的账号邮箱。我们会在 1 小时内处理，最迟不超过 12 小时充值到账。',
+              'Scan the code with WeChat, and put your account email in the payment note. Credits are added within 1 hour, and never later than 12 hours.')}
           </div>
         </div>
         {/* 不做外链：桌面读屏靠扫，手机在微信里靠长按识别。
@@ -365,13 +380,6 @@ export default function Credits() {
     {/* ---------- 兑换码 ---------- */}
     <section className="gl-card">
       <div className="gl-label">{t('兑换码', 'Redeem code')} <em>REDEEM</em></div>
-      <p className="gl-sub" style={{ fontSize: 13, marginBottom: 14 }}>
-        {t('中国内地用户购买积分请联系微信', 'Mainland China: message us on WeChat')}{' '}
-        <button className="gl-wx" onClick={() => void copyWx()} title={t('点击复制微信号', 'Click to copy the WeChat ID')}>
-          {WX_ID}<Icon name="copy" size={11} />
-        </button>
-        {' '}{t('获取兑换码。', 'to get a redeem code.')}
-      </p>
       <div className="gl-redeem">
         <input
           ref={redeemRef}

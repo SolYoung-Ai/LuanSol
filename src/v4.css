@@ -2370,25 +2370,12 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 .gl-pack .gl-btn { margin-top: 6px; }
 
 .gl-note { font-size: 11.5px; line-height: 1.8; color: var(--v4-ink-3); margin-top: 12px; }
-/* 行内微信号按钮：点一下自动复制。做成 chip 而不是 <a>，
-   因为这里没有任何可跳转地址，看起来像链接会给错预期。 */
-.gl-wx {
-  display: inline-flex; align-items: center; gap: 4px; vertical-align: baseline;
-  padding: 1px 7px; border: 0; border-radius: 7px; cursor: pointer;
-  font: inherit; font-weight: 600; letter-spacing: 0.01em;
-  background: rgba(217, 96, 44, 0.11); color: #b24a1b;
-  transition: background var(--v4-dur-fast) var(--v4-ease), transform var(--v4-dur-fast) var(--v4-ease);
-}
-.gl-wx:hover { background: rgba(217, 96, 44, 0.2); }
-.gl-wx:active { transform: scale(0.96); }
 
-/* 兑换码价格表：中国内地用户按人民币结算，价格与美元在线价是两套。
-   放在兑换入口下面，省掉「加微信问价」这一轮往返。 */
-/* 微信扫码购买：左说明 + 人民币价目，右收款码。
+/* 微信扫码购买：左说明，右收款码。
    日间是一层极浅的灰，夜间换成半透明白，跟 .gl-pack 同一套材质语言；
    但收款码那格在两套主题下都必须是白底——二维码贴在灰底上扫不出来。 */
 .gl-wxbuy {
-  margin-top: 12px; padding: 14px; border-radius: 16px;
+  margin-top: 12px; padding: 12px 14px; border-radius: 16px;
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   background: rgba(15, 15, 20, 0.028);
   box-shadow: inset 0 0 0 1px rgba(15, 15, 20, 0.05);
@@ -2401,21 +2388,9 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 .gl-wxbuy-title { font-size: 13px; font-weight: 600; color: var(--v4-ink); }
 .gl-wxbuy-text { margin-top: 4px; font-size: 11.5px; line-height: 1.7; color: var(--v4-ink-3); }
 
-/* 价目：三档胶囊 + 自定义比例，数据来自 PRICING.creditsPacks */
-.gl-wx-price { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
-.gl-wx-chip {
-  display: inline-flex; align-items: baseline; gap: 5px;
-  padding: 3px 9px; border-radius: 9px;
-  background: rgba(15, 15, 20, 0.05);
-}
-[data-theme="dark"] .gl-wx-chip { background: rgba(255, 255, 255, 0.08); }
-.gl-wx-chip em { font-style: normal; font-size: 10.5px; color: var(--v4-ink-3); }
-.gl-wx-chip strong { font-size: 12px; font-weight: 600; color: var(--v4-ink); font-variant-numeric: tabular-nums; }
-.gl-wx-tip { font-size: 10.5px; color: var(--v4-ink-3); padding-left: 2px; }
-
 /* 收款码：固定白底 + 内边距做静默区，深色模式下同样保持白 */
 .gl-wxbuy-code {
-  flex: 0 0 auto; margin-left: auto; width: 152px;
+  flex: 0 0 auto; margin-left: auto; width: 132px;
   display: flex; flex-direction: column; align-items: center; gap: 5px;
   padding: 8px 8px 7px; border-radius: 12px; background: #fff;
   box-shadow: 0 1px 2px rgba(15, 15, 20, 0.08), inset 0 0 0 1px rgba(15, 15, 20, 0.08);
@@ -2428,13 +2403,11 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 
 @media (max-width: 560px) {
   .gl-wxbuy { flex-direction: column; align-items: stretch; }
-  /* 竖排时 flex-basis 变成高度，240px 的基数会在价目下面留一大块空白 */
+  /* 竖排时 flex-basis 变成高度，240px 的基数会在说明下面留一大块空白 */
   .gl-wxbuy-main { flex: 0 0 auto; }
   .gl-wxbuy-code { margin: 2px auto 0; width: 180px; }
 }
 
-[data-theme="dark"] .gl-wx { background: rgba(217, 96, 44, 0.22); color: #ffb98a; }
-[data-theme="dark"] .gl-wx:hover { background: rgba(217, 96, 44, 0.32); }
 .gl-redeem { display: flex; gap: 8px; align-items: center; }
 .gl-redeem .gl-input { flex: 1; }
 

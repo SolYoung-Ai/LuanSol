@@ -75,12 +75,76 @@ export function payReturnFlag(): { returned: boolean; paid: boolean } {
   return { returned, paid: sp.get('paid') === '1' || sp.has('checkout_id') };
 }
 
-/** 清掉地址栏里的支付参数，避免刷新时反复提示「正在确认」 */
+/** 清掉地址栏里的支付参数，避免刷新时反复提示「正在确认」。
+ *  两个位置都要清：本站正常是 hash 里的 `#/credits?paid=1`，但有些渠道会把
+ *  参数放在 `#` 之前（location.search）。只清 hash 的话，location.search 里那份
+ *  会一直跟着页面走，用户每次刷新/返回都会重新触发「正在确认积分到账…」。 */
 export function clearPayReturnFlag(): void {
   if (typeof window === 'undefined') return;
+  const drop = ['paid', 'checkout_id', 'subscription_id', 'order_id', 'status'];
   const h = window.location.hash || '';
+  let nextHash = h;
   const qi = h.indexOf('?');
-  if (qi < 0) return;
-  const next = `${h.slice(0, qi)}${h.slice(qi).replace(/\?.*$/, '')}`;
-  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${next}`);
+  if (qi >= 0) {
+    const sp = new URLSearchParams(h.slice(qi + 1));
+    drop.forEach((k) => sp.delete(k));
+    const rest = sp.toString();
+    nextHash = h.slice(0, qi) + (rest ? `?${rest}` : '');
+  }
+  const usp = new URLSearchParams(window.location.search);
+  drop.forEach((k) => usp.delete(k));
+  const nextSearch = usp.toString() ? `?${usp.toString()}` : '';
+  if (nextHash === h && nextSearch === window.location.search) return;
+  window.history.replaceState(null, '', `${window.location.pathname}${nextSearch}${nextHash}`);
+}
+
+/* ------------------------------------------------------------------
+ * 付款前余额快照 + 「待确认」标记
+ * -----------------------------------------------------------------
+ * 回跳时页面已经整页重载，内存里的东西全没了，只有 sessionStorage 跨得过
+ * 这一次跳转（同标签页、同源）。
+ *  - baseline：付款前的余额。回跳后余额涨了 = 到账，比「近 15 分钟有充值记录」
+ *    可靠得多——用户完全可能过半小时才回到这页。
+ *  - pending：还没确认完的付款。地址栏参数会被立刻清掉，靠它记住「这单要确认」，
+ *    这样未登录先去登录、或者中途刷新，回来还能继续确认。
+ * ------------------------------------------------------------------ */
+const BASE_KEY = 'lunasol.pay.baseline';
+const PENDING_KEY = 'lunasol.pay.pending';
+
+export type PayBaseline = { at: number; left: number | null };
+
+export function markPayBaseline(left: number | null): void {
+  try { sessionStorage.setItem(BASE_KEY, JSON.stringify({ at: Date.now(), left })); } catch { /* 忽略 */ }
+}
+
+export function readPayBaseline(): PayBaseline | null {
+  try {
+    const raw = sessionStorage.getItem(BASE_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { at?: unknown; left?: unknown };
+    if (typeof v?.at !== 'number') return null;
+    return { at: v.at, left: typeof v.left === 'number' ? v.left : null };
+  } catch { return null; }
+}
+
+export function clearPayBaseline(): void {
+  try { sessionStorage.removeItem(BASE_KEY); } catch { /* 忽略 */ }
+}
+
+export function markPayPending(): void {
+  try { sessionStorage.setItem(PENDING_KEY, String(Date.now())); } catch { /* 忽略 */ }
+}
+
+/** 超过 1 小时的待确认记录直接丢弃：那种情况下早就该用明细对账了 */
+export function readPayPending(): number | null {
+  try {
+    const raw = Number(sessionStorage.getItem(PENDING_KEY) || 0);
+    if (!raw) return null;
+    if (Date.now() - raw > 60 * 60 * 1000) { sessionStorage.removeItem(PENDING_KEY); return null; }
+    return raw;
+  } catch { return null; }
+}
+
+export function clearPayPending(): void {
+  try { sessionStorage.removeItem(PENDING_KEY); } catch { /* 忽略 */ }
 }

@@ -64,6 +64,9 @@ export const PRICING = {
    *  不要再出现第二个地址——审核方会核对站点上的邮箱是否与法务页一致。 */
   supportEmail: 'solyoungwork@gmail.com',
 
+  /** 对公微信号（人工充值与售后都走这里，界面只展示、点一下复制） */
+  wechatId: 'soyo-ang',
+
   /** 仅用于积分包的人民币折算校验，不是售价 */
   usdToRmb: 7.1,
 } as const;

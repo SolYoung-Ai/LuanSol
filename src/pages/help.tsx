@@ -18,6 +18,7 @@
 import React, { useMemo, useState } from 'react';
 import { Icon } from '../components/icons';
 import { go } from '../ui';
+import { useApp } from '../store';
 import { useLang } from '../i18n';
 import { PRICING } from '../cloud/plans';
 import { imageCost, imagePromoLabel } from '../cloud/models';
@@ -30,8 +31,6 @@ type TFn = (zh: string, en: string) => string;
 /** kw 只用于本地搜索：把「用户可能打的词」补在问题文本之外 */
 type Faq = { q: string; a: React.ReactNode; kw?: string };
 type Group = { id: string; title: string; en: string; items: Faq[] };
-
-const WX_ID = 'soyo-ang';
 
 function buildGroups(t: TFn, lang: string): Group[] {
   const packsOnline = PRICING.creditsPacks
@@ -225,8 +224,8 @@ function buildGroups(t: TFn, lang: string): Group[] {
           a: <>
             {t('新注册送 ', 'New accounts get ')}
             <strong>{t(`${PRICING.freeTrialUses} 积分`, `${PRICING.freeTrialUses} credits`)}</strong>
-            {t(`；每日签到 +10，没有上限，积分永久有效；另外可以用兑换码兑换，或加微信 ${WX_ID} 人工购买。签到入口在「积分」页顶部。`,
-              `; daily check-in gives +10 with no cap, and credits never expire. You can also redeem a code or buy manually on WeChat ${WX_ID}. Check-in sits at the top of the Credits page.`)}
+            {t(`；每日签到 +10，没有上限，积分永久有效；另外可以用兑换码兑换，或加微信 ${PRICING.wechatId} 人工购买。签到入口在「积分」页顶部。`,
+              `; daily check-in gives +10 with no cap, and credits never expire. You can also redeem a code or buy manually on WeChat ${PRICING.wechatId}. Check-in sits at the top of the Credits page.`)}
           </>,
         },
         {
@@ -394,6 +393,16 @@ function buildLinks(t: TFn): { label: string; desc: string; path: string; icon: 
 
 export default function Help() {
   const { lang, t } = useLang();
+  const { setToast } = useApp();
+  /* 微信号点一下复制：用户在手机微信里搜号加人，复制比手打靠谱 */
+  const copyWx = async () => {
+    try {
+      await navigator.clipboard.writeText(PRICING.wechatId);
+      setToast(t(`已复制微信号 ${PRICING.wechatId}`, `WeChat ID copied: ${PRICING.wechatId}`));
+    } catch {
+      setToast(t(`微信号：${PRICING.wechatId}`, `WeChat ID: ${PRICING.wechatId}`));
+    }
+  };
   const [open, setOpen] = useState<string | null>('start-0');
   /* 搜索时默认全部展开（用户是来找答案的，不该再点一次）；
      仍允许把某一条收起来，但那是另一套状态——不能借用 open，
@@ -522,13 +531,17 @@ export default function Help() {
         <a className="gl-btn" href={`mailto:${PRICING.supportEmail}?subject=LunaSol%20feedback`}>
           <Icon name="mail" size={15} /> {PRICING.supportEmail}
         </a>
+        <button className="gl-btn gl-btn-soft" onClick={() => void copyWx()}
+          title={t('点击复制微信号', 'Click to copy the WeChat ID')}>
+          <Icon name="message" size={15} /> {t(`微信 ${PRICING.wechatId}`, `WeChat ${PRICING.wechatId}`)}
+        </button>
         <button className="gl-btn gl-btn-soft" onClick={() => go('/workspace')}>
           {t('回包装设计', 'Back to Packaging')}
         </button>
       </div>
       <p className="gl-note">
-        {t('没有电话客服，所有问题都走邮箱；工作室时区 UTC+8。',
-          'No phone support — everything goes through email. Studio timezone: UTC+8.')}
+        {t('没有电话客服，问题走邮箱或微信（点一下复制微信号）；工作室时区 UTC+8。',
+          'No phone support — reach us by email or WeChat (tap to copy the ID). Studio timezone: UTC+8.')}
       </p>
     </section>
 
