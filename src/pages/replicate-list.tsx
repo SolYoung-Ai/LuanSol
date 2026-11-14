@@ -10,7 +10,7 @@
  *   · 动作只有「继续复刻 / 复制 / 重命名 / 删除」，不做状态与结构分类——
  *     复刻的进度没有「设计中 / 已印前」这种阶段，硬塞只会多出一堆空筛选。
  * ============================================================ */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, go } from '../ui';
 import { useApp, visibleReplicas } from '../store';
 import { useLang } from '../i18n';
@@ -55,6 +55,11 @@ export default function ReplicateList() {
 
   /* 所有复刻草稿（只保留真的传过图 / 出过图的） */
   const all = useMemo(() => visibleReplicas(s.replicates), [s.replicates]);
+
+  /* 这一页唯一能去的地方就是复刻工作区：挂上就把那块 chunk 取回来。
+     否则第一次点「新建复刻」时还要现拉 JS，中间会闪一整屏加载字标，
+     看起来就是「点了一下没反应，然后突然跳过去」。 */
+  useEffect(() => { void import('./replicate'); }, []);
 
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase();

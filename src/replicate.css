@@ -421,6 +421,29 @@
   animation: repFade 0.18s ease-out both;
 }
 @keyframes repFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* 首次进入（还没选类型）：这一页的背后还没有任何内容，弹窗就是页面本体。
+   所以三件事一起做，换掉「先看到半透明中间态」的那一下：
+     1) 不铺满屏的 backdrop-filter —— 进页第一帧就给全屏做模糊合成，
+        会把整页的光栅化压到关键路径上，是最典型的掉帧来源；
+     2) 遮罩只做 0.12s 淡入、卡片不做上浮，第一帧就是完成态；
+     3) 背景里那半张还没填的工作区先不画（visibility，不占绘制），
+        否则灰幕后面露出半截标题，看着像没加载完。 */
+.rep-modal.is-instant {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: repFade 0.12s ease-out both;
+}
+.rep-modal.is-instant .rep-modal-box { animation: none; }
+.rep-page.is-choosing > *:not(.rep-modal) { visibility: hidden; }
+
+/* 深色模式下卡片是「纸色压在纸色」上，全靠投影分不出来（深色投影等于没投影）。
+   抬一档表面色再补一条描边，弹窗边界才立得住。 */
+:root[data-theme="dark"] .rep-modal-box {
+  background: var(--v4-surface);
+  border: 1px solid var(--v4-line);
+}
+
 .rep-modal-box {
   width: min(880px, 100%);
   max-height: min(86vh, 720px);

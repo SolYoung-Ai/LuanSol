@@ -9,7 +9,7 @@
  *   brand  —— 品牌头（logo + 名称 + 副标题）
  *   links  —— 开始 / Luna Ai / 包装设计 / 复刻设计
  *   slot   —— 分界线下的「场景区」，随当前导航变化：
- *              · 包装设计 → 新建设计 / 项目
+ *              · 包装设计 → 新建包装 / 项目
  *              · 复刻设计 → 新建复刻 / 复刻记录
  *              · Luna     → 会话列表（新建对话 / 搜索 / 历史）
  *   account—— 头像 + 昵称 + 积分 + 使用进度 + 查看计划，点开是账户菜单
@@ -104,7 +104,7 @@ export function SideBrand() {
   </div>;
 }
 
-/** 分界线下的「包装设计」场景区：新建设计 / 项目。
+/** 分界线下的「包装设计」场景区：新建包装 / 项目。
  *  包装设计与复刻设计各有各的一套动作，所以拆成两个组件而不是一个带 if 的组件：
  *  两边的按钮、计数、目标路径全都不一样，混在一起最容易点错。 */
 export function SidePackaging({ onNavigate }: { onNavigate?: () => void }) {
@@ -122,7 +122,7 @@ export function SidePackaging({ onNavigate }: { onNavigate?: () => void }) {
 
     <button className={`sd-act ${inNew ? 'on' : ''}`} onClick={() => { onNavigate?.(); go('/new?fresh=1'); }}>
       <span className="sd-ic"><Icon name="plus" size={16} /></span>
-      <span>{t('新建设计', 'New design')}</span>
+      <span>{t('新建包装', 'New packaging')}</span>
     </button>
 
     <button className={`sd-act ${inProjects ? 'on' : ''}`} onClick={() => { onNavigate?.(); if (!inProjects) go('/workspace?tab=all'); }}>

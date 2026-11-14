@@ -39,8 +39,8 @@ function buildGroups(t: TFn): Group[] {
         {
           q: t('第一次用，怎么开始？', 'First time here — how do I start?'),
           a: <>
-            {t('登录后从首页点「开始设计」，或在包装设计点「新建设计」。整条流程只有四步：',
-              'Sign in, then hit “Start” on the home page, or “New design” under Packaging. The whole flow is four steps: ')}
+            {t('登录后从首页点「开始设计」，或在包装设计点「新建包装」。整条流程只有四步：',
+              'Sign in, then hit “Start” on the home page, or “New packaging” under Packaging. The whole flow is four steps: ')}
             <strong>{t('创作入口 → 确认需求 → 设计方案 → 编辑器', 'Start → Requirements → Concepts → Editor')}</strong>
             {t('。前两步是填信息，第三步 AI 出图，第四步在编辑器里改（含 3D 预览与刀模印前）。',
               '. The first two collect information, the third renders images, and the fourth is where you refine them (with 3D preview and dieline prepress).')}

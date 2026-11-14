@@ -293,6 +293,28 @@ export default function Replicate() {
 
   const reset = () => { setItems([]); setEditingId(null); };
 
+  /** 首次进来（还没选类型）时，这个弹窗就是整页的内容：不淡入、不铺满屏的模糊，
+   *  第一帧就完整出现。否则从「复刻记录」点进来的那一下，会先看到一层半透明的中间态
+   *  ——背景是空的、弹窗还在透明里爬，看着就像卡了一下。 */
+  const pickerInstant = !kind;
+
+  /** 关闭弹窗：已经选过类型 → 收起来继续编辑；还没选 → 这一页没有内容可留，回复刻记录 */
+  const closePicker = () => {
+    if (kind) setPickerOpen(false);
+    else go('/replicate');
+  };
+
+  /* Esc 也关：弹窗是这一页唯一的出口，键盘用户不该被关在里面 */
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (kind) setPickerOpen(false); else go('/replicate');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pickerOpen, kind]);
+
   const pickKind = (k: KindDef) => {
     setKind(k);
     setRatioId(k.ratio);
@@ -511,7 +533,7 @@ export default function Replicate() {
     </div>;
   };
 
-  return <div className="page rep-page">
+  return <div className={`page rep-page ${pickerInstant && pickerOpen ? 'is-choosing' : ''}`}>
     <div className="rep-crumb">
       <button onClick={() => go('/replicate')}>
         <Icon name="chevronLeft" size={12} />{t('复刻记录', 'My recreations')}
@@ -645,8 +667,9 @@ export default function Replicate() {
       </section>
     </div>}
 
-    {/* 类型弹窗：第一次进来必选；已有类型时可以从「换个类型」再打开 */}
-    {pickerOpen && <div className="rep-modal" role="dialog" aria-modal="true" aria-label={t('选择复刻类型', 'Choose a format')}>
+    {/* 类型弹窗：第一次进来必选；已有类型时可以从「换个类型」再打开。
+        首次进入不做淡入（见 pickerInstant）：点进来即完整出现，不再先闪一层中间态。 */}
+    {pickerOpen && <div className={`rep-modal ${pickerInstant ? 'is-instant' : ''}`} role="dialog" aria-modal="true" aria-label={t('选择复刻类型', 'Choose a format')}>
       <div className="rep-modal-box">
         <div className="rep-modal-head">
           <div>
@@ -654,9 +677,12 @@ export default function Replicate() {
             <p>{t('不同类型对应不同的画面规则与默认尺寸，选好之后都可以再调整。',
               'Each format has its own layout rules and default size — everything stays adjustable.')}</p>
           </div>
-          {kind && <button className="rep-modal-x" onClick={() => setPickerOpen(false)} aria-label={t('关闭', 'Close')}>
+          {/* 关闭按钮常驻：还没选类型时关掉等于「不做这次复刻」，回复刻记录 */}
+          <button className="rep-modal-x" onClick={closePicker}
+            title={kind ? t('关闭', 'Close') : t('关闭并回复刻记录', 'Close and go back')}
+            aria-label={kind ? t('关闭', 'Close') : t('关闭并回复刻记录', 'Close and go back')}>
             <Icon name="close" size={15} />
-          </button>}
+          </button>
         </div>
         <div className="rep-kinds">
           {KINDS.map((k) => <button key={k.id} className={`rep-kind ${kind?.id === k.id ? 'on' : ''}`} onClick={() => pickKind(k)}>

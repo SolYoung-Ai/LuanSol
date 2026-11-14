@@ -101,7 +101,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     {
       label: t('包装设计', 'Packaging'),
       items: [
-        { label: t('新建设计', 'New design'), path: '/new?fresh=1', on: path.startsWith('/new') },
+        { label: t('新建包装', 'New packaging'), path: '/new?fresh=1', on: path.startsWith('/new') },
         {
           label: t('项目', 'Projects'), path: '/workspace?tab=all',
           on: path === '/workspace' || path === '/projects', count: visibleProjects(s.projects).length,

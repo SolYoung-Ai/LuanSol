@@ -188,7 +188,7 @@ export default function Workspace() {
         <p className="v4-sub">{t('你的每一个包装作品，都在这里留下记录。', 'Every package you make is kept here.')}</p>
       </div>
       <div className="v4-tools">
-        <button className="v4-btn-dark" onClick={() => go('/new?fresh=1')}>{t('新建设计', 'New design')}</button>
+        <button className="v4-btn-dark" onClick={() => go('/new?fresh=1')}>{t('新建包装', 'New packaging')}</button>
       </div>
     </div>
 
