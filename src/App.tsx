@@ -33,7 +33,6 @@ const Admin = lazy(() => import('./pages/admin'));
 const Replicate = lazy(() => import('./pages/replicate'));
 const ReplicateList = lazy(() => import('./pages/replicate-list'));
 const ReplicateTemplates = lazy(() => import('./pages/replicate-templates'));
-const Design = lazy(() => import('./editor'));
 
 /** 页面级加载态统一交给品牌加载组件：LunaSol 字标被橙色填满 + Sol 三字轻跳。
  *  但**延迟 150ms** 才出现：chunk 已在缓存里时切换只要一帧，
@@ -102,8 +101,8 @@ export default function App() {
   const markShown = useCallback(() => setShown(hash), [hash]);
   // 自带整屏工作区的页面：内部有 fixed 抽屉与贴底输入栏。
   // 给 .main 加 transform 会把 .main 变成这些 fixed 元素的包含块，动画期间抽屉会错位，
-  // 所以这些页的切换过渡只允许淡入，不允许位移。
-  const isFullBleed = path.startsWith('/luna') || path.startsWith('/studio') || path.startsWith('/design');
+  // 所以这两页的切换过渡只允许淡入，不允许位移。
+  const isFullBleed = path.startsWith('/luna') || path.startsWith('/studio');
 
   /* 预取主入口页面的 chunk。懒加载 fallback 是一整屏高的字标，
      首次点进 Luna 时「loader → 真实页面」的高度变化也会被看成整页跳一下。
@@ -116,7 +115,6 @@ export default function App() {
       void import('./pages/replicate');
       void import('./pages/replicate-list');
       void import('./pages/replicate-templates');
-      void import('./editor');
       // 顶栏与账号卡会频繁点到的几页，一并预热：chunk 到位后切页只剩一帧
       void import('./pages/subscribe');
       void import('./pages/account');
@@ -186,8 +184,6 @@ export default function App() {
   } else if (path === '/') page = <Home />;
   else if (path === '/studio') page = <Studio />;
   else if (path === '/new') page = <NewDesign />;
-  /* 设计台：在线设计编辑器（海报 / 视频封面），整屏工作区，无左栏 */
-  else if (path === '/design') page = <Design />;
   else if (path === '/structures') page = <Structures />;
   /* 包装设计：/workspace 与历史路径 /projects 指向同一个页面，旧链接不 404 */
   else if (path === '/workspace' || path === '/projects') page = <Workspace />;
@@ -225,9 +221,9 @@ export default function App() {
     <CloudSyncProvider>
       <ProfileProvider>
         <ChatStoreProvider>
-          {/* Luna、设计台现在也用全站左栏？——不，Luna 用全站左栏，编辑器（studio / design）是 no-side。
-              设计台（/design）是真正全屏的在线编辑器，顶部导航与返回按钮都隐藏，只留自己的工具栏。 */}
-          <div className={`app ${path.startsWith('/studio') || path.startsWith('/design') ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''} ${path.startsWith('/design') ? 'is-designer' : ''}`}>
+          {/* Luna 现在也用全站左栏（会话区挂在左栏分界线下方），所以只有编辑器是 no-side。
+              这样从工作台 / 开始页切到 Luna 时左栏原地不动，只换中间内容，不再闪一下。 */}
+          <div className={`app ${path.startsWith('/studio') ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''}`}>
             <RouteBar active={navigating} />
             <Nav onLogin={requestLogin} />
             {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
