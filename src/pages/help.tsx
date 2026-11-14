@@ -210,10 +210,10 @@ function buildUpdates(t: TFn) {
         'The sign-in dialog carries the brand mark; only email codes and passwords work now — no SMS verification or phone binding.'),
     },
     {
-      date: '11-06',
-      title: t('模型库上线', 'Model library is live'),
-      body: t('复刻设计新增「模型」：12 套已经调好的版式，参考图与提示词都备好，点一下进工作区，只上传自己的素材图就能出三张。',
-        'The model library is live: twelve ready-made layouts with the reference image and prompt already in place — pick one, add your own assets, and get three takes.'),
+      date: '11-14',
+      title: t('模版库筹备中', 'Templates in preparation'),
+      body: t('复刻设计新增「模版」页：正式模版会按主图 / 详情页 / 海报 / 视频封面 / 包装 / 周边分类上架，每个都带参考图，点一下进工作区，只上传自己的素材就能出三张。素材到位前可以先从零开始复刻。',
+        'A Templates page is being set up: curated layouts will be published by format — main image, detail page, poster, video cover, packaging, merch — each with its reference image ready. Until then, start from scratch.'),
     },
     {
       title: t('复刻功能上线', 'Recreate is live'),

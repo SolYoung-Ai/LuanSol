@@ -99,14 +99,21 @@ export default function App() {
   const { toast, setToast } = useApp();
   const auth = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
   // 必须稳定引用：SubscriptionProvider 会把它放进 useEffect 依赖，
   // 每次渲染都新建函数会让闸门反复注销重注册，中间存在计量空窗。
   const requestLogin = useCallback(() => setLoginOpen(true), []);
   // 路由切换后必须回到顶部：懒加载页面在 effect 之后才挂载，只调用一次 scrollTo 会被
   // 后来的内容撑高 / 滚动锚定带偏（实测进入工作台会停在中段，标题被导航遮住），所以补一帧再归零。
+  // 桌面端正文卡是独立滚动容器（.main 固定高度 + 内部滚动），
+  // 只重置 window 是不够的——不一起清 .main 的 scrollTop，换页会停在上一页的滚动位置。
   useEffect(() => {
-    window.scrollTo({ top: 0 });
-    const t = window.setTimeout(() => window.scrollTo({ top: 0 }), 32);
+    const reset = () => {
+      window.scrollTo({ top: 0 });
+      if (mainRef.current) mainRef.current.scrollTop = 0;
+    };
+    reset();
+    const t = window.setTimeout(reset, 32);
     return () => window.clearTimeout(t);
   }, [hash]);
 
@@ -248,7 +255,7 @@ export default function App() {
             {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
                 其中 /studio 保留顶部条，避免工具栏页连导航都没有 */}
             <SideNav onLogin={requestLogin} />
-            <main className="main">
+            <main className="main" ref={mainRef}>
               {/* 全局返回：非首页且非 Luna 对话页显示 */}
               {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
                 if (window.history.length > 1) window.history.back(); else go('/');
@@ -257,8 +264,11 @@ export default function App() {
                 {page}
                 <RouteReady key={`ready:${hash}`} onReady={markShown} />
               </Suspense>
+              {/* 页脚放进正文卡内部：以前它是卡外面的另一块白条，
+                  桌面端滚到底会看到「卡片 + 缝 + 白条」三层，很难看。
+                  放进卡里之后，滚到底就是这张卡自己的底部，页脚成为卡的一部分。 */}
+              <Footer />
             </main>
-            <Footer />
             {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
             <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
             {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>{t('本地模式', 'Local mode')}</span>}

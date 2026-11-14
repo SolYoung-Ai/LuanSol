@@ -6,7 +6,7 @@
  * 不展示功能清单、不展示统计数字、不堆多个 CTA、不放九步说明。
  * 唯一保留的交互是「已有草稿时先确认」——这是防止用户误点丢数据的必要保护。
  * ============================================================ */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, go } from '../ui';
 import { useApp } from '../store';
 import { createEmptyBrief } from '../engine/brief';
@@ -16,6 +16,14 @@ import { useLang } from '../i18n';
 import { PRICING } from '../cloud/plans';
 
 export default function Home() {
+  /* 首页与「开始」页共用同一副「无页脚」的壳：
+     桌面端正文已经是固定高度的卡片，页脚会被挤到一屏之外，
+     滚一下才看到一条孤零零的页脚——首页不需要它。 */
+  useEffect(() => {
+    document.body.classList.add('on-start');
+    return () => { document.body.classList.remove('on-start'); };
+  }, []);
+
   const { s, update, newProject } = useApp();
   const { t } = useLang();
   const [confirmNew, setConfirmNew] = useState(false);
