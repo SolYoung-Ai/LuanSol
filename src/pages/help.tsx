@@ -211,6 +211,11 @@ function buildUpdates(t: TFn) {
     },
     {
       date: '11-06',
+      title: t('模型库上线', 'Model library is live'),
+      body: t('复刻设计新增「模型」：12 套已经调好的版式，参考图与提示词都备好，点一下进工作区，只上传自己的素材图就能出三张。',
+        'The model library is live: twelve ready-made layouts with the reference image and prompt already in place — pick one, add your own assets, and get three takes.'),
+    },
+    {
       title: t('复刻功能上线', 'Recreate is live'),
       body: t('上传参考图与自己的素材图，选定类型（主图 / 详情页 / 海报 / 视频封面 / 包装 / 周边），调好复刻度，一次出三张方案。',
         'Upload references and your own assets, pick a format (main image, detail page, poster, video cover, packaging, merch), set how closely to follow it, and get three takes at once.'),
@@ -222,7 +227,8 @@ function buildLinks(t: TFn): { label: string; desc: string; path: string; icon: 
   return [
     { label: t('开始一个设计', 'Start a design'), desc: t('四步出图', 'Four steps to images'), path: '/new', icon: 'spark' },
     { label: t('积分', 'Credits'), desc: t('余额与签到', 'Balance & check-in'), path: '/credits', icon: 'folder' },
-    { label: t('复刻', 'Recreate'), desc: t('按参考图出新图', 'Recreate from a reference'), path: '/replicate', icon: 'grid' },
+    { label: t('记录', 'Records'), desc: t('复刻过的都在这', 'Every recreation you made'), path: '/replicate', icon: 'grid' },
+    { label: t('模型', 'Models'), desc: t('参考图已备好，传素材就能出图', 'Reference ready — just add your assets'), path: '/replicate/models', icon: 'grid' },
     { label: t('账户信息', 'Account'), desc: t('密码与邮箱', 'Password & email'), path: '/account', icon: 'user' },
   ];
 }

@@ -1,0 +1,105 @@
+/* ============================================================
+ * 模型库（/replicate/models）
+ * ------------------------------------------------------------
+ * 卡片参考「作品流」的做法：图片是主角、文字三行、底部分类与价格。
+ * 网格用 auto-fill + 固定最小宽度：1440 屏 5 列、1024 屏 4 列，
+ * 不会出现「一张图撑满一整行」的尴尬宽度。
+ * ============================================================ */
+.mdl-page { max-width: 1360px; }
+
+.mdl-note {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 22px; padding: 10px 14px;
+  border: 1px solid var(--v4-line); border-radius: 12px;
+  background: var(--v4-surface);
+  font-size: 12.5px; line-height: 1.6; color: var(--v4-ink-2);
+}
+.mdl-note svg { color: var(--v4-orange); flex: none; margin-top: 2px; }
+
+/* 分类：横向胶囊，可换行；不用下拉，六个类型一屏能看全 */
+.mdl-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 22px; }
+.mdl-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 13px;
+  border: 1px solid var(--v4-line); border-radius: 999px;
+  background: var(--v4-paper);
+  font-size: 12.5px; letter-spacing: .01em; color: var(--v4-ink-2);
+  transition: background-color var(--v4-dur-fast) var(--v4-ease), border-color var(--v4-dur-fast) var(--v4-ease), color var(--v4-dur-fast) var(--v4-ease);
+}
+.mdl-tab em { font-style: normal; font-size: 11px; color: var(--v4-ink-3); }
+.mdl-tab:hover { border-color: var(--v4-line-strong); color: var(--v4-ink); }
+.mdl-tab.on { background: var(--v4-solid-bg); border-color: var(--v4-solid-bg); color: var(--v4-solid-fg); }
+.mdl-tab.on em { color: var(--v4-solid-fg); opacity: .6; }
+
+/* 网格 */
+.mdl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(186px, 1fr));
+  gap: clamp(14px, 1.6vw, 22px);
+  margin-top: 18px;
+}
+.mdl-card {
+  display: flex; flex-direction: column;
+  text-align: left; min-width: 0;
+  transition: transform var(--v4-dur) var(--v4-ease);
+}
+.mdl-card:hover { transform: translateY(-2px); }
+
+.mdl-shot {
+  position: relative; display: block;
+  aspect-ratio: 4 / 5;
+  border-radius: 16px; overflow: hidden;
+  border: 1px solid rgba(32, 29, 24, 0.07);
+}
+.mdl-shot img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.mdl-card:hover .mdl-shot img { transform: scale(1.035); }
+
+.mdl-ratio {
+  position: absolute; top: 8px; right: 8px;
+  padding: 2px 7px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(32, 29, 24, 0.06);
+  font-size: 10px; letter-spacing: .04em; color: #3a3833;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+/* 「用它开始」悬停浮层：只遮底部一条，图片仍然看得见 */
+.mdl-use {
+  position: absolute; left: 8px; right: 8px; bottom: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  height: 30px; border-radius: 9px;
+  background: rgba(20, 19, 17, 0.82);
+  color: #fff; font-size: 12px; letter-spacing: .02em;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.mdl-card:hover .mdl-use, .mdl-card:focus-visible .mdl-use { opacity: 1; transform: none; }
+
+.mdl-body { display: flex; flex-direction: column; gap: 3px; padding: 11px 2px 0; min-width: 0; }
+.mdl-body b { font-size: 13.5px; font-weight: 600; letter-spacing: 0; color: var(--v4-ink); }
+.mdl-body em {
+  font-style: normal; font-size: 12px; line-height: 1.5; color: var(--v4-ink-3);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.mdl-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; }
+.mdl-pill {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 9px;
+  border: 1px solid var(--v4-line); border-radius: 999px;
+  font-size: 10.5px; letter-spacing: .02em; color: var(--v4-ink-2); white-space: nowrap;
+}
+.mdl-price { font-size: 11px; color: var(--v4-ink-3); white-space: nowrap; }
+.mdl-credit { margin-top: 34px; font-size: 11px; color: var(--v4-ink-3); }
+
+@media (max-width: 860px) {
+  .mdl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .mdl-shot { aspect-ratio: 3 / 4; border-radius: 13px; }
+  .mdl-use { display: none; }
+  .mdl-body { padding-top: 9px; }
+  .mdl-body b { font-size: 13px; }
+  .mdl-body em { font-size: 11.5px; -webkit-line-clamp: 2; }
+  .mdl-foot { margin-top: 6px; }
+  .mdl-credit { margin-top: 26px; }
+}

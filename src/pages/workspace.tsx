@@ -18,6 +18,7 @@ import { useLang } from '../i18n';
 import { DesignView } from '../components/visuals';
 import { STRUCTURES, groupName, structName } from '../engine/structure';
 import { Icon } from '../components/icons';
+import WorkMenu from '../components/WorkMenu';
 import type { Project } from '../types';
 
 type FilterId = 'all' | 'draft' | 'designing' | 'done';
@@ -286,19 +287,27 @@ export default function Workspace() {
             <div className="v4-work-body">
               <button className="v4-work-name" onClick={onCover} style={{ textAlign: 'left' }}>{p.name}</button>
               <div className="v4-work-meta">
-                <span>{STRUCT_NAME(p)}</span>
                 <span>{sizeLabel(p.brief.size, t)}</span>
                 <span>{fmt(p.updatedAt, t)}</span>
               </div>
-              {!batchMode && <div className="v4-work-actions">
-                <button onClick={() => open(p)}>{p.design ? t('继续编辑', 'Keep editing') : t('继续填写', 'Keep filling in')}</button>
-                {p.design && <button onClick={() => viewSchemes(p)}>{t('查看方案', 'View options')}</button>}
-                {p.design && <button onClick={() => preview3d(p)}>{t('3D 预览', '3D preview')}</button>}
-                {p.design && <button onClick={() => open(p)}>{t('导出', 'Export')}</button>}
-                <button onClick={() => duplicateProject(p.id)}>{t('复制', 'Duplicate')}</button>
-                <button onClick={() => { setRenaming(p); setRenameTo(p.name); }}>{t('重命名', 'Rename')}</button>
-                <button className="danger" onClick={() => setConfirmDel(p)}>{t('删除', 'Delete')}</button>
-              </div>}
+              {/* 底部一行：左边说清「这张卡现在是什么」，右边是次要动作。
+                  主操作就是点封面/标题进来，不再单独占一个按钮位。 */}
+              <div className="v4-work-foot">
+                <span className="v4-work-pill">{STRUCT_NAME(p)}</span>
+                {!batchMode && <WorkMenu
+                  label={t('更多操作', 'More actions')}
+                  items={[
+                    { label: p.design ? t('继续编辑', 'Keep editing') : t('继续填写', 'Keep filling in'), onClick: () => open(p) },
+                    ...(p.design ? [
+                      { label: t('查看方案', 'View options'), onClick: () => viewSchemes(p) },
+                      { label: t('3D 预览', '3D preview'), onClick: () => preview3d(p) },
+                    ] : []),
+                    { label: t('复制一份', 'Duplicate'), onClick: () => duplicateProject(p.id) },
+                    { label: t('重命名', 'Rename'), onClick: () => { setRenaming(p); setRenameTo(p.name); } },
+                    { label: t('删除', 'Delete'), onClick: () => setConfirmDel(p), danger: true },
+                  ]}
+                />}
+              </div>
             </div>
           </div>;
         })}

@@ -387,8 +387,10 @@ src/
   components/  DesignView / DielineView / ProductMockup / Viewer3D / SideNav
   editor/      在线编辑器（画布、图层面板、属性面板、素材库、左栏工具）
   workflow/    /new 四步流程（入口 → 需求 → 方案 → 编辑器）
-  pages/       start / luna / workspace（包装设计）/ replicate（复刻记录）/ replicate-list / account / subscribe / help / settings
+  pages/       start / luna / workspace（包装设计）/ replicate（记录）/ replicate-list / replicate-models（模型库）/ account / subscribe / help / settings
   replicate/   复刻类型目录（KINDS / RATIOS / MAX_IMAGES）+ prompt.ts（复刻度三档 → 提示词）
+               + models.ts（模型库：12 套参考图 + 预设提示词，img 指向 public/tpl/）
+  public/tpl/  模型库参考图（Pexels 免费商用素材，裁切压缩后 900px 宽，共约 600KB）
   cloud/       鉴权 / 订阅与额度 / 云同步 / 支付 / 模型目录 / 登录配置
   store.tsx    全局项目仓库（IndexedDB）
   App.tsx      hash 路由（无需服务端 rewrite）

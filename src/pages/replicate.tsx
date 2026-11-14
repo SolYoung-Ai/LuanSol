@@ -34,6 +34,7 @@ import { emptyProductInfo } from '../types';
 import type { ConceptImage, ImageTier, ReferenceImage, ReferenceRole, ReplicateImage, ReplicateProject, ReplicateResult } from '../types';
 import { BATCH, KINDS, MAX_IMAGES, RATIOS, kindById, kindDesc, kindName, type KindDef } from '../replicate/kinds';
 import { FIDELITIES, buildReplicatePrompt, fidelityDef } from '../replicate/prompt';
+import { modelById } from '../replicate/models';
 import '../replicate.css';
 
 type Slot = 'ref' | 'mat';
@@ -56,6 +57,21 @@ function naturalSize(src: string): Promise<{ w: number; h: number }> {
     img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
     img.onerror = () => resolve({ w: 1024, h: 1024 });
     img.src = src;
+  });
+}
+
+/** 把站内静态图取成 data URL。
+ *  两个原因：上游只认 base64；草稿存在 IndexedDB 里，
+ *  存远程 URL 在离线或换设备后就是一张碎图。 */
+async function urlToDataUrl(url: string): Promise<string> {
+  const r = await fetch(url, { cache: 'force-cache' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const blob = await r.blob();
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result || ''));
+    fr.onerror = () => reject(new Error('read failed'));
+    fr.readAsDataURL(blob);
   });
 }
 
@@ -210,16 +226,21 @@ function ReplicateEditor() {
   const editId = new URLSearchParams(hash.split('?')[1] || '').get('id');
   const [opened] = useState(() => (editId ? s.replicates.find((r) => r.id === editId) ?? null : null));
 
-  const [kind, setKind] = useState<KindDef | null>(() => kindById(opened?.kind));
-  const [pickerOpen, setPickerOpen] = useState(!opened);
+  /* 模型库带过来的预设（?model=…）：参考图、类型、比例、复刻度、补充提示词
+     一次性就位。有它的时候不弹「选类型」——用户已经在模型库选过了。
+     编辑已有草稿（?id=）时忽略 model，以存档为准。 */
+  const [tpl] = useState(() => (opened ? null : modelById(new URLSearchParams(hash.split('?')[1] || '').get('model'))));
+
+  const [kind, setKind] = useState<KindDef | null>(() => kindById(opened?.kind) ?? kindById(tpl?.kind));
+  const [pickerOpen, setPickerOpen] = useState(!opened && !tpl);
 
   const [refs, setRefs] = useState<Uploaded[]>(opened?.refs ?? []);
   const [mats, setMats] = useState<Uploaded[]>(opened?.mats ?? []);
   const [dragSlot, setDragSlot] = useState<Slot | null>(null);
-  const [extra, setExtra] = useState(opened?.extra ?? '');
+  const [extra, setExtra] = useState(opened?.extra ?? tpl?.prompt ?? '');
   const [tier, setTier] = useState<ImageTier>(opened?.tier ?? 'flash');
-  const [ratioId, setRatioId] = useState(opened?.ratio ?? '1:1');
-  const [fidelity, setFidelity] = useState(opened?.fidelity ?? 70);
+  const [ratioId, setRatioId] = useState(opened?.ratio ?? tpl?.ratio ?? '1:1');
+  const [fidelity, setFidelity] = useState(opened?.fidelity ?? tpl?.fidelity ?? 70);
   const [busy, setBusy] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   /** 大图查看：结果点击后放大，能看清文字与材质再决定用哪张 */
@@ -261,6 +282,29 @@ function ReplicateEditor() {
     return { kind, refs, mats, items, extra, fidelity, tier, ratioId, ...patch };
   };
 
+  /* 模型库预填：把模板参考图取成 data URL 放进「参考图」一栏。
+     用户从模型库点进来的那一下，看到的就是「参考图已就位、只差我的素材」。 */
+  const [tplBusy, setTplBusy] = useState(!!tpl);
+  useEffect(() => {
+    if (!tpl) return;
+    let alive = true;
+    (async () => {
+      try {
+        const src = await urlToDataUrl(tpl.img);
+        const size = await naturalSize(src);
+        if (!alive) return;
+        setRefs([{ id: `tpl_${tpl.id}`, src, w: size.w, h: size.h, name: `${tpl.name.zh}.jpg` }]);
+      } catch {
+        if (alive) setToast(t('模板参考图没取到，可以手动上传一张参考图', 'The model reference could not load — add one manually'));
+      } finally {
+        if (alive) setTplBusy(false);
+      }
+    })();
+    return () => { alive = false; };
+    // 模板在首帧固定（换模型会换整个路由 key），不需要跟着变
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /** 整条覆盖写入草稿箱。有 id 就更新，没有就新建并把 id 写进地址栏。 */
   const saveDraft = (snap: Snapshot | null) => {
     if (!snap) return;
@@ -270,7 +314,10 @@ function ReplicateEditor() {
     const existingName = s.replicates.find((r) => r.id === id)?.name;
     const rec: ReplicateProject = {
       id,
-      name: existingName || t(`${kindName(snap.kind, 'zh')}复刻`, `${kindName(snap.kind, 'en')} recreation`),
+      // 从模型库进来的记录直接叫模型名（「白底极简主图」），比「主图复刻」更有辨识度
+      name: existingName || (tpl
+        ? (lang === 'en' ? tpl.name.en : tpl.name.zh)
+        : t(`${kindName(snap.kind, 'zh')}复刻`, `${kindName(snap.kind, 'en')} recreation`)),
       kind: snap.kind.id,
       ratio: snap.ratioId,
       fidelity: snap.fidelity,
@@ -585,8 +632,10 @@ function ReplicateEditor() {
 
   return <div className={`page rep-page ${pickerInstant && pickerOpen ? 'is-choosing' : ''}`}>
     <div className="rep-crumb">
-      <button onClick={() => go('/replicate')}>
-        <Icon name="chevronLeft" size={12} />{t('复刻记录', 'My recreations')}
+      {/* 从模型库进来的，返回就去模型库：把人送回他刚离开的那一屏，
+          而不是扔进一个他还没见过的记录列表 */}
+      <button onClick={() => go(tpl ? '/replicate/models' : '/replicate')}>
+        <Icon name="chevronLeft" size={12} />{tpl ? t('模型库', 'Models') : t('记录', 'Records')}
       </button>
       <span className="rep-kicker">RECREATE</span>
     </div>
@@ -599,13 +648,21 @@ function ReplicateEditor() {
         : t('先选要做什么：主图、详情页、海报、视频封面、包装、周边。每种类型的画面规则和默认尺寸不同，选好以后还能改。',
           'Pick a format first — main image, detail page, poster, video cover, packaging or merch. Each has its own layout rules and default size, and you can change them later.')}</p>
       {kind && <div className="rep-head-actions">
+        {/* 从模型库进来时如实说明「参考图是模板给的」，并留一个回去换的入口。
+            类型被换掉之后徽章就撤：那时参考图已经不是那个模型的版式了，
+            还挂着模型名等于撒谎。 */}
+        {tpl && kind && kind.id === tpl.kind && <span className="rep-tpl">
+          <Icon name="spark" size={12} />
+          <span>{lang === 'en' ? tpl.name.en : tpl.name.zh}</span>
+          <button onClick={() => go('/replicate/models')}>{t('换一个', 'Change')}</button>
+        </span>}
         <button className="rep-switch" onClick={() => setPickerOpen(true)}>
           <Icon name="grid" size={13} />{t('换个类型', 'Change format')}
         </button>
         {/* 如实说明存到哪儿了：复刻草稿存在本机浏览器，不进云端项目表 */}
         <span className="rep-savehint">
           <Icon name="check" size={12} />
-          {draftIdRef.current ? t('已自动存到复刻记录', 'Saved to your recreations') : t('改动会自动存成复刻记录', 'Changes are saved as a recreation')}
+          {draftIdRef.current ? t('已自动存到记录', 'Saved to Records') : t('改动会自动存成一条记录', 'Changes are saved as a record')}
         </span>
       </div>}
     </div>
@@ -613,6 +670,11 @@ function ReplicateEditor() {
     {kind && <div className="rep-grid">
       {/* 左：设置 */}
       <aside className="rep-setup">
+        {/* 模板参考图是本地 fetch 再转 base64 的，慢网下会有一小段空窗；
+            说清楚在做什么，比让用户盯着空框猜好 */}
+        {tplBusy && <div className="rep-tplbusy">
+          <i />{t('正在放入模型参考图…', 'Preparing the model reference…')}
+        </div>}
         <div className="rep-slots">
           {renderSlot('ref')}
           {renderSlot('mat')}
@@ -749,8 +811,8 @@ function ReplicateEditor() {
             </div>
             {/* 关闭按钮常驻：还没选类型时关掉等于「不做这次复刻」，回复刻记录 */}
             <button className="rep-modal-x" onClick={closePicker}
-              title={kind ? t('关闭', 'Close') : t('关闭并回复刻记录', 'Close and go back')}
-              aria-label={kind ? t('关闭', 'Close') : t('关闭并回复刻记录', 'Close and go back')}>
+              title={kind ? t('关闭', 'Close') : t('关闭并回到记录', 'Close and go back')}
+              aria-label={kind ? t('关闭', 'Close') : t('关闭并回到记录', 'Close and go back')}>
               <Icon name="close" size={15} />
             </button>
           </div>

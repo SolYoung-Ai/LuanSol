@@ -1,5 +1,5 @@
 /* ============================================================
- * 复刻设计 · 复刻记录（/replicate）
+ * 复刻设计 · 记录（/replicate）
  * ------------------------------------------------------------
  * 这是与「包装设计」并列的另一个草稿箱：复刻是能中途停下来的活，
  * 没有记录页就只能一次做完，实际用起来做不了。
@@ -15,6 +15,7 @@ import { Modal, go } from '../ui';
 import { useApp, visibleReplicas } from '../store';
 import { useLang } from '../i18n';
 import { Icon } from '../components/icons';
+import WorkMenu from '../components/WorkMenu';
 import { kindById, kindName } from '../replicate/kinds';
 import type { ReplicateProject } from '../types';
 import '../replicate.css';
@@ -91,10 +92,12 @@ export default function ReplicateList() {
     <div className="v4-page-head">
       <div>
         <div className="v4-kicker">RECREATE</div>
-        <h1 className="v4-h1">{t('复刻设计', 'Recreate')}</h1>
-        <p className="v4-sub">{t('参考图 + 你的素材，一次出三张；没做完的先存在这里。', 'References plus your own assets, three takes at a time — unfinished work waits here.')}</p>
+        <h1 className="v4-h1">{t('记录', 'Records')}</h1>
+        <p className="v4-sub">{t('复刻设计的所有记录都在这里；没做完的那条也存着，随时接着做。', 'Every recreation lives here — including the ones you have not finished yet.')}</p>
       </div>
-      <div className="v4-tools">
+      <div className="v4-tools" style={{ display: 'flex', gap: 10 }}>
+        {/* 模型库：参考图已经备好，用户只要上传自己的素材——比从零传两张图快得多 */}
+        <button className="v4-btn-line" onClick={() => go('/replicate/models')}>{t('浏览模型', 'Browse models')}</button>
         <button className="v4-btn-dark" onClick={() => go('/replicate/new')}>{t('新建复刻', 'New recreation')}</button>
       </div>
     </div>
@@ -102,8 +105,8 @@ export default function ReplicateList() {
     {/* 存档位置说清楚：复刻草稿在本机浏览器，不进包装设计的云端项目表 */}
     <div className="v4-toolbar" style={{ borderBottom: 'none', paddingBottom: 0 }}>
       <div className="v4-sec-note">
-        {t('复刻草稿保存在此设备的浏览器里（含图片，体积较大）。单条记录的图片与三张结果都会原样保留，随时可以回来继续。',
-          'Recreations are stored in this browser (images included, so they are fairly large). Everything in a record is kept, so you can always pick it up again.')}
+        {t('记录保存在此设备（含图片）；单条的输入图与结果都会原样保留。',
+          'Records live in this browser, images included — every input and take is kept.')}
       </div>
     </div>
 
@@ -145,11 +148,21 @@ export default function ReplicateList() {
                 <span>{r.ratio}</span>
                 <span>{fmt(r.updatedAt, t)}</span>
               </div>
-              <div className="v4-work-actions">
-                <button onClick={() => open(r)}>{r.items.length ? t('继续复刻', 'Keep recreating') : t('继续填写', 'Keep setting up')}</button>
-                <button onClick={() => duplicateReplicate(r.id)}>{t('复制', 'Duplicate')}</button>
-                <button onClick={() => { setRenaming(r); setRenameTo(r.name); }}>{t('重命名', 'Rename')}</button>
-                <button className="danger" onClick={() => setConfirmDel(r)}>{t('删除', 'Delete')}</button>
+              <div className="v4-work-foot">
+                {/* 封面上已经写了类型，这里换成「出没出图」——
+                    同一个词写两遍等于浪费一行位置 */}
+                <span className="v4-work-pill">{r.items.length
+                  ? t(`${r.items.length} 张结果`, `${r.items.length} takes`)
+                  : t('未出图', 'No takes yet')}</span>
+                <WorkMenu
+                  label={t('更多操作', 'More actions')}
+                  items={[
+                    { label: r.items.length ? t('继续复刻', 'Keep recreating') : t('继续设置', 'Keep setting up'), onClick: () => open(r) },
+                    { label: t('复制一份', 'Duplicate'), onClick: () => duplicateReplicate(r.id) },
+                    { label: t('重命名', 'Rename'), onClick: () => { setRenaming(r); setRenameTo(r.name); } },
+                    { label: t('删除', 'Delete'), onClick: () => setConfirmDel(r), danger: true },
+                  ]}
+                />
               </div>
             </div>
           </div>;
@@ -166,12 +179,15 @@ export default function ReplicateList() {
       <div className="v4-empty-mark" aria-hidden>
         <Icon name="copy" size={26} />
       </div>
-      <h3>{t('还没有复刻记录', 'No recreations yet')}</h3>
+      <h3>{t('这里还没有记录', 'No records yet')}</h3>
       <p>{t('上传参考图和自己的素材图，选好类型，一次给你三张。', 'Add a reference and your own assets, pick a format, and get three takes.')}</p>
-      <button className="v4-btn-dark" onClick={() => go('/replicate/new')}>{t('开始复刻', 'Start recreating')}</button>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button className="v4-btn-line" onClick={() => go('/replicate/models')}>{t('先看模型库', 'Browse models')}</button>
+        <button className="v4-btn-dark" onClick={() => go('/replicate/new')}>{t('从零开始', 'Start from scratch')}</button>
+      </div>
     </div>}
 
-    <Modal open={!!confirmDel} title={t('删除这条复刻记录？', 'Delete this recreation?')} onClose={() => setConfirmDel(null)}>
+    <Modal open={!!confirmDel} title={t('删除这条记录？', 'Delete this record?')} onClose={() => setConfirmDel(null)}>
       <p className="modal-p">{t(
         `「${confirmDel?.name}」会连同上传的图和已生成的方案一起删掉，此操作无法撤销。`,
         `“${confirmDel?.name}” will be deleted along with its uploaded images and generated takes. This cannot be undone.`,
@@ -184,7 +200,7 @@ export default function ReplicateList() {
       </div>
     </Modal>
 
-    <Modal open={!!renaming} title={t('重命名复刻记录', 'Rename recreation')} onClose={() => setRenaming(null)}>
+    <Modal open={!!renaming} title={t('重命名记录', 'Rename record')} onClose={() => setRenaming(null)}>
       <input className="v4-search" style={{ width: '100%' }} value={renameTo} onChange={(e) => setRenameTo(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') doRename(); }} autoFocus placeholder={t('名称', 'Name')} />
       <div className="modal-buttons">

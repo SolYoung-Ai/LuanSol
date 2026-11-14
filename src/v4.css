@@ -379,8 +379,8 @@ input, textarea, select { border-radius: var(--v4-r-md); transition: border-colo
    ============================================================ */
 .v4-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: clamp(20px, 2.4vw, 36px);
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: clamp(18px, 2vw, 30px);
   margin-top: var(--v4-s6);
 }
 .v4-work { display: flex; flex-direction: column; min-width: 0; }
@@ -3392,8 +3392,8 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   cursor: pointer;
   transition: background 0.16s ease, color 0.16s ease;
 }
-.sd-act:hover { background: var(--v4-paper); color: var(--v4-ink); }
-.sd-act.on { background: var(--v4-paper); color: var(--v4-ink); font-weight: 550; }
+.sd-act:hover { background: var(--v4-ios-fill); color: var(--v4-ink); }
+.sd-act.on { background: var(--v4-ios-fill); color: var(--v4-ink); font-weight: 550; }
 .sd-act .sd-ic { display: flex; color: var(--v4-ink-3); transition: color 0.16s ease; }
 .sd-act:hover .sd-ic { color: var(--v4-orange); }
 .sd-act.on .sd-ic { color: var(--v4-orange); }
@@ -3490,4 +3490,118 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 }
 @media (prefers-reduced-motion: reduce) {
   .main.nav-in-down, .main.nav-in-up { animation: none !important; }
+}
+
+/* ============================================================
+   12. 点阵纸 + 双卡桌面布局（仅 ≥861px）
+   ------------------------------------------------------------
+   参考的是一种「工作台悬浮在纸上」的布局：底色是暖灰纸 + 极淡点阵，
+   导航栏是一张独立的圆角白卡，正页面是另一张独立的圆角白卡，
+   两张卡之间只有 12px 缝，页面的所有内容都活在卡片里。
+   为什么不做在移动端：手机上两张卡只剩通栏，留白反而压缩内容宽度，
+   所以这一整块都锁在桌面断点内，≤860px 维持原来的顶栏 + 抽屉。
+   ============================================================ */
+@media (min-width: 861px) {
+  /* 纸底色 */
+  body { background-color: #efede7; }
+
+  /* 点阵铺在 .app 自己的背景上（不是伪元素）：
+     .main 是白色卡片，会盖住中间，点阵只在两张卡之间的缝隙里露出来——
+     这正是要的效果：纸在卡下面，卡浮在纸上。
+     用内联 SVG 而不是 radial-gradient 平铺：Chrome 对 repeat 的渐变
+     在 1–2px 这种极小半径上会做降采样，点会被糊成几乎看不见的噪点
+     （实测 min 233，等于没画）；SVG 的圆点无论怎么缩放都是清晰的。 */
+  .app {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Ccircle cx='3.5' cy='5.5' r='1.3' fill='%23201d18' fill-opacity='0.22'/%3E%3C/svg%3E");
+    background-size: 22px 22px;
+    background-position: 0 0;
+    background-repeat: repeat;
+  }
+
+  /* 正页面 = 第二张卡。Luna 有自己的整屏 shell，不套（会与 100vh 打架）。 */
+  .app.has-side:not(.is-luna) .main {
+    margin: 12px 12px 12px 0;
+    border-radius: 24px;
+    background: var(--v4-paper);
+    border: 1px solid rgba(32, 29, 24, 0.055);
+    box-shadow:
+      0 1px 2px -1px rgba(18, 18, 16, 0.06),
+      0 22px 60px -46px rgba(18, 18, 16, 0.30);
+  }
+  /* 卡片内部不需要整屏级的上留白；底部留够滚动余量 */
+  .app.has-side:not(.is-luna) .v4-page { padding-top: clamp(26px, 3vw, 40px); padding-bottom: 88px; }
+  .app.has-side:not(.is-luna) .page { padding-top: clamp(22px, 2.6vw, 34px); }
+  /* 满屏页要减掉卡片上下各 12px，否则永远多出一条 24px 的滚动 */
+  .app.has-side:not(.is-luna) .v4-home { min-height: calc(100vh - 24px); }
+  .app.has-side:not(.is-luna) .footer-min { margin: 0 12px 0 0; }
+}
+/* 深色：纸更暗、点更淡，卡片比纸亮一档，否则两张卡看不出边界 */
+@media (min-width: 861px) {
+  :root[data-theme="dark"] body { background-color: #080807; }
+  [data-theme="dark"] .app {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Ccircle cx='3.5' cy='5.5' r='1.3' fill='%23ffffff' fill-opacity='0.075'/%3E%3C/svg%3E");
+  }
+  [data-theme="dark"] .app.has-side:not(.is-luna) .main {
+    background: #141413;
+    border-color: rgba(255, 255, 255, 0.055);
+    box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 22px 60px -46px rgba(0, 0, 0, 0.8);
+  }
+}
+
+/* ============================================================
+   13. 草稿卡：向「图片主导、信息三行、操作收进菜单」靠拢
+   ------------------------------------------------------------
+   旧卡片把 6 个动作平铺成一行小字，hover 才出现，视觉上像文档目录。
+   现在：封面是主角（更大圆角、无重边框），信息只留标题 / 说明 / 标签，
+   次要动作收进卡片右下角的「⋯」，点开才是菜单。
+   ============================================================ */
+.v4-work-cover {
+  border-radius: 18px;
+  border-color: rgba(32, 29, 24, 0.07);
+  background: var(--v4-surface);
+}
+.v4-work-cover:hover { box-shadow: 0 16px 34px -18px rgba(18, 18, 16, 0.34); }
+.v4-work-cover img { object-fit: cover; }
+.v4-work-body { padding-top: 12px; gap: 5px; }
+.v4-work-name { font-size: 14px; letter-spacing: 0; }
+.v4-work-meta { font-size: 11.5px; color: var(--v4-ink-3); }
+/* 卡片底部一行：左标签，右「⋯」 */
+.v4-work-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; min-height: 26px; }
+.v4-work-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 10px;
+  border: 1px solid var(--v4-line); border-radius: 999px;
+  background: var(--v4-paper);
+  font-size: 11px; letter-spacing: .02em; color: var(--v4-ink-2);
+  white-space: nowrap;
+}
+.v4-work-pill b { font-weight: 600; color: var(--v4-ink); }
+.v4-work-more-wrap { position: relative; display: flex; flex: none; }
+.v4-work-more {
+  width: 26px; height: 26px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; color: var(--v4-ink-3);
+  opacity: .42; transition: opacity .16s ease, background-color .16s ease, color .16s ease;
+}
+.v4-work:hover .v4-work-more, .v4-work:focus-within .v4-work-more, .v4-work-more.on { opacity: 1; }
+.v4-work-more:hover, .v4-work-more.on { background: var(--v4-surface); color: var(--v4-ink); }
+.v4-work-menu {
+  position: absolute; right: 0; bottom: calc(100% + 6px);
+  z-index: 8;
+  min-width: 148px; padding: 5px;
+  border: 1px solid var(--v4-line); border-radius: 12px;
+  background: var(--v4-paper);
+  box-shadow: 0 18px 40px -18px rgba(18, 18, 16, 0.34), 0 1px 2px rgba(18, 18, 16, 0.06);
+  display: flex; flex-direction: column;
+}
+.v4-work-menu button {
+  display: block; width: 100%; text-align: left;
+  padding: 7px 9px; border-radius: 8px;
+  font-size: 12.5px; color: var(--v4-ink-2);
+}
+.v4-work-menu button:hover { background: var(--v4-surface); color: var(--v4-ink); }
+.v4-work-menu button.danger { color: #b0453a; }
+.v4-work-menu button.danger:hover { background: rgba(176, 69, 58, 0.08); color: #b0453a; }
+@media (max-width: 860px) {
+  .v4-work-more { opacity: 1; }
 }

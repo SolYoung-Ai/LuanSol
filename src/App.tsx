@@ -32,6 +32,7 @@ const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
 const Replicate = lazy(() => import('./pages/replicate'));
 const ReplicateList = lazy(() => import('./pages/replicate-list'));
+const ReplicateModels = lazy(() => import('./pages/replicate-models'));
 
 function Footer() {
   const { t } = useLang();
@@ -132,6 +133,7 @@ export default function App() {
       void import('./pages/workspace');
       void import('./pages/replicate');
       void import('./pages/replicate-list');
+      void import('./pages/replicate-models');
       // 顶栏与账号卡会频繁点到的几页，一并预热：chunk 到位后切页只剩一帧
       void import('./pages/subscribe');
       void import('./pages/account');
@@ -205,10 +207,13 @@ export default function App() {
   /* 包装设计：/workspace 与历史路径 /projects 指向同一个页面，旧链接不 404 */
   else if (path === '/workspace' || path === '/projects') page = <Workspace />;
   /* 复刻设计：/replicate 是复刻记录（独立草稿箱），
+     /replicate/models 是模型库（参考图已备好，点一下直接进工作区），
      /replicate/new 与 /replicate/edit?id= 是工作区。
      key 用 hash：从「新建」切到「编辑某条记录」时组件必须重挂，
      否则会沿用上一条记录已输入的状态。 */
   else if (path === '/replicate') page = <ReplicateList />;
+  /* 模型库必须排在 /replicate/ 通配之前，否则会被当成工作区渲染 */
+  else if (path === '/replicate/models') page = <ReplicateModels />;
   else if (path.startsWith('/replicate/')) page = <Replicate key={hash} />;
   /* 审美市场已永久下线：老书签（/market、/market/site/*、/inspiration）统一送回工作台，
      不做 404，也不再保留任何入口与数据。 */
