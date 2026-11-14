@@ -704,6 +704,14 @@
   .rep-kinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rep-modal { padding: 14px; align-items: flex-end; }
   .rep-modal-box { padding: 20px 16px 24px; max-height: 88vh; border-radius: 20px; }
+  /* 大图在手机上要贴着屏幕看：留白收到最小，操作栏铺满一行 */
+  .rep-view { padding: 12px; }
+  .rep-view-body { gap: 8px; }
+  .rep-view-foot { justify-content: stretch; }
+  .rep-view-foot button { flex: 1; justify-content: center; padding: 10px 12px; }
+  .rep-view-nav { width: 32px; height: 32px; }
+  .rep-view-nav.prev { left: -2px; }
+  .rep-view-nav.next { right: -2px; }
 }
 /* 极窄屏（≤480px）：横排卡会把提示词和按钮挤成一条竖线，改回上下结构 */
 @media (max-width: 480px) {
