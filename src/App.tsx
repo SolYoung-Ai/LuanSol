@@ -59,9 +59,37 @@ function Footer() {
   </div></footer>;
 }
 
-/** 页面级加载态统一交给品牌加载组件：LunaSol 字标被橙色填满 + Sol 三字轻跳 */
+/** 页面级加载态统一交给品牌加载组件：LunaSol 字标被橙色填满 + Sol 三字轻跳。
+ *  但**延迟 150ms** 才出现：chunk 已在缓存里时切换只要一帧，
+ *  这时先闪一个整屏字标再换回真实页面，就是用户说的「显示不出来、闪一下」。 */
 function PageFallback() {
-  return <LunaLoader />;
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setShow(true), 150);
+    return () => window.clearTimeout(t);
+  }, []);
+  return show ? <LunaLoader /> : null;
+}
+
+/** 页面真的挂上来了（懒加载 chunk 到位、组件渲染完成）才会执行。
+ *  进度条靠它收尾，而不是靠定时器猜。 */
+function RouteReady({ onReady }: { onReady: () => void }) {
+  useEffect(() => { onReady(); }, [onReady]);
+  return null;
+}
+
+/** 顶部进度条：2px 橙色，页面在换、内容还没到时先给一个交代。
+ *  两个细节：延迟 120ms 才出现——chunk 已在缓存里时切换不到一帧，
+ *  这时闪一下线本身就成了新的抖动；每次导航换 key，动画从头跑。 */
+function RouteBar({ active }: { active: boolean }) {
+  const [show, setShow] = useState(false);
+  const [run, setRun] = useState(0);
+  useEffect(() => {
+    if (!active) { setShow(false); return; }
+    const t = window.setTimeout(() => { setShow(true); setRun((n) => n + 1); }, 120);
+    return () => window.clearTimeout(t);
+  }, [active]);
+  return <div className={`route-bar ${show ? 'is-on' : 'is-done'}`} aria-hidden><i key={run} /></div>;
 }
 
 export default function App() {
@@ -82,6 +110,13 @@ export default function App() {
   }, [hash]);
 
   const path = hash.split('?')[0];
+
+  /* 路由进度：shown 是「已经真正渲染出来的地址」。
+     只有 RouteReady 挂载后才会更新，所以 shown !== hash 就等于「还在路上」，
+     不依赖定时器，也不会因为 chunk 已在缓存里而闪一下。 */
+  const [shown, setShown] = useState(hash);
+  const navigating = shown !== hash;
+  const markShown = useCallback(() => setShown(hash), [hash]);
   // 自带整屏工作区的页面：内部有 fixed 抽屉与贴底输入栏。
   // 给 .main 加 transform 会把 .main 变成这些 fixed 元素的包含块，动画期间抽屉会错位，
   // 所以这两页的切换过渡只允许淡入，不允许位移。
@@ -97,6 +132,10 @@ export default function App() {
       void import('./pages/workspace');
       void import('./pages/replicate');
       void import('./pages/replicate-list');
+      // 顶栏与账号卡会频繁点到的几页，一并预热：chunk 到位后切页只剩一帧
+      void import('./pages/subscribe');
+      void import('./pages/account');
+      void import('./pages/help');
     }, 1400);
     return () => window.clearTimeout(timer);
   }, []);
@@ -198,6 +237,7 @@ export default function App() {
           {/* Luna 现在也用全站左栏（会话区挂在左栏分界线下方），所以只有编辑器是 no-side。
               这样从工作台 / 开始页切到 Luna 时左栏原地不动，只换中间内容，不再闪一下。 */}
           <div className={`app ${path.startsWith('/studio') ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''}`}>
+            <RouteBar active={navigating} />
             <Nav onLogin={requestLogin} />
             {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
                 其中 /studio 保留顶部条，避免工具栏页连导航都没有 */}
@@ -207,7 +247,10 @@ export default function App() {
               {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
                 if (window.history.length > 1) window.history.back(); else go('/');
               }} aria-label={t('返回', 'Back')}>← {t('返回', 'Back')}</button>}
-              <Suspense fallback={<PageFallback />}>{page}</Suspense>
+              <Suspense fallback={<PageFallback />}>
+                {page}
+                <RouteReady key={`ready:${hash}`} onReady={markShown} />
+              </Suspense>
             </main>
             <Footer />
             {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}

@@ -104,6 +104,10 @@ const initial = (): Persisted => ({
 
 interface AppCtx {
   s: Persisted;
+  /** 本机数据（IndexedDB）是否已经读完。
+   *  直接打开 /replicate/edit?id=… 这类带 id 的地址时，必须等它变 true 才能读草稿，
+   *  否则读到的是空数组，页面会以为这条记录不存在、直接弹「选类型」。 */
+  ready: boolean;
   dieline: Dieline;
   toast: string | null;
   setToast: (t: string | null) => void;
@@ -472,7 +476,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }), []);
 
   const value: AppCtx = {
-    s, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
+    s, ready, dieline, toast, setToast, update, patchBrief, patchDraft, addChat, clearChat, refreshDieline,
     saveProject, syncProject, loadProject, mergeCloudProjects, dropProjects, deleteProject, duplicateProject, newProject, startEmptyDraft,
     createWorkflowProject, patchWorkflow, updateProject,
     addVersion, restoreVersion,

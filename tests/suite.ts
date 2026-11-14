@@ -28,6 +28,8 @@ import { buildAIContext, contextText } from '../src/ai/context';
 import { runAITask, registerAITransport, resetAITransport, aiCapabilitySummary } from '../src/ai/provider';
 import { assembleDesign, inferStructure } from '../src/workflow/assembler';
 import { createInitialWorkflow } from '../src/types';
+import { KINDS } from '../src/replicate/kinds';
+import { buildReplicatePrompt, fidelityLevel } from '../src/replicate/prompt';
 import { migrateProductInfo, migrateProject, migrateWorkflow } from '../src/migrations';
 import { humanizeAuthError, isSessionNoise } from '../src/cloud/authErrors';
 import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
@@ -896,6 +898,24 @@ export async function runTests(): Promise<Result[]> {
       A(payReturnFlag().returned && !payReturnFlag().paid, 'paid=0 是回跳但不代表已付');
       return 'paid=1 / checkout_id / 无参 / paid=0 四种情况正确';
     } finally { g.window = prev; }
+  });
+
+  await t('复刻提示词 · 复刻度三档必须真的改变指令', () => {
+    const main = KINDS.find((k) => k.id === 'main')!;
+    const exact = buildReplicatePrompt(main, 100, '', true, true);
+    const layout = buildReplicatePrompt(main, 70, '', true, true);
+    const loose = buildReplicatePrompt(main, 30, '', true, true);
+    A(exact !== layout && layout !== loose && exact !== loose, '三档提示词完全相同，等于复刻度白选');
+    A(/一比一/.test(exact), '一比一档必须写明一比一');
+    // 一比一不能拼类型场景句：那句话在要求重新构图，会把「照参考图」抵消掉
+    A(!exact.includes(main.scene), '一比一档不应拼入会要求重新构图的场景句');
+    A(layout.includes(main.scene), '参考版式档应保留场景规则');
+    A(/重新设计/.test(loose), '只借感觉档必须明确要求重新设计版式');
+    A(!/一比一/.test(loose), '只借感觉档不能出现一比一字样');
+    // 历史草稿里的 20–100 要能反查回档位，不能落到默认档以外
+    A(fidelityLevel(95) === 'exact' && fidelityLevel(64) === 'layout' && fidelityLevel(35) === 'loose',
+      '数值到档位的映射不正确');
+    return '一比一 / 参考版式 / 只借感觉 三档互不相同';
   });
 
   return R;

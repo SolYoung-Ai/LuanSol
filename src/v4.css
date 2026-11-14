@@ -3429,6 +3429,39 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   .app.has-side { transition: padding-left 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }
 }
 
+/* ---- 路由进度条 ----
+   懒加载页面在 chunk 到达前没有任何内容，那一瞬间的空白会被读成
+   「页面还没显示出来、闪了一下」。这条 2px 的橙线把「正在切换」说清楚：
+   够细、不挡内容，也不需要真实百分比（真实进度只有页面挂载那一刻才知道）。
+   is-on：从 0 缓慢爬到 72%（长跑也不会顶到头）；is-done：补满 100% 再淡出。 */
+.route-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.route-bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(90deg, var(--v4-orange), #f0a072);
+  box-shadow: 0 0 10px rgba(217, 96, 44, 0.45);
+}
+.route-bar.is-on { opacity: 1; }
+/* 用关键帧而不是 transition：元素是重新挂载的，没有「上一帧宽度」可过渡 */
+.route-bar.is-on i { animation: routeFill 2.6s cubic-bezier(0.12, 0.7, 0.2, 1) forwards; }
+@keyframes routeFill { from { transform: scaleX(0); } to { transform: scaleX(0.72); } }
+.route-bar.is-done { opacity: 0; transition: opacity 0.22s ease 0.1s; }
+.route-bar.is-done i { animation: none; transform: scaleX(1); }
+
 /* ---- 导航页切换：保留上下方向感，但不再让整页弹一下 ----
    旧版给 .main 加 translateY(±5vh) + opacity .45，整块页面（含 Luna 的
    贴底输入栏、侧栏）一起上下弹；而 transform 会让 .main 成为 fixed 元素的

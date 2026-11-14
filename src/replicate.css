@@ -7,6 +7,9 @@
 
 .rep-page { max-width: 1240px; margin: 0 auto; padding: 36px 28px 120px; }
 
+/* 等本机草稿读完的那一瞬：占个位置，别让页脚跳上来 */
+.rep-hold { min-height: 220px; }
+
 /* 顶部面包屑：回「复刻记录」+ 英文小标。放最上面一排，
    和页面右下角的全局返回按钮分工不同：这个明确回的是复刻记录，不是上一页。 */
 .rep-crumb { display: flex; align-items: center; gap: 12px; }
@@ -126,6 +129,15 @@
   background: #f7f7f5;
   overflow: hidden;
 }
+.rep-thumb-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
 .rep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rep-thumb-x {
   position: absolute;
@@ -214,6 +226,33 @@
   font-size: 9.5px;
   color: var(--v4-ink-3);
 }
+
+/* 复刻度三档：明确的选择按钮，选中态给足对比。
+   以前是滑杆，拖到哪都对结果没影响，等于白选。 */
+.rep-fids {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.rep-fid {
+  padding: 8px 6px;
+  border: 1px solid var(--v4-line);
+  border-radius: 9px;
+  background: var(--v4-surface);
+  color: var(--v4-ink-2);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.rep-fid:hover:not(:disabled) { color: var(--v4-ink); border-color: var(--v4-line-strong); }
+.rep-fid.on {
+  border-color: var(--v4-ink);
+  background: var(--v4-solid-bg);
+  color: var(--v4-solid-fg);
+}
+.rep-fid:disabled { opacity: 0.55; cursor: not-allowed; }
+.rep-fid-hint { margin: 6px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--v4-ink-3); }
 
 .rep-ratios { display: flex; flex-wrap: wrap; gap: 6px; }
 .rep-ratio {
@@ -305,8 +344,39 @@
 }
 .rep-card:hover { transform: translateY(-2px); box-shadow: 0 18px 32px -26px rgba(0, 0, 0, 0.5); }
 
-.rep-card-img { position: relative; aspect-ratio: var(--rep-ar, 1 / 1); background: #f5f5f2; overflow: hidden; }
+/* 结果图本身是按钮：点了要看大图，所以给 zoom-in 光标 + 悬停角标，
+   否则用户不知道这张图可点。 */
+.rep-card-img {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  cursor: zoom-in;
+  position: relative;
+  aspect-ratio: var(--rep-ar, 1 / 1);
+  background: #f5f5f2;
+  overflow: hidden;
+}
 .rep-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rep-zoom {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(20, 20, 20, 0.66);
+  color: #fff;
+  font-size: 10.5px;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.rep-card-img:hover .rep-zoom,
+.rep-card-img:focus-visible .rep-zoom { opacity: 1; transform: none; }
 .rep-tag {
   position: absolute;
   top: 9px;
@@ -407,6 +477,12 @@
 .rep-foot button:hover { color: var(--v4-ink); border-color: var(--v4-ink-3); }
 
 /* ---------- 类型弹窗 ---------- */
+/* 挂到 body 上（portal），所以这里的 fixed 永远相对视口。
+   两个刻意的选择：
+   1) 不做全屏 backdrop-filter：遮罩面积等于整个视口，模糊要把背后 6 张卡片一起重绘，
+      首帧直接掉帧——用户看到的就是「卡一下」；
+   2) 卡片只做 0.98 → 1 的缩放 + 透明度，不做 translateY。
+      位移动画在打开瞬间会被读成「从上面掉下来」，缩放才是「在原地展开」。 */
 .rep-modal {
   position: fixed;
   inset: 0;
@@ -415,25 +491,13 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(18, 18, 16, 0.42);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  animation: repFade 0.18s ease-out both;
+  background: rgba(18, 18, 16, 0.46);
+  animation: repFade 0.14s ease-out both;
 }
 @keyframes repFade { from { opacity: 0; } to { opacity: 1; } }
 
-/* 首次进入（还没选类型）：这一页的背后还没有任何内容，弹窗就是页面本体。
-   所以三件事一起做，换掉「先看到半透明中间态」的那一下：
-     1) 不铺满屏的 backdrop-filter —— 进页第一帧就给全屏做模糊合成，
-        会把整页的光栅化压到关键路径上，是最典型的掉帧来源；
-     2) 遮罩只做 0.12s 淡入、卡片不做上浮，第一帧就是完成态；
-     3) 背景里那半张还没填的工作区先不画（visibility，不占绘制），
-        否则灰幕后面露出半截标题，看着像没加载完。 */
-.rep-modal.is-instant {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  animation: repFade 0.12s ease-out both;
-}
+/* 首次进入（还没选类型）：这一页背后还没有内容，弹窗就是页面本体，第一帧就完整出现。 */
+.rep-modal.is-instant,
 .rep-modal.is-instant .rep-modal-box { animation: none; }
 .rep-page.is-choosing > *:not(.rep-modal) { visibility: hidden; }
 
@@ -452,9 +516,10 @@
   border-radius: 22px;
   background: var(--v4-paper);
   box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  animation: repRise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: repPop 0.18s cubic-bezier(0.22, 0.8, 0.2, 1) both;
 }
-@keyframes repRise { from { transform: translateY(10px); } to { transform: none; } }
+/* 只缩放、不位移：0.985 起步足够看出「展开了」，又不会像掉下来 */
+@keyframes repPop { from { opacity: 0.7; transform: scale(0.985); } to { opacity: 1; transform: none; } }
 .rep-modal-head { display: flex; align-items: flex-start; gap: 16px; }
 .rep-modal-head h2 { margin: 0; font-size: 19px; font-weight: 550; letter-spacing: -0.01em; }
 .rep-modal-head p { margin: 7px 0 0; font-size: 12.5px; line-height: 1.65; color: var(--v4-ink-2); }
@@ -518,6 +583,109 @@
   letter-spacing: 0.04em;
   color: var(--v4-ink-3);
 }
+
+/* ---------- 大图查看 ---------- */
+/* 同样是 body 层的 portal：结果图一点就要立刻铺满视口，
+   留在页面树里会被 .main 的 transform 动画夹住。 */
+.rep-view {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(12, 12, 11, 0.92);
+  animation: repFade 0.14s ease-out both;
+}
+/* 撑满视口高度，图片才有「装得下多大就用多大」的参照：
+   只给 max-height 而不给 height，flex 子项拿不到确定高度，图会停在小尺寸。 */
+.rep-view-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(1040px, 100%);
+  height: 100%;
+  max-height: 100%;
+  animation: repPop 0.18s cubic-bezier(0.22, 0.8, 0.2, 1) both;
+}
+.rep-view-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+}
+.rep-view-head b { font-size: 13px; font-weight: 550; color: #fff; }
+.rep-view-head span { font-size: 11px; color: rgba(255, 255, 255, 0.6); }
+.rep-view-x {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+}
+.rep-view-x:hover { background: rgba(255, 255, 255, 0.18); }
+.rep-view-img {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  flex: 1;
+}
+/* 用 width/height 100% + contain 撑满可视区：
+   只写 max-width/max-height 只会「封顶」，小图永远放大不了。 */
+.rep-view-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+}
+.rep-view-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.6);
+  color: #fff;
+  cursor: pointer;
+}
+.rep-view-nav:hover { background: rgba(20, 20, 20, 0.82); }
+.rep-view-nav.prev { left: -6px; }
+.rep-view-nav.next { right: -6px; }
+.rep-view-foot { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.rep-view-foot button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rep-view-foot button:hover { background: rgba(255, 255, 255, 0.18); }
+.rep-view-foot .primary {
+  border-color: #fff;
+  background: #fff;
+  color: #17171a;
+}
+/* 上传图预览只要一个壳，不需要操作栏 */
+.rep-view.is-peek .rep-view-body { width: min(760px, 100%); }
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 1100px) {

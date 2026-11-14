@@ -19,6 +19,7 @@
  * App 会按 key 重挂编辑器，刚输入的内容就被清空了。
  * ============================================================ */
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { go, useHash } from '../ui';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
@@ -32,34 +33,13 @@ import { useLang } from '../i18n';
 import { emptyProductInfo } from '../types';
 import type { ConceptImage, ImageTier, ReferenceImage, ReferenceRole, ReplicateImage, ReplicateProject, ReplicateResult } from '../types';
 import { BATCH, KINDS, MAX_IMAGES, RATIOS, kindById, kindDesc, kindName, type KindDef } from '../replicate/kinds';
+import { FIDELITIES, buildReplicatePrompt, fidelityDef } from '../replicate/prompt';
 import '../replicate.css';
 
 type Slot = 'ref' | 'mat';
 /** 上传的图与存档的图是同一个结构（id / src / 宽高 / 文件名） */
 type Uploaded = ReplicateImage;
 type Item = ReplicateResult;
-
-const TAIL = '高分辨率商业级出图，画面干净，无拼贴、无分栏、无水印、无多余产品，中文文字排版正确';
-
-/** 复刻度 → 一句可执行的指令。100% 就是「一比一照着做」，越低给模型的发挥空间越大。 */
-function fidelityRule(r: number): string {
-  if (r >= 95) return '复刻度 100%：构图、元素位置、比例、配色、字体气质与留白层级全部按参考图一比一还原，只把画面主体替换成我的素材';
-  if (r >= 75) return `复刻度 ${r}%：沿用参考图的构图骨架、配色关系与字体气质，仅在纹理、装饰细节与辅助元素上做小幅调整`;
-  if (r >= 45) return `复刻度 ${r}%：保留参考图的整体气质与配色方向，版式与元素可以重新组织，让主体更突出`;
-  return `复刻度 ${r}%：参考图只作为风格灵感，构图、版式与元素全部重新设计，只保留色彩与气质倾向`;
-}
-
-/** 两栏各自的职责。缺哪一栏就换一句，不能把缺失的那栏写进提示词里。 */
-function roleRule(hasRef: boolean, hasMat: boolean): string {
-  if (hasRef && hasMat) return '输入图中的参考图只提供配色、字体气质、材质与构图骨架；素材图是必须出现在画面里的真实主体，保留它的造型、结构、标签排版与品牌文字，不要改变它的身份';
-  if (hasRef) return '输入图是参考图：按它复刻构图与视觉风格，画面主体取自参考图本身，允许替换其中的文案与产品信息';
-  return '输入图是我的素材：作为画面主体，必须保留它的造型、结构、标签文字与品牌信息；画面风格按下述要求重新设计';
-}
-
-function buildPrompt(kind: KindDef, r: number, extra: string, hasRef: boolean, hasMat: boolean): string {
-  return [fidelityRule(r), kind.scene, roleRule(hasRef, hasMat), extra.trim(), TAIL]
-    .filter(Boolean).join('，');
-}
 
 /** 报错文案：浏览器的 TypeError 只会说 "Failed to fetch"，
  *  对用户等于没说。网络类错误统一换成一句人能看懂的话。 */
@@ -77,6 +57,28 @@ function naturalSize(src: string): Promise<{ w: number; h: number }> {
     img.onerror = () => resolve({ w: 1024, h: 1024 });
     img.src = src;
   });
+}
+
+/** 保存到本地。云函数回的是 base64，直接 download 就行；
+ *  万一是远端 http 图（旧记录），先取成 blob，否则 download 属性会被跨域忽略、
+ *  变成在新标签页打开一张图。 */
+async function saveImage(src: string, name: string) {
+  const a = document.createElement('a');
+  a.download = name;
+  if (src.startsWith('data:')) {
+    a.href = src;
+  } else {
+    try {
+      const r = await fetch(src);
+      a.href = URL.createObjectURL(await r.blob());
+    } catch {
+      a.href = src;
+      a.target = '_blank';
+    }
+  }
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 /** 每张压到 1280 长边 / 520KB：最多 4 张 + 拼贴板要塞进云函数 6MB 的请求体 */
@@ -189,6 +191,15 @@ const sigOf = (x: Snapshot): string => JSON.stringify([
 ]);
 
 export default function Replicate() {
+  const { ready } = useApp();
+  /* 等本机数据读完再挂载编辑器：带 id 的地址（刷新、从列表点进来）
+     如果先读到空的 replicates，编辑器会以为这条记录不存在，
+     直接弹「选类型」，再建一条同名草稿——旧内容看起来就像丢了。 */
+  if (!ready) return <div className="page rep-page"><div className="rep-hold" /></div>;
+  return <ReplicateEditor />;
+}
+
+function ReplicateEditor() {
   const { t, lang } = useLang();
   const auth = useAuth();
   const sub = useSubscription();
@@ -208,9 +219,13 @@ export default function Replicate() {
   const [extra, setExtra] = useState(opened?.extra ?? '');
   const [tier, setTier] = useState<ImageTier>(opened?.tier ?? 'flash');
   const [ratioId, setRatioId] = useState(opened?.ratio ?? '1:1');
-  const [fidelity, setFidelity] = useState(opened?.fidelity ?? 80);
+  const [fidelity, setFidelity] = useState(opened?.fidelity ?? 70);
   const [busy, setBusy] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  /** 大图查看：结果点击后放大，能看清文字与材质再决定用哪张 */
+  const [zoomId, setZoomId] = useState<string | null>(null);
+  /** 上传图的预览（轻量）：只看不改 */
+  const [peek, setPeek] = useState<{ src: string; name: string } | null>(null);
 
   const [items, setItems] = useState<Item[]>(opened?.items ?? []);
   const [regenId, setRegenId] = useState<string | null>(null);
@@ -230,6 +245,9 @@ export default function Replicate() {
   const safeTier = resolveTier(tier, sub.isPro);
   /** 与「设计方案」同口径：三张按一张档位的价扣，不收三倍 */
   const batchCost = imageCost(safeTier);
+  /** 复刻度档位：滑杆改成三档之后，「这一档模型会做什么」才说得清 */
+  const fidDef = fidelityDef(fidelity);
+  const fidName = (v: number) => { const f = fidelityDef(v); return lang === 'en' ? f.name.en : f.name.zh; };
   const ratio = RATIOS.find((r) => r.id === ratioId) || RATIOS[0];
   /** 结果卡与占位卡按所选比例出框，16:9 的封面不会被裁成方图 */
   const cssRatio = ratio.id.replace(':', ' / ');
@@ -315,6 +333,21 @@ export default function Replicate() {
     return () => window.removeEventListener('keydown', onKey);
   }, [pickerOpen, kind]);
 
+  /* 大图：Esc 关闭，左右方向键在三张之间翻 */
+  useEffect(() => {
+    if (!zoomId && !peek) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setZoomId(null); setPeek(null); return; }
+      if (!zoomId || items.length < 2) return;
+      const i = items.findIndex((x) => x.id === zoomId);
+      if (i < 0) return;
+      if (e.key === 'ArrowRight') setZoomId(items[(i + 1) % items.length].id);
+      if (e.key === 'ArrowLeft') setZoomId(items[(i - 1 + items.length) % items.length].id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoomId, peek, items]);
+
   const pickKind = (k: KindDef) => {
     setKind(k);
     setRatioId(k.ratio);
@@ -365,12 +398,22 @@ export default function Replicate() {
     return true;
   };
 
-  const charge = async (n: number) => {
-    if (auth.user) {
-      await recordUsage(auth.user.id, n, 'image');
-      sub.refresh();
-    }
+  /** 扣费回执：扣多少、还剩多少，一次说清。
+   *  「怎么越点越贵」的误读，基本都来自只看到余额在变、不知道这一次扣了多少：
+   *  一次生成就是固定一份价，重来一次也是同一份，不按张叠加。 */
+  const charge = async (n: number): Promise<number | null> => {
+    if (!auth.user) return null;
+    const left = await recordUsage(auth.user.id, n, 'image');
+    void sub.refresh();
+    setToast(left >= 0
+      ? t(`已扣 ${n} 积分，余额 ${left} 积分`, `Charged ${n} credits · ${left} left`)
+      : t(`已扣 ${n} 积分`, `Charged ${n} credits`));
+    return left;
   };
+
+  /** 同一次操作只允许扣一次费：按钮的 disabled 依赖 state，
+   *  两次点击可能落在同一帧里，用 ref 做第二道锁。 */
+  const busyRef = useRef(false);
 
   /** 真·多图 + 拼贴板兜底，顺序都是「参考… → 素材…」 */
   const imageInputs = async () => {
@@ -388,7 +431,9 @@ export default function Replicate() {
       setToast(t('参考图和素材图各至少要 1 张', 'Add at least one reference and one asset image'));
       return;
     }
+    if (busyRef.current) return;
     if (!ensureQuota(batchCost)) return;
+    busyRef.current = true;
     setBusy(true);
     setItems([]);
     // 生成期间先落一次库：中途关掉页面，回来还能看到已上传的图与设置
@@ -396,7 +441,7 @@ export default function Replicate() {
     try {
       const uid = auth.user?.id;
       const inputs = await imageInputs();
-      const prompt = buildPrompt(kind, fidelity, extra, refs.length > 0, mats.length > 0);
+      const prompt = buildReplicatePrompt(kind, fidelity, extra, refs.length > 0, mats.length > 0);
       const settled = await Promise.allSettled(Array.from({ length: BATCH }, async () => {
         const src = await callImage(prompt, { tier: safeTier, size: sizeForTier(safeTier, ratio), ...inputs, uid });
         const size = await naturalSize(src);
@@ -414,6 +459,7 @@ export default function Replicate() {
     } catch (e) {
       setToast(readableError(e, t('生成失败', 'Generation failed'), t('网络不通，检查网络后再试一次', 'Network request failed — check your connection and try again')));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -429,7 +475,7 @@ export default function Replicate() {
       const inputs = await imageInputs();
       // 系统规则（复刻度 / 场景 / 两栏职责）在每次重生成时都重新拼回，
       // 否则「改提示词」会退化成普通的单图生图，素材图的文字就保不住了。
-      const p = buildPrompt(kind, fidelity, nextExtra, refs.length > 0, mats.length > 0);
+      const p = buildReplicatePrompt(kind, fidelity, nextExtra, refs.length > 0, mats.length > 0);
       const nextSafe = resolveTier(nextTier, sub.isPro);
       const src = await callImage(p, { tier: nextSafe, size: sizeForTier(nextSafe, ratio), ...inputs, uid });
       const size = await naturalSize(src);
@@ -511,7 +557,11 @@ export default function Replicate() {
       <p className="rep-slot-hint">{hint}</p>
       <div className={`rep-thumbs ${list.length ? 'has' : ''}`}>
         {list.map((img) => <div className="rep-thumb" key={img.id}>
-          <img src={img.src} alt={img.name} />
+          {/* 点图看大图：上传后想再确认一下细节，不该只能删了重传 */}
+          <button className="rep-thumb-open" onClick={() => setPeek({ src: img.src, name: img.name })}
+            title={t('查看大图', 'View larger')} aria-label={t('查看大图', 'View larger')}>
+            <img src={img.src} alt={img.name} />
+          </button>
           <button className="rep-thumb-x" onClick={() => removeAt(slot, img.id)} title={t('移除', 'Remove')} aria-label={t('移除', 'Remove')}>
             <Icon name="close" size={11} />
           </button>
@@ -575,15 +625,20 @@ export default function Replicate() {
           placeholder={t('例如：主色改成深绿、文案换成「冷萃 250ml」、背景加一块亚麻布',
             'e.g. deep green as the base colour, copy reads “Cold Brew 250ml”, add linen in the background')} />
 
-        <label className="rep-label" htmlFor="rep-fid">
-          {t('复刻度', 'How closely to follow')} <b className="rep-fid-val">{fidelity}%</b>
-        </label>
-        <input id="rep-fid" className="rep-range" type="range" min={20} max={100} step={5}
-          value={fidelity} onChange={(e) => setFidelity(Number(e.target.value))} />
-        <div className="rep-range-ends">
-          <span>{t('只借个感觉', 'Loose inspiration')}</span>
-          <span>{t('一比一照做', 'One to one')}</span>
+        {/* 复刻度：三档明确选项，而不是一根 20–100 的滑杆。
+            滑杆看着精细，实际三档之外的数值对模型没有任何区别，
+            还容易让人以为「拖到 100% 就一定一比一」——现在每档都是一句
+            完全不同的指令（重做 / 沿用 / 照抄），选哪档就出哪种结果。 */}
+        <label className="rep-label">{t('复刻度', 'How closely to follow')}</label>
+        <div className="rep-fids" role="group" aria-label={t('复刻度', 'How closely to follow')}>
+          {FIDELITIES.map((f) => <button key={f.id} type="button"
+            className={`rep-fid ${f.id === fidDef.id ? 'on' : ''}`}
+            onClick={() => setFidelity(f.value)} disabled={busy}
+            aria-pressed={f.id === fidDef.id}>
+            {lang === 'en' ? f.name.en : f.name.zh}
+          </button>)}
         </div>
+        <p className="rep-fid-hint">{lang === 'en' ? fidDef.hint.en : fidDef.hint.zh}</p>
 
         <label className="rep-label">{t('生图模型', 'Image model')}</label>
         <ModelPicker value={tier} onChange={setTier} disabled={busy} />
@@ -598,6 +653,12 @@ export default function Replicate() {
           <span>{t(`本次 ${BATCH} 张 · ${ratio.label}`, `${BATCH} images · ${ratio.label}`)}</span>
           <b>{batchCost} {t('积分', 'credits')}</b>
         </div>
+        {/* 把计价方式写死在这里：一组几张、重来几次都是同一个价，
+            免得用户以为「点第二遍会翻倍」。 */}
+        <p className="rep-note">
+          {t(`一组 ${BATCH} 张算一次，固定 ${batchCost} 积分；重来一次还是 ${batchCost} 积分，不按张叠加。`,
+            `${BATCH} images count as one run — ${batchCost} credits. Regenerating all three costs the same, never a multiple.`)}
+        </p>
 
         <button className="rep-run" onClick={() => void generateAll()} disabled={busy || !ready}>
           {busy ? t('正在生成…', 'Generating…') : t('开始复刻', 'Recreate')}
@@ -619,16 +680,20 @@ export default function Replicate() {
           {items.map((it, i) => {
             const isEditing = editingId === it.id;
             return <article className="rep-card" key={it.id}>
-              <div className="rep-card-img" style={{ '--rep-ar': cssRatio } as React.CSSProperties}>
+              {/* 点图看大图：出图后最想做的事就是看清楚，点了没反应等于白做 */}
+              <button className="rep-card-img" style={{ '--rep-ar': cssRatio } as React.CSSProperties}
+                onClick={() => setZoomId(it.id)}
+                title={t('查看大图', 'View larger')} aria-label={t('查看大图', 'View larger')}>
                 <img src={it.src} alt={`${kind ? nm(kind) : ''} ${i + 1}`} />
                 <span className="rep-tag">{t('方案', 'Take')} {String.fromCharCode(65 + i)}</span>
+                <span className="rep-zoom"><Icon name="fullscreen" size={13} />{t('看大图', 'Larger')}</span>
                 {regenId === it.id && <div className="rep-loading"><i />{t('重新生成中…', 'Regenerating…')}</div>}
-              </div>
+              </button>
               <div className="rep-card-body">
                 <div className="rep-card-meta">
                   <span>{imageLabel(it.tier)}</span>
                   <span>{it.w}×{it.h}</span>
-                  <span>{it.fid}%</span>
+                  <span>{fidName(it.fid)}</span>
                 </div>
                 <p className="rep-card-prompt">{it.extra || t('按参考图与素材图复刻', 'Recreated from your images')}</p>
 
@@ -644,7 +709,8 @@ export default function Replicate() {
                 </div>}
 
                 {!isEditing && <div className="rep-card-actions">
-                  <button onClick={() => void regenerateOne(it.id, it.extra, it.tier)} disabled={regenId === it.id}>
+                  <button onClick={() => void regenerateOne(it.id, it.extra, it.tier)} disabled={regenId === it.id}
+                    title={t(`这张重出一次，${imageCost(it.tier)} 积分`, `One image again · ${imageCost(it.tier)} credits`)}>
                     <Icon name="refresh" size={13} />{t('重新生成', 'Regenerate')}
                   </button>
                   <button onClick={() => { setEditingId(it.id); setDraftExtra(it.extra); setDraftTier(it.tier); }}>
@@ -668,32 +734,100 @@ export default function Replicate() {
     </div>}
 
     {/* 类型弹窗：第一次进来必选；已有类型时可以从「换个类型」再打开。
-        首次进入不做淡入（见 pickerInstant）：点进来即完整出现，不再先闪一层中间态。 */}
-    {pickerOpen && <div className={`rep-modal ${pickerInstant ? 'is-instant' : ''}`} role="dialog" aria-modal="true" aria-label={t('选择复刻类型', 'Choose a format')}>
-      <div className="rep-modal-box">
-        <div className="rep-modal-head">
-          <div>
-            <h2>{t('要复刻成什么？', 'What are we making?')}</h2>
-            <p>{t('不同类型对应不同的画面规则与默认尺寸，选好之后都可以再调整。',
-              'Each format has its own layout rules and default size — everything stays adjustable.')}</p>
+        **挂到 body 上**（portal），不留在页面树里：路由切换的那 320ms 里 .main 上带着
+        transform 动画，fixed 元素的包含块会变成 .main 本身——弹窗于是被夹在内容区里、
+        跟着页面一起位移，看起来就是「从上面掉下来还卡一下」。挂在 body 上就没有这个问题。 */}
+    {pickerOpen && createPortal(
+      <div className={`rep-modal ${pickerInstant ? 'is-instant' : ''}`} role="dialog" aria-modal="true"
+        aria-label={t('选择复刻类型', 'Choose a format')}>
+        <div className="rep-modal-box">
+          <div className="rep-modal-head">
+            <div>
+              <h2>{t('要复刻成什么？', 'What are we making?')}</h2>
+              <p>{t('不同类型对应不同的画面规则与默认尺寸，选好之后都可以再调整。',
+                'Each format has its own layout rules and default size — everything stays adjustable.')}</p>
+            </div>
+            {/* 关闭按钮常驻：还没选类型时关掉等于「不做这次复刻」，回复刻记录 */}
+            <button className="rep-modal-x" onClick={closePicker}
+              title={kind ? t('关闭', 'Close') : t('关闭并回复刻记录', 'Close and go back')}
+              aria-label={kind ? t('关闭', 'Close') : t('关闭并回复刻记录', 'Close and go back')}>
+              <Icon name="close" size={15} />
+            </button>
           </div>
-          {/* 关闭按钮常驻：还没选类型时关掉等于「不做这次复刻」，回复刻记录 */}
-          <button className="rep-modal-x" onClick={closePicker}
-            title={kind ? t('关闭', 'Close') : t('关闭并回复刻记录', 'Close and go back')}
-            aria-label={kind ? t('关闭', 'Close') : t('关闭并回复刻记录', 'Close and go back')}>
-            <Icon name="close" size={15} />
-          </button>
+          <div className="rep-kinds">
+            {KINDS.map((k) => <button key={k.id} className={`rep-kind ${kind?.id === k.id ? 'on' : ''}`} onClick={() => pickKind(k)}>
+              <span className="rep-kind-ic"><Icon name={k.icon} size={17} /></span>
+              <b>{nm(k)}</b>
+              <em>{kd(k)}</em>
+              <span className="rep-kind-ratio">{RATIOS.find((r) => r.id === k.ratio)?.label}</span>
+            </button>)}
+          </div>
         </div>
-        <div className="rep-kinds">
-          {KINDS.map((k) => <button key={k.id} className={`rep-kind ${kind?.id === k.id ? 'on' : ''}`} onClick={() => pickKind(k)}>
-            <span className="rep-kind-ic"><Icon name={k.icon} size={17} /></span>
-            <b>{nm(k)}</b>
-            <em>{kd(k)}</em>
-            <span className="rep-kind-ratio">{RATIOS.find((r) => r.id === k.ratio)?.label}</span>
-          </button>)}
+      </div>,
+      document.body,
+    )}
+
+    {/* 大图查看：结果与上传图共用同一套壳，结果版多一排操作 */}
+    {zoomId && (() => {
+      const idx = items.findIndex((x) => x.id === zoomId);
+      const it = idx >= 0 ? items[idx] : null;
+      if (!it) return null;
+      return createPortal(
+        <div className="rep-view" role="dialog" aria-modal="true" aria-label={t('查看大图', 'View larger')}
+          onClick={() => setZoomId(null)}>
+          <div className="rep-view-body" onClick={(e) => e.stopPropagation()}>
+            <div className="rep-view-head">
+              <b>{t('方案', 'Take')} {String.fromCharCode(65 + idx)}</b>
+              <span>{imageLabel(it.tier)} · {it.w}×{it.h} · {fidName(it.fid)}</span>
+              <button className="rep-view-x" onClick={() => setZoomId(null)} aria-label={t('关闭', 'Close')}>
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+            <div className="rep-view-img">
+              <img src={it.src} alt={`${kind ? nm(kind) : ''} ${idx + 1}`} />
+              {items.length > 1 && <>
+                <button className="rep-view-nav prev" aria-label={t('上一张', 'Previous')}
+                  onClick={() => setZoomId(items[(idx - 1 + items.length) % items.length].id)}>
+                  <Icon name="chevronLeft" size={18} />
+                </button>
+                <button className="rep-view-nav next" aria-label={t('下一张', 'Next')}
+                  onClick={() => setZoomId(items[(idx + 1) % items.length].id)}>
+                  <Icon name="chevronRight" size={18} />
+                </button>
+              </>}
+            </div>
+            <div className="rep-view-foot">
+              <button onClick={() => void saveImage(it.src, `${kind ? kind.id : 'recreate'}-${idx + 1}.png`)}>
+                <Icon name="download" size={14} />{t('保存这张', 'Save image')}
+              </button>
+              <button onClick={() => { setZoomId(null); setEditingId(it.id); setDraftExtra(it.extra); setDraftTier(it.tier); }}>
+                <Icon name="edit" size={14} />{t('改提示词', 'Edit prompt')}
+              </button>
+              <button className="primary" onClick={() => { setZoomId(null); useResult(it); }}>
+                {t('用它做包装', 'Use in packaging')} <Icon name="chevronRight" size={14} />
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      );
+    })()}
+
+    {peek && createPortal(
+      <div className="rep-view is-peek" role="dialog" aria-modal="true" aria-label={t('查看大图', 'View larger')}
+        onClick={() => setPeek(null)}>
+        <div className="rep-view-body" onClick={(e) => e.stopPropagation()}>
+          <div className="rep-view-head">
+            <b>{peek.name || t('上传的图', 'Uploaded image')}</b>
+            <button className="rep-view-x" onClick={() => setPeek(null)} aria-label={t('关闭', 'Close')}>
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+          <div className="rep-view-img"><img src={peek.src} alt={peek.name} /></div>
         </div>
-      </div>
-    </div>}
+      </div>,
+      document.body,
+    )}
 
     <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
   </div>;
