@@ -195,8 +195,6 @@
   letter-spacing: 0.04em;
   color: var(--v4-ink-3);
 }
-.rep-fid-val { font-size: 12px; font-weight: 600; color: var(--v4-ink); letter-spacing: 0; }
-
 .rep-textarea, .rep-select {
   width: 100%;
   padding: 9px 11px;
@@ -211,21 +209,6 @@
 }
 .rep-textarea:focus, .rep-select:focus { outline: none; border-color: var(--v4-ink-3); }
 .rep-select { height: 34px; padding: 0 8px; }
-
-/* 复刻度滑杆：轨道左右两端就是「借感觉 / 照做」 */
-.rep-range {
-  width: 100%;
-  margin: 2px 0 0;
-  accent-color: var(--v4-orange);
-  cursor: pointer;
-}
-.rep-range-ends {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 2px;
-  font-size: 9.5px;
-  color: var(--v4-ink-3);
-}
 
 /* 复刻度三档：明确的选择按钮，选中态给足对比。
    以前是滑杆，拖到哪都对结果没影响，等于白选。 */
