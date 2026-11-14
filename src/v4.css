@@ -819,9 +819,7 @@ img, svg, video, canvas { max-width: 100%; }
     min-height: 0;
   }
 }
-/* Luna 页不需要整站页脚，避免输入框与页脚之间出现空档 */
-body.on-luna .footer-min { display: none; }
-body.on-start .footer-min { display: none; }
+/* 首页与开始页是一屏两卡，不需要「返回」按钮 */
 body.on-start .global-back { display: none; }
 
 /* 桌面端：整页不再滚动，滚轮只作用于鼠标所在的子区域（对话列表 / 消息区）。
@@ -1393,8 +1391,6 @@ body.on-start .global-back { display: none; }
   /* 欢迎区 logo */
   .lc-welcome-logo { width: 64px; height: 64px; border-radius: 16px; object-fit: cover; margin-bottom: 20px; }
 
-  /* 隐藏整站 footer，避免和输入框挤在一起 */
-  body.on-luna .footer-min { display: none; }
 }
 
 /* ============================================================
@@ -1688,9 +1684,8 @@ button.ag-row.open { background: var(--v4-ios-fill); }
        看起来就像套了一圈边框。色彩只放在卡片内部。 */
     background: transparent;
   }
-  /* 顶栏与页脚的通栏细线一并去掉，靠留白和柔影分层，不做「框」 */
+  /* 顶栏的通栏细线去掉，靠留白和柔影分层，不做「框」 */
   .v4-nav { border-bottom: 0; box-shadow: none; }
-  .footer-min { border-top: 0; }
 
   .lc-side {
     border: 0;
@@ -2477,6 +2472,84 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 .gl-link-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .gl-link-text strong { font-size: 12.5px; font-weight: 500; }
 .gl-link-text small { font-size: 11px; color: var(--v4-ink-3); }
+
+/* ---------- 帮助页：搜索 + 分区索引 ----------
+   这一页内容多（六组问答 + 更新日志），先给一条捷径：
+   一个搜索框过滤问题，一排 pill 直接跳到分区。
+   搜索只比问题文本与关键词，不做全文匹配——答案里全是模块常量和 <strong>，
+   拼成纯文本匹配噪音太大。 */
+.gl-find { padding: 14px 16px; }
+.gl-find-row { position: relative; display: flex; align-items: center; }
+.gl-find-ico {
+  position: absolute; left: 13px; display: flex;
+  color: var(--v4-ink-3); pointer-events: none;
+}
+.gl-find-row .gl-input { padding-left: 38px; padding-right: 38px; }
+.gl-find-clear {
+  position: absolute; right: 8px; width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--v4-ink-2); background: var(--v4-ios-fill);
+  transition: color var(--v4-dur-fast) var(--v4-ease);
+}
+.gl-find-clear:hover { color: var(--v4-ink); }
+.gl-index { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.gl-index .gl-pill { border: 0; cursor: pointer; font-family: inherit; }
+.gl-index .gl-pill:hover { background: var(--v4-ios-fill-hover); color: var(--v4-ink); }
+.gl-find-hint { margin-top: 10px; font-size: 11.5px; color: var(--v4-ink-3); }
+/* 跳转后标题别贴在卡口上：.main 是独立滚动容器，用 scroll-margin 留一口气 */
+.gl-card[id] { scroll-margin-top: 18px; }
+
+/* 三档复刻度这类「名称 + 一句说明」的清单 */
+.gl-steps { list-style: none; margin: 10px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.gl-steps li {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  padding: 9px 12px; border-radius: 12px;
+  background: rgba(15, 15, 20, 0.028);
+}
+[data-theme="dark"] .gl-steps li { background: rgba(255, 255, 255, 0.05); }
+.gl-steps strong { flex: none; font-size: 12px; color: var(--v4-ink); font-weight: 600; }
+.gl-steps span { font-size: 12px; color: var(--v4-ink-2); }
+
+/* ---------- 站点信息（帮助页最后一屏，原全站页脚） ----------
+   不再是压在卡片外面的一条白条，而是与其它分区同款的玻璃卡：
+   品牌行 + 三列链接 + 一行结算说明。 */
+.sf-card { padding: 20px 20px 18px; }
+.sf-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 14px; border-bottom: 1px solid var(--v4-line);
+}
+.sf-brand { display: flex; align-items: center; gap: 10px; }
+.sf-brand span { font-size: 9px; letter-spacing: 0.2em; color: var(--v4-ink-3); }
+.sf-copy { margin-left: auto; font-size: 11.5px; color: var(--v4-ink-3); }
+.sf-cols {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 18px; padding: 16px 0 2px;
+}
+.sf-col { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.sf-col h4 {
+  margin: 0 0 3px; font-size: 10px; font-weight: 500;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--v4-ink-3);
+}
+.sf-link {
+  font: inherit; font-size: 12.5px; color: var(--v4-ink-2);
+  text-decoration: none; background: none; border: 0; padding: 0;
+  text-align: left; cursor: pointer;
+  transition: color var(--v4-dur-fast) var(--v4-ease);
+}
+.sf-link:hover { color: var(--v4-orange); }
+.sf-note { font-size: 11px; color: var(--v4-ink-3); }
+.sf-legalnote {
+  margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--v4-line);
+  font-size: 11px; line-height: 1.75; color: var(--v4-ink-3);
+}
+/* 手机端：三列改两列，联系那列独占一行——单列排五个链接会把页尾拉得很长 */
+@media (max-width: 560px) {
+  .sf-head { gap: 6px; }
+  .sf-copy { margin-left: 0; }
+  .sf-cols { grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+  .sf-col { gap: 5px; }
+  .sf-col:last-child { grid-column: 1 / -1; margin-top: 4px; }
+}
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 860px) {
@@ -3526,7 +3599,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   .app.has-side:not(.is-luna) .page { padding-top: clamp(22px, 2.6vw, 34px); }
   /* 满屏页要减掉卡片上下各 12px，否则永远多出一条 24px 的滚动 */
   .app.has-side:not(.is-luna) .v4-home { min-height: calc(100vh - 24px); }
-  .app.has-side:not(.is-luna) .footer-min { margin: 0 12px 0 0; }
 }
 /* 深色：纸更暗、点更淡，卡片比纸亮一档，否则两张卡看不出边界 */
 @media (min-width: 861px) {
@@ -3641,14 +3713,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   .app.has-side:not(.is-luna) .main::-webkit-scrollbar-thumb:hover { background: rgba(32, 29, 24, 0.28); background-clip: content-box; }
   .app.has-side:not(.is-luna) .main::-webkit-scrollbar-track { background: transparent; }
 
-  /* 页脚在卡里：不再自带白底（会把点阵截断），只用一条发丝线分界 */
-  .app.has-side:not(.is-luna) .footer-min {
-    margin: 40px 0 0;
-    background: transparent;
-    border-top: 1px solid var(--v4-line);
-  }
-  .app.has-side:not(.is-luna) .footer-min-inner { max-width: none; padding: 24px clamp(20px, 3vw, 40px) 28px; }
-
   /* 左栏：实心白（之前是半透明玻璃，在浅底上发灰），圆角与正文卡一致 */
   .sd-nav {
     border-radius: 18px;
@@ -3723,14 +3787,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   .app.has-side:not(.is-luna) .main::-webkit-scrollbar-thumb:hover { background: rgba(32, 29, 24, 0.28); background-clip: content-box; }
   .app.has-side:not(.is-luna) .main::-webkit-scrollbar-track { background: transparent; }
 
-  /* 页脚在卡里：不再自带白底（会把点阵截断），只用一条发丝线分界 */
-  .app.has-side:not(.is-luna) .footer-min {
-    margin: 40px 0 0;
-    background: transparent;
-    border-top: 1px solid var(--v4-line);
-  }
-  .app.has-side:not(.is-luna) .footer-min-inner { max-width: none; padding: 24px clamp(20px, 3vw, 40px) 28px; }
-
   /* 左栏：实心白（之前是半透明玻璃，在浅底上发灰），圆角与正文卡一致 */
   .sd-nav {
     border-radius: 18px;
@@ -3762,34 +3818,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   [data-theme="dark"] .app.has-side:not(.is-luna) .main::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); background-clip: content-box; }
 }
 
-/* 内容不足一屏时页脚贴卡片底部，内容超一屏时正常滚动：flex 列 + footer margin-top:auto。
-   两个必须补的补丁，否则 flex 会打乱原有排版：
-     · .v4-page 的 margin:0 auto 在交叉轴上会阻止 stretch —— 页面缩成内容宽并居中，
-       所以显式给 width:100%（此时 auto 边距归零，和原来 block 的观感一致）；
-     · .global-back 是普通 inline-flex，会被 stretch 拉成横贯整张卡的一条，
-       用 align-self 让它按自身内容宽收回来。 */
-@media (min-width: 861px) {
-  .app.has-side:not(.is-luna) .main { display: flex; flex-direction: column; }
-  .app.has-side:not(.is-luna) .main > * { flex: 0 0 auto; }
-  .app.has-side:not(.is-luna) .main > .v4-page,
-  .app.has-side:not(.is-luna) .main > .page { width: 100%; }
-  .app.has-side:not(.is-luna) .main > .global-back { align-self: flex-start; }
-  .app.has-side:not(.is-luna) .main > .footer-min { margin-top: auto; }
-}
-/* 内容不足一屏时页脚贴卡片底部，内容超一屏时正常滚动：flex 列 + footer margin-top:auto。
-   两个必须补的补丁，否则 flex 会打乱原有排版：
-     · .v4-page 的 margin:0 auto 在交叉轴上会阻止 stretch —— 页面缩成内容宽并居中，
-       所以显式给 width:100%（此时 auto 边距归零，和原来 block 的观感一致）；
-     · .global-back 是普通 inline-flex，会被 stretch 拉成横贯整张卡的一条，
-       用 align-self 让它按自身内容宽收回来。 */
-@media (min-width: 861px) {
-  .app.has-side:not(.is-luna) .main { display: flex; flex-direction: column; }
-  .app.has-side:not(.is-luna) .main > * { flex: 0 0 auto; }
-  .app.has-side:not(.is-luna) .main > .v4-page,
-  .app.has-side:not(.is-luna) .main > .page { width: 100%; }
-  .app.has-side:not(.is-luna) .main > .global-back { align-self: flex-start; }
-  .app.has-side:not(.is-luna) .main > .footer-min { margin-top: auto; }
-}
 
 /* ============================================================
    15. 去掉暖底：整站改成白/中性灰

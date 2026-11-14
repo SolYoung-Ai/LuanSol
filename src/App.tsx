@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, toastTone } from './store';
-import { Button, Logo, Nav, Notice, PageHead, go, useHash } from './ui';
+import { Button, Nav, Notice, PageHead, go, useHash } from './ui';
 import Home from './pages/home';
 import { useAuth } from './cloud/auth';
 import { LoginDialog } from './cloud/LoginDialog';
@@ -33,32 +33,6 @@ const Admin = lazy(() => import('./pages/admin'));
 const Replicate = lazy(() => import('./pages/replicate'));
 const ReplicateList = lazy(() => import('./pages/replicate-list'));
 const ReplicateTemplates = lazy(() => import('./pages/replicate-templates'));
-
-function Footer() {
-  const { t } = useLang();
-  return <footer className="footer-min"><div className="footer-min-inner">
-    <div className="footer-min-brand"><Logo compact /><span>AI PACKAGING DESIGN STUDIO</span></div>
-    <div className="footer-min-links">
-      <a href="#/studio">{t('开始设计', 'Start designing')}</a>
-      <a href="#/workspace">{t('包装设计', 'Packaging')}</a>
-      <a href="#/replicate">{t('复刻设计', 'Recreate')}</a>
-      <a href="#/credits">{t('积分说明', 'Credits')}</a>
-    </div>
-    {/* 法务与价格必须是真实可抓取的静态地址：支付通道审核会直接请求 /terms 这类路径，
-        而 #/terms 这种 hash 路由在他们眼里等于不存在。 */}
-    {/* 法务页目前只有中文版本，英文界面下直接链过去，不做半截翻译 */}
-    <div className="footer-min-legal">
-      <a href="./pricing/">{t('价格', 'Pricing')}</a>
-      <a href="./terms/">{t('服务条款', 'Terms')}</a>
-      <a href="./privacy/">{t('隐私说明', 'Privacy')}</a>
-      <a href="./aup/">{t('使用规范', 'Acceptable use')}</a>
-      <a href="./contact/">{t('联系', 'Contact')}</a>
-    </div>
-    <span className="footer-min-copy">
-      © 2026 LunaSol · {t('从想法，到一件作品', 'From an idea to a finished piece')}
-    </span>
-  </div></footer>;
-}
 
 /** 页面级加载态统一交给品牌加载组件：LunaSol 字标被橙色填满 + Sol 三字轻跳。
  *  但**延迟 150ms** 才出现：chunk 已在缓存里时切换只要一帧，
@@ -264,10 +238,9 @@ export default function App() {
                 {page}
                 <RouteReady key={`ready:${hash}`} onReady={markShown} />
               </Suspense>
-              {/* 页脚放进正文卡内部：以前它是卡外面的另一块白条，
-                  桌面端滚到底会看到「卡片 + 缝 + 白条」三层，很难看。
-                  放进卡里之后，滚到底就是这张卡自己的底部，页脚成为卡的一部分。 */}
-              <Footer />
+              {/* 页脚不在这里：正文卡是固定高度、卡内滚动的，
+                  滚到底多出一条页脚只会让每一页多出一段「滑下来才看到」的白条。
+                  站内导航、法务链接与版权统一收在帮助与反馈页的最后一屏。 */}
             </main>
             {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
             <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />

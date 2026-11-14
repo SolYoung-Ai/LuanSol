@@ -59,6 +59,10 @@ export const PRICING = {
   /** 内部管理员邮箱（仅此邮箱可见开发者管理入口） */
   adminEmail: 'solyoungwork@gmail.com',
 
+  /** 对外唯一联系邮箱。帮助页、条款、联系页、退款处理都必须用这一个，
+   *  不要再出现第二个地址——审核方会核对站点上的邮箱是否与法务页一致。 */
+  supportEmail: 'solyoungwork@gmail.com',
+
   /** 仅用于积分包的人民币折算校验，不是售价 */
   usdToRmb: 7.1,
 } as const;

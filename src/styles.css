@@ -654,27 +654,12 @@ img { display: block; max-width: 100%; }
 .flow-min-name { font-size: 13px; color: var(--ink-2); }
 .flow-min-note { color: var(--muted); font-size: 12.5px; margin-top: 34px; }
 
-/* ---------- 精简页脚 ---------- */
-.footer-min { border-top: 1px solid var(--line); margin-top: 40px; background: var(--paper); }
-.footer-min-inner { max-width: 1080px; margin: 0 auto; padding: 26px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
-.footer-min-brand { display: flex; align-items: center; gap: 10px; }
-.footer-min-brand span { font-size: 9px; letter-spacing: .2em; color: #aaa59c; }
-.footer-min-links { display: flex; gap: 22px; }
-.footer-min-links a { font-size: 13px; color: var(--muted); }
-.footer-min-links a:hover { color: var(--ink); }
-.footer-min-copy { font-size: 12px; color: #aaa59c; }
-/* 法务与价格：真实静态地址，与导航区分开，字号更小、颜色更淡 */
-.footer-min-legal { display: flex; flex-wrap: wrap; gap: 16px; }
-.footer-min-legal a { font-size: 12px; color: #a8a29a; text-decoration: none; }
-.footer-min-legal a:hover { color: var(--ink); }
-
 @media (max-width: 900px) {
   .flow-min-steps { grid-template-columns: repeat(3, 1fr); }
   .flow-min-head h2 { font-size: 25px; }
 }
 @media (max-width: 560px) {
   .flow-min-steps { grid-template-columns: repeat(2, 1fr); }
-  .footer-min-inner { flex-direction: column; align-items: flex-start; gap: 14px; }
 }
 
 /* 全局返回按钮：所有非首页左上角统一一个 */
