@@ -778,7 +778,7 @@ async function handleChat(req, res, body) {
  *   CREEM_WEBHOOK_SECRET       Webhooks 端点详情页
  *   CREEM_PRODUCT_ID           历史会员订阅产品 prod_xxx（仅用于识别老续费事件）
  *   CREEM_CREDIT_PRODUCTS      积分包白名单 JSON：{"prod_xxx":1000,"prod_yyy":2100}。
- *                              不配则用代码里内置的三档（1000 / 2100 / 3500）。
+ *                              不配则用代码里内置的四档（100 / 1000 / 2100 / 3500）。
  *                              加档位优先配这一项，不用改代码、不用重新部署。
  *   CREEM_CREDITS_PER_PACK     仅在事件里拿不到产品 ID 时使用的兜底积分量（默认 1000）
  *   PAY_APPLY_SECRET           本函数与数据库函数共享的落库口令
@@ -798,16 +798,18 @@ const PAY_PUBLISHABLE_KEY = process.env.LUNASOL_PG_ANON_KEY || PAY_PUBLISHABLE_K
 
 /** 积分包产品白名单：Creem 产品 ID → 该产品发多少积分。
  *
- *  为什么是一张表而不是一个 id：1000 / 2100 / 3500 三档同价不同量，
+ *  为什么是一张表而不是一个 id：100 / 1000 / 2100 / 3500 各档同价不同量，
  *  用户点哪一档由**产品 ID**决定，绝不接受前端传来的「给我 3500 积分」——
  *  否则谁都能用 1000 积分那一档的价格买到 3500 积分。
  *
- *  内置一份当前上架的三档（产品 ID 不是密钥，它本来就会出现在结账请求里），
+ *  内置一份当前上架的四档（产品 ID 不是密钥，它本来就会出现在结账请求里），
+ *  其中 prod_5nK… 是 US$1 / 100 积分的临时体验档，下架只需从这张表删掉它，
  *  需要增删档位时优先改云函数环境变量 CREEM_CREDIT_PRODUCTS（JSON），不必改代码：
  *    CREEM_CREDIT_PRODUCTS={"prod_xxx":1000,"prod_yyy":2100}
  */
 const CREDIT_PACKS_DEFAULT = {
-  prod_7NiVzlPdBAHijnv06eQ0uw: 1000,   // US$13.70
+  prod_5nKbilayRd9BPYuyE2jV5Y: 100,    // US$1.00  临时体验档（测试支付链路用）
+  prod_7NiVzlPdBAHijnv06eQ0uw: 1000,   // US$14.00
   prod_1Pu40n8LlNNn3bTOLIY0wR: 2100,   // US$28.00
   prod_TiM2kUweFHmfqUIukrEUu: 3500,    // US$43.00
 };
@@ -824,9 +826,9 @@ function creditPacks() {
         if (id && n > 0) out[id] = Math.min(1000000, n);
       }
       if (Object.keys(out).length) return out;
-      console.error('[pay] CREEM_CREDIT_PRODUCTS 为空，回退内置三档');
+      console.error('[pay] CREEM_CREDIT_PRODUCTS 为空，回退内置四档');
     } catch (e) {
-      console.error('[pay] CREEM_CREDIT_PRODUCTS 不是合法 JSON，回退内置三档：', (e && e.message) || e);
+      console.error('[pay] CREEM_CREDIT_PRODUCTS 不是合法 JSON，回退内置四档：', (e && e.message) || e);
     }
   }
   return CREDIT_PACKS_DEFAULT;
@@ -1076,6 +1078,9 @@ function readCreemEvent(evt) {
     email: customerEmail,
     productId,
     metaKind: String(md.kind || '').trim(),
+    /** 结账时由本函数写入的积分量（metadata 是服务端填的，不是前端直传）；
+     *  只在事件里拿不到产品 ID 时用于兜底，且必须命中白名单里的某一档。 */
+    metaPoints: Math.round(Number(md.points || 0) || 0),
     quantity: Math.max(1, Math.round(Number((order && order.quantity) || 1) || 1)),
     amount: Number.isFinite(amount) ? Math.round(amount) : null,
     currency: String((order && order.currency) || (obj.last_transaction && obj.last_transaction.currency) || '').trim() || null,
@@ -1192,7 +1197,12 @@ async function handleCreemWebhook(req, res) {
       return sendJson(res, 200, { ok: true, needsManual: true });
     }
     const sign = e.kind === 'revoke' ? -1 : 1;
-    const perPack = packPoints || c.creditsPerPack;
+    // 发放量优先级：产品 ID 查白名单（权威）→ metadata.points（服务端结账时写入，
+    // 且必须正好等于白名单里的某一档）→ CREEM_CREDITS_PER_PACK 固定兜底。
+    // 加这一层是因为部分事件不保证带 product；若直接落到固定兜底，
+    // US$1/100 的体验档会被当成 1000 积分发放。
+    const metaCredits = Object.keys(c.packs).some((id) => c.packs[id] === e.metaPoints) ? e.metaPoints : 0;
+    const perPack = packPoints || metaCredits || c.creditsPerPack;
     const credits = sign * perPack * (sign > 0 ? e.quantity : 1);
     try {
       const out = await payApply({

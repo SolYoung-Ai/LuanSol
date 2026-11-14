@@ -14,7 +14,7 @@ import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
 import { useSubscription, type CreditLog } from '../cloud/subscription';
 import { startCheckout, payReturnFlag, clearPayReturnFlag, markPayKind, lastPayKind, clearPayKind } from '../cloud/pay';
-import { PRICING } from '../cloud/plans';
+import { PRICING, TEST_PACK, SHOW_TEST_PACK } from '../cloud/plans';
 import { imageModelNote } from '../cloud/models';
 import { IMAGE_MODELS, HYPER3D_COST } from '../cloud/models';
 import { useLang } from '../i18n';
@@ -23,9 +23,15 @@ import Coin from '../components/Coin';
 
 /** 积分包标签的英文（PRICING 里只有中文标签，不为此改数据源） */
 function packTagEn(points: number): string {
-  const map: Record<number, string> = { 1000: 'Starter', 2100: 'Popular', 3500: 'Best value' };
+  const map: Record<number, string> = { 100: 'Trial', 1000: 'Starter', 2100: 'Popular', 3500: 'Best value' };
   return map[points] || String(points);
 }
+
+/** 线上可买的卡片：体验档在前（临时），正式三档在后。
+ *  体验档不在 PRICING.creditsPacks 里，理由见 plans.ts 末尾注释。 */
+const BUY_PACKS = SHOW_TEST_PACK
+  ? [TEST_PACK, ...PRICING.creditsPacks]
+  : [...PRICING.creditsPacks];
 
 export default function Credits() {
   const a = useAuth();
@@ -305,7 +311,7 @@ export default function Credits() {
     <section className="gl-card">
       <div className="gl-label">{t('购买积分包', 'Credit packs')} <em>TOP-UP</em></div>
       <div className="gl-packs">
-        {PRICING.creditsPacks.map((p) => (
+        {BUY_PACKS.map((p) => (
           <div className={`gl-pack${p.points === 2100 ? ' hot' : ''}`} key={p.points}>
             <div className="gl-pack-tag">{t(p.tag, packTagEn(p.points))} · {t('在线可买', 'available online')}</div>
             <div className="gl-pack-price">US${p.priceUSD}</div>

@@ -13,7 +13,7 @@ import { generatePalettes } from '../src/v3/colors';
 import { accountKey, otpTarget, emailTarget, isEmail, rowId, projectIdOf, ownsProject } from '../src/cloud/keys';
 import { LOGIN_CONFIG } from '../src/cloud/loginConfig';
 import { decideGate, usageStat, CREDIT_BUCKET_FREE } from '../src/cloud/subscription';
-import { PRICING } from '../src/cloud/plans';
+import { PRICING, TEST_PACK, SHOW_TEST_PACK } from '../src/cloud/plans';
 import { payReturnFlag } from '../src/cloud/pay';
 import { IMAGE_MODELS, OPEN_IMAGE_MODELS, HYPER3D_COST, imageCost, imageModel, isProOnlyTier, resolveTier } from '../src/cloud/models';
 import {
@@ -882,6 +882,17 @@ export async function runTests(): Promise<Result[]> {
     }
     A(PRICING.customPointsPerRMB > 0, '自定义积分比例必须为正');
     return packs.map((p) => `${p.points}=US$${p.priceUSD}/¥${p.priceRMB}`).join(' / ');
+  });
+
+  await t('体验档 · US$1/100 与正式阶梯分开、不会被当成大包', () => {
+    A(typeof SHOW_TEST_PACK === 'boolean', '体验档必须有一个显式开关，下架时只改这一处');
+    A(TEST_PACK.priceUSD === 1 && TEST_PACK.points === 100, '体验档必须是 US$1 / 100 积分（与 Creem 产品一致）');
+    A(!PRICING.creditsPacks.some((p) => p.points === TEST_PACK.points),
+      '体验档不能混进正式阶梯：它的单价低于 US$14/1000，会让「越大越便宜」不成立');
+    const entry = PRICING.creditsPacks[0];
+    A(TEST_PACK.priceUSD / TEST_PACK.points < entry.priceUSD / entry.points,
+      '体验档的单价应低于入门档，否则这个产品没有存在意义');
+    return `US$${TEST_PACK.priceUSD} / ${TEST_PACK.points} 积分 · 开关 ${SHOW_TEST_PACK ? '开' : '关'}`;
   });
 
   await t('支付回跳 · hash 路由下的参数识别', () => {
