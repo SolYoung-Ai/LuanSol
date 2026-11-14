@@ -496,9 +496,11 @@
 }
 @keyframes repFade { from { opacity: 0; } to { opacity: 1; } }
 
-/* 首次进入（还没选类型）：这一页背后还没有内容，弹窗就是页面本体，第一帧就完整出现。 */
-.rep-modal.is-instant,
-.rep-modal.is-instant .rep-modal-box { animation: none; }
+/* 首次进入（还没选类型）：这一页背后本来就被藏起来了，不需要景深；
+   但入场保留一次极短的「展开」——纯 scale + 透明度，几乎没有绘制成本，
+   比「啪一下出现」更符合手指点下去的节奏。 */
+.rep-modal.is-instant { animation: repFade 0.12s ease-out both; }
+.rep-modal.is-instant .rep-modal-box { animation: repPop 0.16s cubic-bezier(0.22, 0.8, 0.2, 1) both; }
 .rep-page.is-choosing > *:not(.rep-modal) { visibility: hidden; }
 
 /* 深色模式下卡片是「纸色压在纸色」上，全靠投影分不出来（深色投影等于没投影）。
