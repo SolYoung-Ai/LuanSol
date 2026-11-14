@@ -97,7 +97,7 @@ export default function ReplicateList() {
       </div>
       <div className="v4-tools" style={{ display: 'flex', gap: 10 }}>
         {/* 模型库：参考图已经备好，用户只要上传自己的素材——比从零传两张图快得多 */}
-        <button className="v4-btn-line" onClick={() => go('/replicate/models')}>{t('浏览模型', 'Browse models')}</button>
+        <button className="v4-btn-line" onClick={() => go('/replicate/templates')}>{t('浏览模版', 'Browse templates')}</button>
         <button className="v4-btn-dark" onClick={() => go('/replicate/new')}>{t('新建复刻', 'New recreation')}</button>
       </div>
     </div>
@@ -182,7 +182,7 @@ export default function ReplicateList() {
       <h3>{t('这里还没有记录', 'No records yet')}</h3>
       <p>{t('上传参考图和自己的素材图，选好类型，一次给你三张。', 'Add a reference and your own assets, pick a format, and get three takes.')}</p>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <button className="v4-btn-line" onClick={() => go('/replicate/models')}>{t('先看模型库', 'Browse models')}</button>
+        <button className="v4-btn-line" onClick={() => go('/replicate/templates')}>{t('先看模版库', 'Browse templates')}</button>
         <button className="v4-btn-dark" onClick={() => go('/replicate/new')}>{t('从零开始', 'Start from scratch')}</button>
       </div>
     </div>}

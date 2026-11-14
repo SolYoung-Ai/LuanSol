@@ -10,7 +10,7 @@
  *   links  —— 开始 / Luna Ai / 包装设计 / 复刻设计
  *   slot   —— 分界线下的「场景区」，随当前导航变化：
  *              · 包装设计 → 新建包装 / 项目
- *              · 复刻设计 → 新建复刻 / 记录 / 模型
+ *              · 复刻设计 → 新建复刻 / 记录 / 模版
  *              · Luna     → 会话列表（新建对话 / 搜索 / 历史）
  *   account—— 头像 + 昵称 + 积分 + 使用进度 + 查看计划，点开是账户菜单
  *
@@ -133,7 +133,7 @@ export function SidePackaging({ onNavigate }: { onNavigate?: () => void }) {
   </div>;
 }
 
-/** 分界线下的「复刻设计」场景区：新建复刻 / 记录 / 模型。
+/** 分界线下的「复刻设计」场景区：新建复刻 / 记录 / 模版。
  *  和包装设计一样有独立的草稿位置——复刻也是会做一半停下来的活，
  *  没有草稿箱就只能一次做完，实际用起来做不了。
  *
@@ -145,8 +145,8 @@ export function SideRecreate({ onNavigate }: { onNavigate?: () => void }) {
   const hash = useHash();
   const path = hash.split('?')[0];
   const inList = path === '/replicate';
-  const inModels = path === '/replicate/models';
-  const inNew = path.startsWith('/replicate') && !inList && !inModels;
+  const inTemplates = path === '/replicate/templates' || path === '/replicate/models';
+  const inNew = path.startsWith('/replicate') && !inList && !inTemplates;
 
   const total = visibleReplicas(s.replicates).length;
 
@@ -164,9 +164,9 @@ export function SideRecreate({ onNavigate }: { onNavigate?: () => void }) {
       <em className="sd-act-n">{total}</em>
     </button>
 
-    <button className={`sd-act ${inModels ? 'on' : ''}`} onClick={() => { onNavigate?.(); if (!inModels) go('/replicate/models'); }}>
+    <button className={`sd-act ${inTemplates ? 'on' : ''}`} onClick={() => { onNavigate?.(); if (!inTemplates) go('/replicate/templates'); }}>
       <span className="sd-ic"><Icon name="grid" size={16} /></span>
-      <span>{t('模型', 'Models')}</span>
+      <span>{t('模版', 'Templates')}</span>
     </button>
   </div>;
 }

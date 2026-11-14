@@ -228,7 +228,7 @@ function buildLinks(t: TFn): { label: string; desc: string; path: string; icon: 
     { label: t('开始一个设计', 'Start a design'), desc: t('四步出图', 'Four steps to images'), path: '/new', icon: 'spark' },
     { label: t('积分', 'Credits'), desc: t('余额与签到', 'Balance & check-in'), path: '/credits', icon: 'folder' },
     { label: t('记录', 'Records'), desc: t('复刻过的都在这', 'Every recreation you made'), path: '/replicate', icon: 'grid' },
-    { label: t('模型', 'Models'), desc: t('参考图已备好，传素材就能出图', 'Reference ready — just add your assets'), path: '/replicate/models', icon: 'grid' },
+    { label: t('模版', 'Templates'), desc: t('参考图已备好，传素材就能出图', 'Reference ready — just add your assets'), path: '/replicate/templates', icon: 'grid' },
     { label: t('账户信息', 'Account'), desc: t('密码与邮箱', 'Password & email'), path: '/account', icon: 'user' },
   ];
 }

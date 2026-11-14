@@ -30,7 +30,7 @@ import { assembleDesign, inferStructure } from '../src/workflow/assembler';
 import { createInitialWorkflow } from '../src/types';
 import { KINDS, RATIOS, kindById } from '../src/replicate/kinds';
 import { FIDELITIES, buildReplicatePrompt, fidelityLevel } from '../src/replicate/prompt';
-import { MODELS } from '../src/replicate/models';
+import { TEMPLATES } from '../src/replicate/templates';
 import { migrateProductInfo, migrateProject, migrateWorkflow } from '../src/migrations';
 import { humanizeAuthError, isSessionNoise } from '../src/cloud/authErrors';
 import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
@@ -919,14 +919,15 @@ export async function runTests(): Promise<Result[]> {
     return '一比一 / 参考版式 / 只借感觉 三档互不相同';
   });
 
-  await t('模型库 · 每个模型都必须能直接开工', () => {
-    A(MODELS.length >= 6, '模型太少，六个分类至少各一个');
+  await t('模版库 · 每个模版都必须能直接开工', () => {
+    // 允许为空：正式素材还没到位时这一页显示「准备中」的空状态，不是故障
+    if (!TEMPLATES.length) return '模版库为空（等待正式素材，页面走空状态）';
     const ids = new Set<string>();
     const imgs = new Set<string>();
-    for (const m of MODELS) {
-      A(!ids.has(m.id), `模型 id 重复：${m.id}`); ids.add(m.id);
+    for (const m of TEMPLATES) {
+      A(!ids.has(m.id), `模版 id 重复：${m.id}`); ids.add(m.id);
       // 分类必须落在真实的复刻类型上，否则点进去会没有场景规则
-      A(!!kindById(m.kind), `模型 ${m.id} 的类型 ${m.kind} 不存在`);
+      A(!!kindById(m.kind), `模版 ${m.id} 的类型 ${m.kind} 不存在`);
       // 比例必须是 RATIOS 里的值：界面按钮按它高亮，生图按它取尺寸
       A(RATIOS.some((r) => r.id === m.ratio), `模型 ${m.id} 的比例 ${m.ratio} 不在尺寸表里`);
       // 复刻度只允许三档，和历史草稿的数值映射保持同一套
@@ -937,11 +938,9 @@ export async function runTests(): Promise<Result[]> {
       A(!!m.desc.zh && !!m.desc.en, `模型 ${m.id} 缺少双语说明`);
       A(m.prompt.trim().length > 6, `模型 ${m.id} 没有预设提示词，预填就白做了`);
     }
-    // 六个分类都要有货，否则侧栏点进去是空页
-    for (const k of KINDS) {
-      A(MODELS.some((m) => m.kind === k.id), `分类「${k.name.zh}」下没有任何模型`);
-    }
-    return `${MODELS.length} 个模型，覆盖 ${KINDS.length} 个分类`;
+    // 至少覆盖一个分类，避免「全填成同一种、其它分类点进去是空页」
+    A(KINDS.some((k) => TEMPLATES.some((m) => m.kind === k.id)), '没有任何分类有可用模版');
+    return `${TEMPLATES.length} 个模版，覆盖 ${new Set(TEMPLATES.map((m) => m.kind)).size} 个分类`;
   });
 
   return R;

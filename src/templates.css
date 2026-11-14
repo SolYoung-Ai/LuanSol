@@ -103,3 +103,25 @@
   .mdl-foot { margin-top: 6px; }
   .mdl-credit { margin-top: 26px; }
 }
+
+/* ---------- 空状态（正式素材还没到位时） ---------- */
+/* 不摆空分类、不摆空卡片：一片空白会让人以为是加载失败。
+   这里只做一件事——说清「在准备什么」+ 给一个现在就能走的路。 */
+.mdl-empty {
+  max-width: 560px;
+  margin: clamp(44px, 9vh, 104px) auto 0;
+  text-align: center;
+  padding: 0 4px;
+}
+.mdl-empty-mark {
+  width: 56px; height: 56px; margin: 0 auto 20px;
+  display: grid; place-items: center;
+  border-radius: 16px;
+  border: 1px solid var(--v4-line);
+  background: var(--v4-surface);
+  color: var(--v4-ink-3);
+}
+.mdl-empty h3 { font-size: 17px; font-weight: 550; letter-spacing: 0; }
+.mdl-empty p { margin-top: 10px; font-size: 13px; line-height: 1.7; color: var(--v4-ink-2); }
+.mdl-empty-sub { margin-top: 14px !important; color: var(--v4-ink-3) !important; font-size: 12.5px !important; }
+.mdl-empty-actions { display: flex; justify-content: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }

@@ -111,12 +111,12 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     {
       label: t('复刻设计', 'Recreate'),
       items: [
-        { label: t('新建复刻', 'New recreation'), path: '/replicate/new', on: path.startsWith('/replicate/') && path !== '/replicate/models' },
+        { label: t('新建复刻', 'New recreation'), path: '/replicate/new', on: path.startsWith('/replicate/') && !path.startsWith('/replicate/templates') && path !== '/replicate/models' },
         {
           label: t('记录', 'Records'), path: '/replicate',
           on: path === '/replicate', count: visibleReplicas(s.replicates).length,
         },
-        { label: t('模型', 'Models'), path: '/replicate/models', on: path === '/replicate/models' },
+        { label: t('模版', 'Templates'), path: '/replicate/templates', on: path === '/replicate/templates' || path === '/replicate/models' },
       ],
     },
   ];

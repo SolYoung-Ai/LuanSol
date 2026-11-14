@@ -34,7 +34,7 @@ import { emptyProductInfo } from '../types';
 import type { ConceptImage, ImageTier, ReferenceImage, ReferenceRole, ReplicateImage, ReplicateProject, ReplicateResult } from '../types';
 import { BATCH, KINDS, MAX_IMAGES, RATIOS, kindById, kindDesc, kindName, type KindDef } from '../replicate/kinds';
 import { FIDELITIES, buildReplicatePrompt, fidelityDef } from '../replicate/prompt';
-import { modelById } from '../replicate/models';
+import { templateById } from '../replicate/templates';
 import '../replicate.css';
 
 type Slot = 'ref' | 'mat';
@@ -226,10 +226,14 @@ function ReplicateEditor() {
   const editId = new URLSearchParams(hash.split('?')[1] || '').get('id');
   const [opened] = useState(() => (editId ? s.replicates.find((r) => r.id === editId) ?? null : null));
 
-  /* 模型库带过来的预设（?model=…）：参考图、类型、比例、复刻度、补充提示词
-     一次性就位。有它的时候不弹「选类型」——用户已经在模型库选过了。
-     编辑已有草稿（?id=）时忽略 model，以存档为准。 */
-  const [tpl] = useState(() => (opened ? null : modelById(new URLSearchParams(hash.split('?')[1] || '').get('model'))));
+  /* 模版库带过来的预设（?tpl=…，兼容上一版的 ?model=）：参考图、类型、比例、
+     复刻度、补充提示词一次性就位。有它的时候不弹「选类型」——用户已经选过了。
+     编辑已有草稿（?id=）时忽略模版参数，以存档为准。 */
+  const [tpl] = useState(() => {
+    if (opened) return null;
+    const q = new URLSearchParams(hash.split('?')[1] || '');
+    return templateById(q.get('tpl') || q.get('model'));
+  });
 
   const [kind, setKind] = useState<KindDef | null>(() => kindById(opened?.kind) ?? kindById(tpl?.kind));
   const [pickerOpen, setPickerOpen] = useState(!opened && !tpl);
@@ -282,8 +286,8 @@ function ReplicateEditor() {
     return { kind, refs, mats, items, extra, fidelity, tier, ratioId, ...patch };
   };
 
-  /* 模型库预填：把模板参考图取成 data URL 放进「参考图」一栏。
-     用户从模型库点进来的那一下，看到的就是「参考图已就位、只差我的素材」。 */
+  /* 模版预填：把模版参考图取成 data URL 放进「参考图」一栏。
+     用户从模版库点进来的那一下，看到的就是「参考图已就位、只差我的素材」。 */
   const [tplBusy, setTplBusy] = useState(!!tpl);
   useEffect(() => {
     if (!tpl) return;
@@ -295,13 +299,13 @@ function ReplicateEditor() {
         if (!alive) return;
         setRefs([{ id: `tpl_${tpl.id}`, src, w: size.w, h: size.h, name: `${tpl.name.zh}.jpg` }]);
       } catch {
-        if (alive) setToast(t('模板参考图没取到，可以手动上传一张参考图', 'The model reference could not load — add one manually'));
+        if (alive) setToast(t('模版参考图没取到，可以手动上传一张参考图', 'The template reference could not load — add one manually'));
       } finally {
         if (alive) setTplBusy(false);
       }
     })();
     return () => { alive = false; };
-    // 模板在首帧固定（换模型会换整个路由 key），不需要跟着变
+    // 模版在首帧固定（换模版会换整个路由 key），不需要跟着变
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -314,7 +318,7 @@ function ReplicateEditor() {
     const existingName = s.replicates.find((r) => r.id === id)?.name;
     const rec: ReplicateProject = {
       id,
-      // 从模型库进来的记录直接叫模型名（「白底极简主图」），比「主图复刻」更有辨识度
+      // 从模版库进来的记录直接叫模版名，比「主图复刻」更有辨识度
       name: existingName || (tpl
         ? (lang === 'en' ? tpl.name.en : tpl.name.zh)
         : t(`${kindName(snap.kind, 'zh')}复刻`, `${kindName(snap.kind, 'en')} recreation`)),
@@ -632,10 +636,10 @@ function ReplicateEditor() {
 
   return <div className={`page rep-page ${pickerInstant && pickerOpen ? 'is-choosing' : ''}`}>
     <div className="rep-crumb">
-      {/* 从模型库进来的，返回就去模型库：把人送回他刚离开的那一屏，
+      {/* 从模版库进来的，返回就去模版库：把人送回他刚离开的那一屏，
           而不是扔进一个他还没见过的记录列表 */}
-      <button onClick={() => go(tpl ? '/replicate/models' : '/replicate')}>
-        <Icon name="chevronLeft" size={12} />{tpl ? t('模型库', 'Models') : t('记录', 'Records')}
+      <button onClick={() => go(tpl ? '/replicate/templates' : '/replicate')}>
+        <Icon name="chevronLeft" size={12} />{tpl ? t('模版库', 'Templates') : t('记录', 'Records')}
       </button>
       <span className="rep-kicker">RECREATE</span>
     </div>
@@ -648,13 +652,13 @@ function ReplicateEditor() {
         : t('先选要做什么：主图、详情页、海报、视频封面、包装、周边。每种类型的画面规则和默认尺寸不同，选好以后还能改。',
           'Pick a format first — main image, detail page, poster, video cover, packaging or merch. Each has its own layout rules and default size, and you can change them later.')}</p>
       {kind && <div className="rep-head-actions">
-        {/* 从模型库进来时如实说明「参考图是模板给的」，并留一个回去换的入口。
-            类型被换掉之后徽章就撤：那时参考图已经不是那个模型的版式了，
-            还挂着模型名等于撒谎。 */}
+        {/* 从模版库进来时如实说明「参考图是模版给的」，并留一个回去换的入口。
+            类型被换掉之后徽章就撤：那时参考图已经不是那个模版的版式了，
+            还挂着模版名等于撒谎。 */}
         {tpl && kind && kind.id === tpl.kind && <span className="rep-tpl">
           <Icon name="spark" size={12} />
           <span>{lang === 'en' ? tpl.name.en : tpl.name.zh}</span>
-          <button onClick={() => go('/replicate/models')}>{t('换一个', 'Change')}</button>
+          <button onClick={() => go('/replicate/templates')}>{t('换一个', 'Change')}</button>
         </span>}
         <button className="rep-switch" onClick={() => setPickerOpen(true)}>
           <Icon name="grid" size={13} />{t('换个类型', 'Change format')}
@@ -670,10 +674,10 @@ function ReplicateEditor() {
     {kind && <div className="rep-grid">
       {/* 左：设置 */}
       <aside className="rep-setup">
-        {/* 模板参考图是本地 fetch 再转 base64 的，慢网下会有一小段空窗；
+        {/* 模版参考图是本地 fetch 再转 base64 的，慢网下会有一小段空窗；
             说清楚在做什么，比让用户盯着空框猜好 */}
         {tplBusy && <div className="rep-tplbusy">
-          <i />{t('正在放入模型参考图…', 'Preparing the model reference…')}
+          <i />{t('正在放入模版参考图…', 'Preparing the template reference…')}
         </div>}
         <div className="rep-slots">
           {renderSlot('ref')}
