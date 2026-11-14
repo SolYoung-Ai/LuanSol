@@ -158,6 +158,10 @@
           booted = true;
           var boot = $id('boot');
           if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
+          // 看门狗可能已经先把 #boot 换成了失败页：这时应用其实已经挂载成功，
+          // 失败页必须一并撤掉，否则它就一直压在能用的页面上面（用户只能看到「加载超时」）。
+          var fail = $id('boot-fail');
+          if (fail && fail.parentNode) fail.parentNode.removeChild(fail);
           // 恢复时加的 ?v= 只用于绕过缓存，进站后清掉，别留在地址栏
           try {
             var u = new URL(location.href);
