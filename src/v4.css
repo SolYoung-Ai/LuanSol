@@ -3514,29 +3514,26 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 }
 
 /* ============================================================
-   12. 点阵纸 + 双卡桌面布局（仅 ≥861px）
+   12. 暖灰纸 + 双卡桌面布局（仅 ≥861px）
    ------------------------------------------------------------
-   参考的是一种「工作台悬浮在纸上」的布局：底色是暖灰纸 + 极淡点阵，
-   导航栏是一张独立的圆角白卡，正页面是另一张独立的圆角白卡，
-   两张卡之间只有 12px 缝，页面的所有内容都活在卡片里。
+   布局关系：底色是暖灰纸，导航栏是一张独立的圆角白卡，
+   正页面是另一张独立的圆角白卡，两张卡之间只有 12px 缝，
+   页面的所有内容都活在卡片里。
+   **背景一律纯色**：早先卡片内铺过一层 16px 点阵（波点），
+   观感上像贴了壁纸，与「干净的工作台」目标相反，已全局移除。
    为什么不做在移动端：手机上两张卡只剩通栏，留白反而压缩内容宽度，
    所以这一整块都锁在桌面断点内，≤860px 维持原来的顶栏 + 抽屉。
    ============================================================ */
 @media (min-width: 861px) {
-  /* 纸底色：卡片外面那一圈，纯色、不带点 */
+  /* 纸底色：卡片外面那一圈，纯色 */
   body { background-color: #efede7; }
 
   /* 正页面 = 第二张卡。Luna 有自己的整屏 shell，不套（会与 100vh 打架）。
-     点阵画在**这张卡内部**，不是整页背景：
-     左栏是干净的白卡，右侧内容区是「白纸上印了一层很淡的点」，
-     两张卡之间只有纯色缝隙。这才是参考图里的关系——
-     点阵是内容的纸，不是页面的底。 */
+     卡内不留任何纹理，纯 --v4-paper 填充，内容才压得住。 */
   .app.has-side:not(.is-luna) .main {
     margin: 12px 12px 12px 0;
     border-radius: 24px;
     background-color: var(--v4-paper);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='1.05' fill='%23201d18' fill-opacity='0.11'/%3E%3C/svg%3E");
-    background-size: 16px 16px;
     border: 1px solid rgba(32, 29, 24, 0.055);
     box-shadow:
       0 1px 2px -1px rgba(18, 18, 16, 0.06),
@@ -3548,13 +3545,12 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   /* 满屏页要减掉卡片上下各 12px，否则永远多出一条 24px 的滚动 */
   .app.has-side:not(.is-luna) .v4-home { min-height: calc(100vh - 24px); }
 }
-/* 深色：纸更暗、点更淡，卡片比纸亮一档，否则两张卡看不出边界 */
+/* 深色：纸更暗，卡片比纸亮一档，否则两张卡看不出边界 */
 @media (min-width: 861px) {
   :root[data-theme="dark"] body { background-color: #080807; }
 
   [data-theme="dark"] .app.has-side:not(.is-luna) .main {
     background-color: #141413;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='1.05' fill='%23ffffff' fill-opacity='0.1'/%3E%3C/svg%3E");
     border-color: rgba(255, 255, 255, 0.055);
     box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 22px 60px -46px rgba(0, 0, 0, 0.8);
   }
@@ -3627,7 +3623,7 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
    现在：
      · .main 固定成视口高的一张卡，内容在卡内滚动，卡片本身不动；
      · 页脚进卡内（App 里已经移到 </main> 之前），滚到底就是这张卡的底部；
-     · 左栏从玻璃改成实心白，底色更浅，点阵只在正文卡里。
+     · 左栏从玻璃改成实心白，底色更浅；正文卡纯色无纹理。
    ============================================================ */
 @media (min-width: 861px) {
   body { background-color: #f3f1ed; }
@@ -3643,8 +3639,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
     overscroll-behavior: contain;
     border-radius: 18px;
     background-color: var(--v4-paper);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='1.05' fill='%23201d18' fill-opacity='0.09'/%3E%3C/svg%3E");
-    background-size: 16px 16px;
     border: 1px solid rgba(32, 29, 24, 0.055);
     box-shadow:
       0 1px 2px -1px rgba(18, 18, 16, 0.05),
@@ -3685,7 +3679,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   }
   [data-theme="dark"] .app.has-side:not(.is-luna) .main {
     background-color: #141413;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='1.05' fill='%23ffffff' fill-opacity='0.075'/%3E%3C/svg%3E");
     border-color: rgba(255, 255, 255, 0.055);
     box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 18px 44px -38px rgba(0, 0, 0, 0.8);
   }
@@ -3701,7 +3694,7 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
    现在：
      · .main 固定成视口高的一张卡，内容在卡内滚动，卡片本身不动；
      · 页脚进卡内（App 里已经移到 </main> 之前），滚到底就是这张卡的底部；
-     · 左栏从玻璃改成实心白，底色更浅，点阵只在正文卡里。
+     · 左栏从玻璃改成实心白，底色更浅；正文卡纯色无纹理。
    ============================================================ */
 @media (min-width: 861px) {
   body { background-color: #f3f1ed; }
@@ -3717,8 +3710,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
     overscroll-behavior: contain;
     border-radius: 18px;
     background-color: var(--v4-paper);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='1.05' fill='%23201d18' fill-opacity='0.09'/%3E%3C/svg%3E");
-    background-size: 16px 16px;
     border: 1px solid rgba(32, 29, 24, 0.055);
     box-shadow:
       0 1px 2px -1px rgba(18, 18, 16, 0.05),
@@ -3759,7 +3750,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
   }
   [data-theme="dark"] .app.has-side:not(.is-luna) .main {
     background-color: #141413;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='1.05' fill='%23ffffff' fill-opacity='0.075'/%3E%3C/svg%3E");
     border-color: rgba(255, 255, 255, 0.055);
     box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 18px 44px -38px rgba(0, 0, 0, 0.8);
   }
