@@ -234,8 +234,10 @@ function buildGroups(t: TFn, lang: string): Group[] {
             {t('没有月费，也不需要订阅。积分永久有效，用多少买多少。在线支付支持 ',
               'There is no monthly fee or subscription. Credits never expire — buy only what you need. Online payments accept ')}
             <strong>Visa / Mastercard / Apple Pay / Google Pay / 支付宝（含 AlipayHK）</strong>
-            {t('，由 Creem 结算，付款后自动到账，不会自动续费。中国内地用户在「积分」页微信扫码按人民币付款，或使用兑换码。',
-              ', settled by Creem, credited automatically, never auto-renewed. Mainland China users can scan the WeChat code on the Credits page to pay in CNY, or use a redeem code. ')}
+            {t('，由 Creem 结算，付款后自动到账，不会自动续费。中国内地用户可通过微信联系我们（',
+              ', settled by Creem, credited automatically, never auto-renewed. Mainland China users can reach us on WeChat (')}
+            <strong>{PRICING.wechatId}</strong>
+            {t('）按人民币购买，或使用兑换码。', ') to pay in CNY, or use a redeem code. ')}
             {t(`积分包在线三档：${packsOnline}；人民币通道（兑换码 / 微信）价格以微信内标价为准。`,
               `Credit packs online: ${packsOnline}. For CNY channels (redeem code / WeChat), pricing follows what is listed in WeChat.`)}
           </>,

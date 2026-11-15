@@ -17,7 +17,7 @@ import {
   startCheckout, payReturnFlag, clearPayReturnFlag, markPayKind, lastPayKind, clearPayKind,
   markPayBaseline, readPayBaseline, clearPayBaseline, markPayPending, readPayPending, clearPayPending,
 } from '../cloud/pay';
-import { PRICING, WECHAT_PAY_QR } from '../cloud/plans';
+import { PRICING } from '../cloud/plans';
 import { imageModelNote } from '../cloud/models';
 import { IMAGE_MODELS, HYPER3D_COST } from '../cloud/models';
 import { useLang } from '../i18n';
@@ -32,7 +32,7 @@ function packTagEn(points: number): string {
 
 /** 收款码图片地址：图片放在 public/，用 BASE_URL 拼绝对路径，
  *  GitHub Pages 的 /LuanSol/ 子路径与 CloudBase 根路径都能取到。 */
-const WX_QR_SRC = WECHAT_PAY_QR ? import.meta.env.BASE_URL + WECHAT_PAY_QR : '';
+
 
 export default function Credits() {
   const a = useAuth();
@@ -355,23 +355,6 @@ export default function Credits() {
         {t('支持 Visa / Mastercard / Apple Pay / Google Pay / 支付宝（含 AlipayHK）在线支付，付款后积分自动到账；',
           'Pay online with Visa / Mastercard / Apple Pay / Google Pay or Alipay (incl. AlipayHK) — credits arrive automatically.')}
       </p>
-      {/* 微信通道：一张收款码 + 人民币价目，扫码后人工核对充值。
-          图片常量置空时整块不渲染——宁可不显示，也不放一张空图或死按钮。 */}
-      {WX_QR_SRC && <div className="gl-wxbuy">
-        <div className="gl-wxbuy-main">
-          <div className="gl-wxbuy-title">{t('中国内地 · 微信扫码购买', 'Mainland China · pay by WeChat')}</div>
-          <div className="gl-wxbuy-text">
-            {t('用微信扫右侧二维码付款，并在付款备注里写下你的账号邮箱。我们会在 1 小时内处理，最迟不超过 12 小时充值到账。',
-              'Scan the code with WeChat, and put your account email in the payment note. Credits are added within 1 hour, and never later than 12 hours.')}
-          </div>
-        </div>
-        {/* 不做外链：桌面读屏靠扫，手机在微信里靠长按识别。
-            点图跳原图反而容易让人以为「点了没反应」，所以只当一张静态图。 */}
-        <div className="gl-wxbuy-code">
-          <img src={WX_QR_SRC} alt={t('微信收款码', 'WeChat payment code')} />
-          <span>{t('微信扫码 · 长按可识别', 'Scan, or long-press')}</span>
-        </div>
-      </div>}
       <button className="gl-btn gl-btn-soft gl-btn-sm" style={{ marginTop: 10 }} onClick={goRedeem}>
         {t('用兑换码充值', 'Top up with a code')}
       </button>

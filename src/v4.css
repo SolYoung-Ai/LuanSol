@@ -2371,42 +2371,6 @@ button.gl-row:hover, .gl-row-hover:hover { background: var(--v4-ios-fill); }
 
 .gl-note { font-size: 11.5px; line-height: 1.8; color: var(--v4-ink-3); margin-top: 12px; }
 
-/* 微信扫码购买：左说明，右收款码。
-   日间是一层极浅的灰，夜间换成半透明白，跟 .gl-pack 同一套材质语言；
-   但收款码那格在两套主题下都必须是白底——二维码贴在灰底上扫不出来。 */
-.gl-wxbuy {
-  margin-top: 12px; padding: 12px 14px; border-radius: 16px;
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  background: rgba(15, 15, 20, 0.028);
-  box-shadow: inset 0 0 0 1px rgba(15, 15, 20, 0.05);
-}
-[data-theme="dark"] .gl-wxbuy {
-  background: rgba(255, 255, 255, 0.045);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-}
-.gl-wxbuy-main { flex: 1 1 240px; min-width: 0; }
-.gl-wxbuy-title { font-size: 13px; font-weight: 600; color: var(--v4-ink); }
-.gl-wxbuy-text { margin-top: 4px; font-size: 11.5px; line-height: 1.7; color: var(--v4-ink-3); }
-
-/* 收款码：固定白底 + 内边距做静默区，深色模式下同样保持白 */
-.gl-wxbuy-code {
-  flex: 0 0 auto; margin-left: auto; width: 132px;
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  padding: 8px 8px 7px; border-radius: 12px; background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 15, 20, 0.08), inset 0 0 0 1px rgba(15, 15, 20, 0.08);
-}
-.gl-wxbuy-code img { display: block; width: 100%; height: auto; border-radius: 4px; }
-.gl-wxbuy-code span {
-  font-size: 9.5px; line-height: 1.4; text-align: center;
-  letter-spacing: 0.01em; color: #8a857c;
-}
-
-@media (max-width: 560px) {
-  .gl-wxbuy { flex-direction: column; align-items: stretch; }
-  /* 竖排时 flex-basis 变成高度，240px 的基数会在说明下面留一大块空白 */
-  .gl-wxbuy-main { flex: 0 0 auto; }
-  .gl-wxbuy-code { margin: 2px auto 0; width: 180px; }
-}
 
 .gl-redeem { display: flex; gap: 8px; align-items: center; }
 .gl-redeem .gl-input { flex: 1; }
