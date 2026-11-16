@@ -19,7 +19,7 @@ import { useAuth, isEmail } from '../cloud/auth';
 import { humanizeAuthError } from '../cloud/authErrors';
 import { LOGIN_CONFIG, NO_SMS_HINT, NO_SMS_HINT_EN } from '../cloud/loginConfig';
 import { useLang } from '../i18n';
-import PackArt from '../site/PackArt';
+import BrandLoop from '../site/BrandLoop';
 
 type Mode = 'in' | 'up';
 type Step = 'email' | 'code' | 'password';
@@ -44,30 +44,12 @@ function GoogleMark({ size = 17 }: { size?: number }) {
   </svg>;
 }
 
-/** 左侧品牌视觉：纯 CSS 的橙色晨光（白底，不再铺点阵）。
- *  这一版把原来的深色粒子场去掉了：2.0 全站底色是白，
- *  登录页留一块深黑面板会像另一个产品；点阵也按需求全部撤掉。 */
+/** 左侧品牌视觉：整块白底上循环播放首页那支品牌开场动画。
+ *  这一版把包装静物、橙色晨光、橙色山峰微标全部撤掉了——
+ *  2.0 的 logo 只有一个：Luna 黑 + Sol 橙的字标，任何位置都不再出现图形微标。 */
 function BrandField() {
   return <div className="lg-visual" aria-hidden>
-    <div className="lg-v-glow" />
-    <div className="lg-v-beam lg-v-beam-a" />
-    <div className="lg-v-beam lg-v-beam-b" />
-    {/* 三件几何包装「站在」地平线上：白底上一块空面板太飘，
-        放实物轮廓才能立刻读出这是包装设计工具 */}
-    <div className="lg-v-packs">
-      <PackArt kind="tin" height={196} tint="#FAF0DD" />
-      <PackArt kind="carton" height={268} />
-      <PackArt kind="can" height={208} tint="#F7ECD8" />
-    </div>
-    <div className="lg-v-horizon" />
-    <div className="lg-v-vignette" />
-    <div className="lg-v-mark">
-      <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-        <path d="M2 21.5 9.5 4.5 13 13l3.5-5.5L24 21.5" stroke="#F47735" strokeWidth="1.6"
-          strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <span>LunaSol</span>
-    </div>
+    <div className="lg-v-loop"><BrandLoop /></div>
   </div>;
 }
 
@@ -180,8 +162,7 @@ export default function Login() {
     <section className="lg-panel">
       <header className="lg-top">
         <a className="lg-brand" href="#/" onClick={(e) => { e.preventDefault(); go('/'); }}>
-          <span className="lg-brand-dot" />
-          <span className="lg-brand-name">LunaSol</span>
+          <span className="lg-brand-name">Luna<i>Sol</i></span>
         </a>
         <div className="lg-toggle" role="tablist" aria-label={t('登录或创建账户', 'Sign in or create account')}>
           <button role="tab" aria-selected={mode === 'in'} className={mode === 'in' ? 'is-on' : ''}
@@ -301,7 +282,7 @@ export default function Login() {
       </div>
 
       <footer className="lg-foot">
-        <span>LunaSol</span>
+        <span className="lg-foot-word">Luna<i>Sol</i></span>
         <span className="lg-foot-help">
           {t('需要帮助？', 'Need help?')} <a href="mailto:hello@solyoung.top">hello@solyoung.top</a>
         </span>

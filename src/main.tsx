@@ -5,7 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { AppProvider } from './store';
 import { AuthProvider } from './cloud/auth';
 import { LangProvider } from './i18n';
-import { applyTheme, readTheme } from './theme';
+import { applyTheme } from './theme';
 import './styles.css';
 import './v3.css';
 import './v4.css';
@@ -34,7 +34,10 @@ window.addEventListener('vite:preloadError', (e) => {
 });
 
 // 主题必须在 React 挂载之前写到 <html> 上：晚一帧就会先闪白再变深色。
-applyTheme(readTheme());
+// 2.0 起全站只用白色一套（品牌页、工作台、登录页都是白底），
+// 深色切换入口已随旧侧栏一起撤掉；这里固定成 light，
+// 免得老用户 localStorage 里残留的 dark 把旧组件染成深色、压在白色新壳上。
+applyTheme('light');
 
 /** 首帧真的画出来之后，才撤掉 index.html 里的启动兜底层。
  *  放在组件里（而不是 createRoot 之后立刻）是为了避免「React 还没提交、

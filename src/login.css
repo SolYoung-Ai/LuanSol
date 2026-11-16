@@ -37,75 +37,145 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---------- 左侧品牌视觉 ---------- */
+/* ---------- 左侧品牌视觉 ----------
+   这里不再摆包装静物，也不再放橙色山峰微标：
+   整块白底上循环播放首页那支品牌开场动画（见 BrandLoop）。
+   白底 + 一层极淡暖光做背景，动画本身是唯一的视觉主体。 */
 .lg-visual {
   position: relative;
   overflow: hidden;
+  display: grid;
+  place-items: center;
   background:
-    radial-gradient(120% 78% at 50% 64%, rgba(244, 119, 53, .1) 0%, rgba(244, 119, 53, 0) 62%),
-    linear-gradient(180deg, #ffffff 0%, #fbf8f4 100%);
+    radial-gradient(120% 80% at 50% 58%, rgba(244, 119, 53, .085) 0%, rgba(244, 119, 53, 0) 62%),
+    #ffffff;
   border-right: 1px solid var(--mk-line);
   isolation: isolate;
 }
-/* 三件包装：底边贴着地平线，轻微重叠建立层次 */
-.lg-v-packs {
-  position: absolute;
-  left: 50%;
-  bottom: 42%;
-  transform: translateX(-50%);
+.lg-v-loop { position: relative; z-index: 1; }
+/* 左栏是大块留白，动画按原尺寸会显得太小，这里统一放大一档 */
+.lg-visual .bl-mark { width: 116px; height: 116px; }
+.lg-visual .bl-word { font-size: 32px; }
+.lg-visual .bl-sub { font-size: 11px; letter-spacing: .36em; }
+
+/* ---------- 循环中的品牌开场（7s 一轮） ---------- */
+.bl {
   display: flex;
-  align-items: flex-end;
-  pointer-events: none;
-  /* 必须压在白雾（vignette）之上：它写在 DOM 后面会把三件包装洗成半透明 */
-  z-index: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
 }
-.lg-v-packs > * { flex: 0 0 auto; margin-left: -6px; filter: drop-shadow(0 20px 24px rgba(120, 96, 70, .18)); }
-.lg-v-packs > *:first-child { margin-left: 0; }
+.bl-mark { width: 92px; height: 92px; overflow: visible; }
+.bl-sq {
+  fill: none;
+  stroke: var(--mk-ink);
+  stroke-width: 2.4;
+  stroke-dasharray: 300;
+  stroke-dashoffset: 300;
+  transform-origin: 46px 46px;
+  animation: blSquare 7s var(--mk-ease) infinite, blRotate 7s var(--mk-ease) infinite;
+}
+.bl-sun {
+  fill: var(--mk-brand);
+  transform-origin: 46px 46px;
+  animation: blSun 7s cubic-bezier(.2, 1.35, .4, 1) infinite;
+}
+.bl-moon {
+  fill: #ffffff;
+  animation: blMoon 7s var(--mk-ease) infinite;
+}
+@keyframes blSquare {
+  0%        { stroke-dashoffset: 300; opacity: 1; }
+  16%       { stroke-dashoffset: 0; opacity: 1; }
+  78%       { stroke-dashoffset: 0; opacity: 1; }
+  86%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes blRotate {
+  0%   { transform: rotate(-24deg); }
+  16%  { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes blSun {
+  0%, 8%    { opacity: 0; transform: scale(.2); }
+  20%       { opacity: 1; transform: scale(1.09); }
+  26%       { opacity: 1; transform: scale(1); }
+  78%       { opacity: 1; transform: scale(1); }
+  86%, 100% { opacity: 0; transform: scale(1); }
+}
+@keyframes blMoon {
+  0%, 16%   { opacity: 0; transform: translate(-3px, -3px) scale(.94); }
+  26%       { opacity: 1; transform: translate(0, 0) scale(1); }
+  78%       { opacity: 1; transform: translate(0, 0) scale(1); }
+  86%, 100% { opacity: 0; transform: translate(0, 0) scale(1); }
+}
 
-.lg-v-horizon {
-  position: absolute; left: -10%; right: -10%; top: 58%; height: 1.5px;
-  background: linear-gradient(90deg, transparent 4%, rgba(244, 119, 53, 0.28) 24%,
-    rgba(244, 119, 53, 0.72) 50%, rgba(244, 119, 53, 0.28) 76%, transparent 96%);
-  box-shadow: 0 0 30px 5px rgba(244, 119, 53, 0.16);
-}
-.lg-v-glow {
-  position: absolute; left: 50%; top: 58%;
-  width: 96%; aspect-ratio: 1 / 0.44;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(closest-side, rgba(255, 152, 88, 0.26), rgba(244, 119, 53, 0.1) 42%, transparent 70%);
-  filter: blur(26px);
-  animation: lg-breathe 9s ease-in-out infinite;
-}
-.lg-v-beam {
-  position: absolute; left: 50%; top: 58%;
-  width: 1px; height: 34%;
-  transform-origin: 50% 0;
-  background: linear-gradient(180deg, rgba(244, 119, 53, 0.3), rgba(244, 119, 53, 0.06) 55%, transparent);
-  filter: blur(1.4px);
-  opacity: 0.55;
-}
-.lg-v-beam-a { transform: rotate(15deg) translateY(0); }
-.lg-v-beam-b { transform: rotate(-16deg) translateY(3%); opacity: 0.35; height: 26%; }
-.lg-v-vignette {
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(95% 75% at 50% 55%, transparent 42%, rgba(255, 255, 255, 0.92) 100%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), transparent 34%, rgba(255, 255, 255, 0.85));
-}
-.lg-v-mark {
-  position: absolute; left: 40px; bottom: 48px;
-  display: flex; align-items: center; gap: 10px;
+.bl-word {
+  display: flex;
+  align-items: baseline;
+  font-size: 26px;
+  letter-spacing: .16em;
+  font-weight: 600;
+  text-transform: uppercase;
   color: var(--mk-ink);
-  font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase;
+  margin-left: .16em; /* 抵消末字 letter-spacing，视觉上仍居中 */
 }
-
-@keyframes lg-drift {
-  0%, 100% { transform: perspective(420px) rotateX(70deg) translateY(0); }
-  50% { transform: perspective(420px) rotateX(70deg) translateY(-1.2%); }
+.bl-word span { display: inline-block; opacity: 0; transform: translateY(8px); }
+/* 逐字落位：每字错开 2%（≈140ms），落位后一路停到收尾 */
+.bl-l1 { animation: blL1 7s var(--mk-ease) infinite; }
+.bl-l2 { animation: blL2 7s var(--mk-ease) infinite; }
+.bl-l3 { animation: blL3 7s var(--mk-ease) infinite; }
+.bl-l4 { animation: blL4 7s var(--mk-ease) infinite; }
+.bl-l5 { animation: blL5 7s var(--mk-ease) infinite; color: var(--mk-brand); }
+.bl-l6 { animation: blL6 7s var(--mk-ease) infinite; color: var(--mk-brand); }
+.bl-l7 { animation: blL7 7s var(--mk-ease) infinite; color: var(--mk-brand); }
+/* 每个字只需要「自己的入场窗口 + 统一收尾窗口」，所以按键帧拆开写：
+   这是唯一能保证七个字母与图形严格同周期、不会各自跑偏的写法。 */
+@keyframes blL1 {
+  0%, 32%   { opacity: 0; transform: translateY(8px); }
+  36%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: translateY(-4px); }
 }
-@keyframes lg-breathe {
-  0%, 100% { opacity: 0.72; transform: translate(-50%, -50%) scale(1); }
-  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+@keyframes blL2 {
+  0%, 34%   { opacity: 0; transform: translateY(8px); }
+  38%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes blL3 {
+  0%, 36%   { opacity: 0; transform: translateY(8px); }
+  40%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes blL4 {
+  0%, 38%   { opacity: 0; transform: translateY(8px); }
+  42%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes blL5 {
+  0%, 40%   { opacity: 0; transform: translateY(8px); }
+  44%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes blL6 {
+  0%, 42%   { opacity: 0; transform: translateY(8px); }
+  46%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes blL7 {
+  0%, 44%   { opacity: 0; transform: translateY(8px); }
+  48%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+.bl-sub {
+  font-size: 10.5px;
+  letter-spacing: .34em;
+  text-transform: uppercase;
+  color: var(--mk-sub);
+  animation: blSub 7s var(--mk-ease) infinite;
+}
+@keyframes blSub {
+  0%, 54%   { opacity: 0; }
+  62%, 78%  { opacity: 1; }
+  86%, 100% { opacity: 0; }
 }
 
 /* ---------- 右侧表单 ---------- */
@@ -124,12 +194,9 @@
   display: inline-flex; align-items: center; gap: 9px;
   text-decoration: none; color: var(--mk-ink);
 }
-.lg-brand-dot {
-  width: 11px; height: 11px; border-radius: 50%;
-  background: var(--mk-brand);
-  box-shadow: 0 0 0 4px rgba(244, 119, 53, 0.14);
-}
-.lg-brand-name { font-size: 14.5px; font-weight: 600; letter-spacing: 0.02em; }
+/* 全站统一字标：Luna 黑 + Sol 橙，没有任何图形微标 */
+.lg-brand-name { font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
+.lg-brand-name i { font-style: normal; color: var(--mk-brand); }
 .lg-toggle {
   display: inline-flex; gap: 2px;
   padding: 3px;
@@ -193,34 +260,45 @@
 }
 .lg-code { letter-spacing: 0.32em; font-size: 17px; font-variant-numeric: tabular-nums; }
 
+/* 主按钮：黑色液态玻璃。禁用态必须是「看得见的浅灰胶囊」——
+   上一版给橙色按钮加 opacity .45，白底上直接糊成一片白，
+   用户根本找不到「验证并继续」在哪。 */
 .lg-primary {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   width: 100%; height: 50px; margin-top: 6px;
-  border: 0; border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, .34);
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 12px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, .34) 0%, rgba(255, 255, 255, .06) 46%, rgba(255, 255, 255, 0) 70%),
-    linear-gradient(180deg, #f8873f 0%, #ef6a27 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, .2) 0%, rgba(255, 255, 255, .02) 48%, rgba(255, 255, 255, 0) 72%),
+    linear-gradient(180deg, #2b2b2b 0%, #0f0f0f 100%);
   color: #fff;
   font: inherit; font-size: 15px; font-weight: 500; letter-spacing: 0.01em;
   cursor: pointer;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .5),
-    inset 0 -1px 0 rgba(150, 60, 10, .18),
-    0 14px 28px -16px rgba(244, 119, 53, 0.9);
-  transition: background 0.22s var(--mk-ease), transform 0.22s var(--mk-ease), box-shadow 0.22s var(--mk-ease);
+    inset 0 1px 0 rgba(255, 255, 255, .28),
+    inset 0 -1px 0 rgba(0, 0, 0, .5),
+    0 1px 2px rgba(16, 16, 16, .18),
+    0 14px 26px -18px rgba(16, 16, 16, .8);
+  transition: background 0.22s var(--mk-ease), transform 0.22s var(--mk-ease), box-shadow 0.22s var(--mk-ease), color 0.22s var(--mk-ease);
 }
 .lg-primary span { transition: transform 0.22s var(--mk-ease); }
 .lg-primary:hover:not(:disabled) {
-  filter: saturate(1.04) brightness(1.02);
+  filter: brightness(1.06);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .55),
-    inset 0 -1px 0 rgba(150, 60, 10, .18),
-    0 18px 32px -16px rgba(244, 119, 53, 0.95);
+    inset 0 1px 0 rgba(255, 255, 255, .34),
+    inset 0 -1px 0 rgba(0, 0, 0, .5),
+    0 2px 4px rgba(16, 16, 16, .16),
+    0 18px 30px -18px rgba(16, 16, 16, .9);
 }
 .lg-primary:hover:not(:disabled) span { transform: translateX(3px); }
 .lg-primary:active:not(:disabled) { transform: translateY(1px); }
-.lg-primary:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.lg-primary:disabled {
+  background: #ebe7e1;
+  border-color: #e2ddd6;
+  color: #a29c94;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 
 .lg-oauth {
   display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -284,22 +362,18 @@
 }
 .lg-foot-help a { color: #7c7770; text-decoration: none; border-bottom: 1px solid #ddd8d0; }
 .lg-foot-help a:hover { color: var(--mk-ink); }
+.lg-foot-word { font-weight: 600; color: var(--mk-ink); letter-spacing: -.01em; }
+.lg-foot-word i { font-style: normal; color: var(--mk-brand); }
 
 @keyframes lg-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes lg-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-/* ---------- 移动端：单栏，深色视觉压成顶部横幅 ---------- */
+/* ---------- 移动端：单栏，品牌动画压成顶部横幅 ---------- */
 @media (max-width: 900px) {
   .lg { grid-template-columns: 1fr; }
-  /* 横幅：包装按比例缩到 0.5 并贴着地平线，否则原尺寸会从顶部被切掉 */
-  .lg-visual { min-height: 210px; }
-  /* 地平线下移到 68%，包装按 0.5 缩放后正好站在线上且不顶出横幅 */
-  .lg-v-horizon { top: 68%; }
-  .lg-v-glow { top: 68%; }
-  .lg-v-beam { display: none; }
-  .lg-v-packs { transform: translateX(-50%) scale(.5); transform-origin: center bottom; bottom: 32%; }
-  /* 页头已经有字标，横幅里再放一个会撞在一起 */
-  .lg-v-mark { display: none; }
+  /* 横幅：整组动画按 0.58 缩放，否则 92px 的方形会顶出横幅 */
+  .lg-visual { min-height: 216px; }
+  .lg-v-loop { transform: scale(.46); }
   .lg-panel { padding: 20px 22px 18px; }
   .lg-form { padding: 34px 0 26px; justify-content: flex-start; }
   .lg-h1 { margin-bottom: 26px; font-size: 28px; }
@@ -307,12 +381,17 @@
 }
 @media (max-width: 420px) {
   .lg-toggle button { padding: 0 12px; font-size: 12.5px; }
-  /* 字标留着：之前隐藏后会剩一个孤零零的橙点 */
-  .lg-brand-name { font-size: 13.5px; }
+  .lg-brand-name { font-size: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lg-v-glow { animation: none; }
   .lg-top, .lg-form, .lg-foot { animation: none; }
   .lg-primary, .lg-primary span, .lg-input { transition: none; }
+  /* 动画停住就停在「组装完成」的一帧：字标与图形都在，不留一块空画布 */
+  .bl-sq, .bl-sun, .bl-moon, .bl-word span, .bl-sub { animation: none; }
+  .bl-sq { stroke-dashoffset: 0; }
+  .bl-sun { opacity: 1; transform: none; }
+  .bl-moon { opacity: 1; transform: none; }
+  .bl-word span { opacity: 1; transform: none; }
+  .bl-sub { opacity: 1; }
 }

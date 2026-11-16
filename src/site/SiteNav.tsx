@@ -1,13 +1,13 @@
 /* ============================================================
-   公开站点的顶部导航
+   全站唯一的顶部导航
    ------------------------------------------------------------
-   左：字标。中：首页 / 产品 / 关于（真居中，不用 flex 挤）。
-   右：未登录是「登录」，已登录是「头像 + 积分 + 账户菜单」。
-   「产品」是一个下拉菜单而不是直达链接——2.0 的产品线只有一条，
-   菜单里只放「包装设计」，以后新增能力往同一个菜单里加即可。
-   不使用旧站 Nav 的原因：旧 Nav 顶部挂着「Luna Ai / 包装设计 / 复刻设计」
-   四个产品入口，那是旧信息架构，2.0 的公开站点只讲三件事。
-   账户菜单只做「余额 / 账户 / 帮助 / 退出」——不把用户送回旧版工作台。
+   版式参考 B.AI：字标贴最左，导航项紧跟字标右侧（左对齐，不再居中），
+   右侧只放账户动作。这样宽屏上眼睛从左往右读，不会被中间一块空白劈开。
+   顺序：首页 / 产品⌄ / Luna AI / 关于。
+   「产品」是下拉：包装设计（介绍页）、复刻设计（按参考图出稿）。
+   左边栏（开始 / Luna AI / 包装设计 / 复刻设计）已经整块撤掉，
+   入口全部收到这条导航与账户菜单里，所以这里必须能到达每个真实页面。
+   账户菜单只做「余额 / 账户 / 帮助 / 退出」。
    ============================================================ */
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../cloud/auth';
@@ -16,10 +16,11 @@ import { useProfile } from '../cloud/profile';
 import { go, useHash } from '../ui';
 import { useLang } from '../i18n';
 
-/** 产品下拉里的条目：目前只有包装设计。
- *  用数组而不是写死一行，是为了以后加「复刻设计」「结构库」时不用改结构。 */
+/** 产品下拉里的条目。
+ *  复刻设计原来只挂在左侧栏，侧栏撤掉之后必须在这里给一个真实入口。 */
 const PRODUCT_MENU = [
   { zh: '包装设计', en: 'Packaging design', desc: '从想法到可印刷的刀版', descEn: 'From idea to a print-ready dieline', path: '/product' },
+  { zh: '复刻设计', en: 'Replicate', desc: '按参考图一比一出稿', descEn: 'Reproduce a reference pack exactly', path: '/replicate' },
 ];
 
 /** 字标：导航里只留 LunaSol（顶部 72px 内加一行 9px 副标会变成噪点），
@@ -141,6 +142,12 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
           </div>
 
           <button
+            className={`site-link ${path.startsWith('/luna') ? 'is-on' : ''}`}
+            onClick={() => go('/luna')}
+            aria-current={path.startsWith('/luna') ? 'page' : undefined}
+          >Luna AI</button>
+
+          <button
             className={`site-link ${path === '/about' ? 'is-on' : ''}`}
             onClick={() => go('/about')}
             aria-current={path === '/about' ? 'page' : undefined}
@@ -220,6 +227,12 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
       </button>
       <button className="site-sheet-link is-sub" onClick={() => go('/product')}>
         {t('包装设计', 'Packaging design')}<span>→</span>
+      </button>
+      <button className="site-sheet-link is-sub" onClick={() => go('/replicate')}>
+        {t('复刻设计', 'Replicate')}<span>→</span>
+      </button>
+      <button className="site-sheet-link" onClick={() => go('/luna')}>
+        Luna AI<span>→</span>
       </button>
       <button className="site-sheet-link" onClick={() => go('/about')}>
         {t('关于', 'About')}<span>→</span>

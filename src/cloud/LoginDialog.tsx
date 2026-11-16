@@ -125,9 +125,9 @@ export function LoginDialog({ open, onClose, onDone }: {
 
   return <Modal open={open} title={a.user ? t('账号', 'Account') : t('登录', 'Sign in')} onClose={onClose}>
     {!a.user && <div className="login-brand">
-      <img src={brand.logo} alt="" />
       <div>
-        <div className="login-brand-name">{brand.name}</div>
+        {/* 2.0 起不再有图形微标：品牌一律是 Luna 黑 + Sol 橙的文字标 */}
+        <div className="login-brand-name">Luna<i>Sol</i></div>
         <span className="login-brand-tag">{t(brand.tagline, 'AI Packaging Design Studio')}</span>
       </div>
     </div>}

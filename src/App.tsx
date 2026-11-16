@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, toastTone } from './store';
-import { Button, Nav, Notice, PageHead, go, useHash } from './ui';
+import { Button, go, useHash } from './ui';
 import { useAuth } from './cloud/auth';
 import { SubscriptionProvider } from './cloud/subscription';
 import { ProfileProvider } from './cloud/profile';
@@ -11,7 +11,6 @@ import { LunaLoader } from './components/LunaLoader';
 import SiteNav from './site/SiteNav';
 import SiteFooter from './site/SiteFooter';
 import SiteIntro from './site/SiteIntro';
-import SideNav from './components/SideNav';
 import { useLang } from './i18n';
 
 // 路由级代码分割：除首页外壳外，所有页面按需加载。
@@ -180,9 +179,13 @@ export default function App() {
   const OLD_FLOW_ROUTES = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
   const isOldFlow = OLD_FLOW_ROUTES.some((p) => path.startsWith(p));
 
-  /* 2.0 公开站点：独立壳（顶部导航 + 页脚），不套旧应用的侧栏，
-     也不加载侧栏依赖的 store 逻辑。 */
+  /* 2.0 公开站点：首页 / 产品 / 关于 / Studio 空壳。 */
   const isPublic = path === '/' || path === '/product' || path === '/about' || path === '/studio';
+  /* 账户类页面（积分 / 账户 / 帮助）现在是独立页：套同一条顶部导航，
+     不再有左侧栏。它们也吃页脚，读到底有个收尾。 */
+  const isDoc = path === '/credits' || path === '/subscribe' || path === '/account'
+    || path === '/security' || path === '/help';
+  const showFooter = (isPublic && path !== '/studio') || isDoc;
 
   // 工作台与 AI 新建设计流程需要登录（/studio 现在只是空壳，不再拦登录）
   const needLogin = (isOldFlow || path === '/new') && auth.ready && !auth.user;
@@ -235,43 +238,33 @@ export default function App() {
     <CloudSyncProvider>
       <ProfileProvider>
         <ChatStoreProvider>
-          {/* 两套壳，互不嵌套：
-              · .site-root = 2.0 公开站点（顶部导航 + 页脚，没有侧栏）
-              · .app      = 旧应用（左栏 + 正文卡），工作台 / 账户 / 积分仍在用
-              登录页虽然走 .app，但它是整屏版式，所以挂 no-side + is-auth。 */}
-          <div className={isPublic
-            ? 'site-root'
-            : `app ${isAuthPage ? 'no-side is-auth' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''}`}>
+          {/* 2.0 只有一个壳：顶部导航 + 正文 +（公开页）页脚。
+              左侧栏整体撤掉——开始 / Luna AI / 包装设计 / 复刻设计
+              全部收进顶部导航与账户菜单，页面自己负责居中。
+              登录页例外：它是整屏左右分栏，自带顶栏，不套导航。 */}
+          <div className={isAuthPage
+            ? 'app no-side is-auth'
+            : `site-root app is-site ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''}`}>
             <RouteBar active={navigating} />
 
-            {isPublic ? <>
-              <SiteNav onLogin={requestLogin} />
-              {/* 公开页的 chunk 都是几十 KB，但首屏遇到发版瞬间仍可能等一两秒。
-                  这里不给「空白 + 页脚顶上来」的画面，先占住一屏高度。 */}
-              <Suspense fallback={<div className="site-page" style={{ minHeight: '72vh' }} />}>
+            {isAuthPage ? <>
+              <Suspense fallback={<PageFallback />}>
                 {page}
                 <RouteReady key={`ready:${hash}`} onReady={markShown} />
               </Suspense>
-              <SiteFooter />
-              {/* 品牌开场：只在首页、且同一会话没播过时出现 */}
-              <SiteIntro enabled={path === '/'} />
             </> : <>
-              <Nav onLogin={requestLogin} />
-              {/* 桌面端左栏 */}
-              <SideNav onLogin={requestLogin} />
+              <SiteNav onLogin={requestLogin} />
               <main className="main" ref={mainRef}>
-                {/* 全局返回：非首页且非 Luna 对话页显示 */}
-                {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
-                  if (window.history.length > 1) window.history.back(); else go('/');
-                }} aria-label={t('返回', 'Back')}>← {t('返回', 'Back')}</button>}
-                <Suspense fallback={<PageFallback />}>
+                {/* 公开页的 chunk 都是几十 KB，但首屏遇到发版瞬间仍可能等一两秒。
+                    这里不给「空白 + 页脚顶上来」的画面，先占住一屏高度。 */}
+                <Suspense fallback={<div className="site-page" style={{ minHeight: '72vh' }} />}>
                   {page}
                   <RouteReady key={`ready:${hash}`} onReady={markShown} />
                 </Suspense>
-                {/* 页脚不在这里：正文卡是固定高度、卡内滚动的，
-                    滚到底多出一条页脚只会让每一页多出一段「滑下来才看到」的白条。
-                    站内导航、法务链接与版权统一收在帮助与反馈页的最后一屏。 */}
               </main>
+              {showFooter && <SiteFooter />}
+              {/* 品牌开场：只在首页、且同一会话没播过时出现 */}
+              <SiteIntro enabled={path === '/'} />
             </>}
 
             {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}

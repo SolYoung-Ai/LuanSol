@@ -184,7 +184,7 @@ function Bubble({ m, onMedia }: { m: LunaMessage; onMedia?: () => void }) {
   const isUser = m.role === 'user';
   return (
     <div className={`lc-msg ${isUser ? 'user' : 'assistant'}`}>
-      <div className="lc-msg-avatar">{isUser ? t('我', 'Me') : <img src="./logo.png" alt="Luna" />}</div>
+      <div className="lc-msg-avatar">{isUser ? t('我', 'Me') : 'L'}</div>
       <div className="lc-msg-body">
         {m.reasoning && <ReasoningBlock reasoning={m.reasoning} />}
         {m.content && m.content !== '（参考图）' && (
@@ -468,7 +468,7 @@ export default function Luna() {
               {/* 预备期：这 3 秒里请求还没发出去，取消是真的不花钱 */}
               {chat.preflight > 0 && (
                 <div className="lc-msg assistant">
-                  <div className="lc-msg-avatar"><img src="./logo.png" alt="Luna" /></div>
+                  <div className="lc-msg-avatar">L</div>
                   <div className="lc-preflight">
                     <span className="lc-preflight-count">{chat.preflight}</span>
                     <span className="lc-preflight-text">
@@ -481,7 +481,7 @@ export default function Luna() {
               {/* 已经开跑：这里不再给取消——请求已经发出去了，取消也拦不住计费 */}
               {chat.busy && chat.preflight === 0 && (
                 <div className="lc-msg assistant">
-                  <div className="lc-msg-avatar"><img src="./logo.png" alt="Luna" /></div>
+                  <div className="lc-msg-avatar">L</div>
                   <div className="lc-busy">
                     <span className="lc-dot" />
                     <span className="lc-dot" />
