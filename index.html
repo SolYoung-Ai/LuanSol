@@ -29,6 +29,9 @@
         -webkit-font-smoothing: antialiased;
       }
       #boot img { width: 44px; height: 44px; border-radius: 12px; }
+      /* 启动层与全站统一：只有 LunaSol 字标（Luna 黑 + Sol 橙），不放图形微标 */
+      .boot-word { font-size: 19px; font-weight: 600; letter-spacing: -.03em; color: #171717; }
+      .boot-word b { font-weight: 600; color: #f47735; }
       #boot span { font-size: 11px; color: #a0a09a; letter-spacing: .22em; }
       #boot .bar { width: 96px; height: 2px; border-radius: 2px; background: #eee; overflow: hidden; }
       #boot .bar i { display: block; width: 40%; height: 100%; background: #171717; border-radius: 2px; animation: bootSlide 1.1s cubic-bezier(.32,.72,0,1) infinite; }
@@ -41,6 +44,7 @@
         box-shadow: inset 0 1px 0 rgba(255,255,255,.82), 0 26px 60px -34px rgba(16,18,22,.34);
       }
       #boot-fail img { width: 40px; height: 40px; border-radius: 11px; margin-bottom: 14px; }
+      #boot-fail .boot-word { margin-bottom: 12px; }
       #boot-fail h1 { font-size: 17px; font-weight: 600; margin: 0 0 8px; letter-spacing: -.01em; }
       #boot-fail p { font-size: 13px; color: #737373; margin: 0 0 6px; line-height: 1.7; }
       #boot-fail small { display: block; font-size: 11.5px; color: #a0a09a; margin-top: 10px; word-break: break-all; }
@@ -53,26 +57,27 @@
         #boot, #boot-fail { background: #0d0d0f; color: #f4f4f5; }
         #boot .bar { background: #26262a; }
         #boot .bar i { background: #f4f4f5; }
+        #boot .boot-word, #boot-fail .boot-word { color: #f4f4f5; }
         #boot-fail .box { background: rgba(28,28,32,.9); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 26px 60px -34px rgba(0,0,0,.7); }
         #boot-fail p { color: #a1a1aa; }
         #boot-fail button { background: #f4f4f5; color: #171717; }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-CVF2xGo9.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DS3Omz3L.css">
+    <script type="module" crossorigin src="./assets/index-nabIWxVu.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DLGhsnhV.css">
   </head>
   <body>
     <div id="root"></div>
 
     <div id="boot">
-      <img src="./logo.png" alt="" />
+      <div class="boot-word">Luna<b>Sol</b></div>
       <div class="bar"><i></i></div>
-      <span>LUNA SOL</span>
+      <span>AI PACKAGING STUDIO</span>
     </div>
 
     <div id="boot-fail">
       <div class="box">
-        <img src="./logo.png" alt="" />
+        <div class="boot-word">Luna<b>Sol</b></div>
         <h1 data-zh="页面没能加载出来" data-en="This page failed to load">页面没能加载出来</h1>
         <p data-zh="通常是浏览器缓存了旧版本，而旧版本的脚本已经被新版本替换掉了。" data-en="Usually the browser cached an older version while its scripts have already been replaced.">通常是浏览器缓存了旧版本，而旧版本的脚本已经被新版本替换掉了。</p>
         <p data-zh="点下面按钮重新加载即可，你的草稿和登录状态不会丢。" data-en="Hit the button below to reload — your drafts and sign-in state are safe.">点下面按钮重新加载即可，你的草稿和登录状态不会丢。</p>
