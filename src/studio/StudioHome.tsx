@@ -19,6 +19,9 @@ import { createStudioProject, isBlankStudio, type StudioProject } from './types'
 import { CategoryArt } from './art';
 
 const LAUNCH_KEY = 'lunasol.studio.launch.v1';
+/* 未登录点「开始一个新设计」→ 去登录 → 回来继续建项目。
+   不记这一笔的话，登录回来会停在一屏欢迎界面，要再点一次。 */
+const INTENT_KEY = 'lunasol.studio.intent.v1';
 const TOTAL_STEPS = 9;
 
 interface Row {
@@ -110,10 +113,21 @@ export default function StudioHome() {
   const visible = useMemo(() => rows.filter((r) => !r.blank), [rows]);
   const last = visible[0] || null;
 
-  const openProject = (id: string) => go(`/studio?id=${encodeURIComponent(id)}`);
+  const toLogin = () => go(`/login?next=${encodeURIComponent('/studio')}`);
+
+  const openProject = (id: string) => {
+    if (!uid) { toLogin(); return; }
+    go(`/studio?id=${encodeURIComponent(id)}`);
+  };
 
   const startNew = async () => {
-    if (!uid || busy) return;
+    // 未登录先用欢迎界面把人留住，点到「开始设计」才去登录
+    if (!uid) {
+      try { sessionStorage.setItem(INTENT_KEY, JSON.stringify({ kind: 'new', at: Date.now() })); } catch { /* ignore */ }
+      toLogin();
+      return;
+    }
+    if (busy) return;
     setBusy(true);
     const p = createStudioProject(uid);
     cacheOne(p);
@@ -121,6 +135,22 @@ export default function StudioHome() {
     void pushStudio(uid, p);
     openProject(p.id);
   };
+
+  /* 登录回来接着建项目（只认一次，消费后立刻清掉） */
+  const startRef = useRef(startNew);
+  startRef.current = startNew;
+  useEffect(() => {
+    if (!uid) return;
+    let raw = '';
+    try { raw = sessionStorage.getItem(INTENT_KEY) || ''; } catch { raw = ''; }
+    if (!raw) return;
+    try { sessionStorage.removeItem(INTENT_KEY); } catch { /* ignore */ }
+    let intent: { kind?: string; at?: number } = {};
+    try { intent = JSON.parse(raw) as { kind?: string; at?: number }; } catch { return; }
+    // 十分钟内才算「刚点过开始」，避免很久以后登录回来凭空冒出项目
+    if (intent.kind !== 'new' || Date.now() - Number(intent.at || 0) > 10 * 60 * 1000) return;
+    void startRef.current();
+  }, [uid]);
 
   const removeOne = async (id: string) => {
     if (!uid) return;
@@ -160,6 +190,10 @@ export default function StudioHome() {
             {t('继续上次设计', 'Continue last design')}
           </button>}
         </div>
+        {!uid && <p className="st-lede st-lede-mini">
+          {t('开始设计需要登录：你的需求会按账号保存，换设备也能继续。',
+            'Sign in to start — briefs are saved to your account and follow you across devices.')}
+        </p>}
       </div>
       <div className="st-hero-art" aria-hidden>
         <CategoryArt id="gift" />
@@ -188,21 +222,27 @@ export default function StudioHome() {
         <span className="st-count">{visible.length ? t(`${visible.length} 个项目`, `${visible.length} projects`) : ''}</span>
       </header>
 
-      {cloudErr && <div className="st-note warn">
+      {!uid && <div className="st-empty">
+        <p>{t('登录后可以保存设计、跨设备继续，也能在「我的设计」里回看每一份需求。',
+          'Sign in to save designs, continue on another device, and find every brief under “My designs”.')}</p>
+        <button className="st-btn st-btn-dark" onClick={toLogin}>{t('登录 / 注册', 'Sign in')}</button>
+      </div>}
+
+      {uid && cloudErr && <div className="st-note warn">
         {t(`云端列表暂时没读出来：${cloudErr}`, `Could not load the cloud list: ${cloudErr}`)}
         <button onClick={() => void loadCloud()}>{t('重试', 'Retry')}</button>
       </div>}
 
-      {loading && !visible.length && <div className="st-grid">
+      {uid && loading && !visible.length && <div className="st-grid">
         {[0, 1, 2].map((i) => <div className="st-skel" key={i} />)}
       </div>}
 
-      {!loading && !visible.length && <div className="st-empty">
+      {uid && !loading && !visible.length && <div className="st-empty">
         <p>{t('还没有设计项目。第一个项目会出现在这里。', 'No designs yet — your first one will show up here.')}</p>
         <button className="st-btn st-btn-ghost" onClick={startNew} disabled={busy}>{t('开始一个新设计', 'Start a new design')}</button>
       </div>}
 
-      {!!visible.length && <div className="st-grid">
+      {uid && !!visible.length && <div className="st-grid">
         {visible.map((r) => <article className="st-card" key={r.id}>
           <button className="st-card-open" onClick={() => openProject(r.id)}>
             <span className={`st-card-badge ${r.status === 'confirmed' ? 'ok' : ''}`}>
@@ -257,13 +297,15 @@ export default function StudioHome() {
             <span className="st-launch-go" aria-hidden>→</span>
           </button>
 
-          <button className="st-launch-item" onClick={goList} disabled={!visible.length}>
+          <button className="st-launch-item" onClick={uid ? goList : toLogin} disabled={!!uid && !visible.length}>
             <span className="st-launch-ico" aria-hidden>▤</span>
             <span className="st-launch-txt">
               <b>{t('我的设计', 'My designs')}</b>
-              <em>{visible.length
-                ? t(`${visible.length} 个项目`, `${visible.length} projects`)
-                : t('还没有项目', 'No projects yet')}</em>
+              <em>{!uid
+                ? t('登录后查看', 'Sign in to view')
+                : visible.length
+                  ? t(`${visible.length} 个项目`, `${visible.length} projects`)
+                  : t('还没有项目', 'No projects yet')}</em>
             </span>
             <span className="st-launch-go" aria-hidden>→</span>
           </button>

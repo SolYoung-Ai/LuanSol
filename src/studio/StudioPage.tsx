@@ -1,7 +1,7 @@
 /* ============================================================
    Studio 2.0 — /studio 路由入口
    ------------------------------------------------------------
-   · 未登录：直接交给登录页（App 层已经重定向），这里只兜底不留白屏
+   · 未登录也能进：先看到启动弹窗与欢迎界面，点「开始设计」时才去登录
    · /studio            → 欢迎界面（带启动弹窗）
    · /studio?id=st_xxx  → 这个项目的九步向导
    需求项目一人一份：数据存在 lunasol_projects，RLS 按 owner_id 隔离，
@@ -27,7 +27,6 @@ export default function StudioPage() {
   const id = new URLSearchParams(query).get('id') || '';
 
   if (!auth.ready) return <Bare><span className="st-spin" aria-hidden />{t('正在确认登录状态…', 'Checking your session…')}</Bare>;
-  if (!auth.user) return <Bare>{t('正在前往登录…', 'Taking you to sign in…')}</Bare>;
 
   return <Suspense fallback={<Bare><span className="st-spin" aria-hidden />{t('正在打开工作室…', 'Opening the studio…')}</Bare>}>
     {id ? <StudioWizard id={id} key={id} /> : <StudioHome />}

@@ -189,8 +189,9 @@ export default function App() {
     || path === '/security' || path === '/help';
   const showFooter = (isPublic && path !== '/studio') || isDoc;
 
-  // 工作室与旧工作台都需要登录：项目按账号存档，未登录没有可读写的项目
-  const needLogin = (isOldFlow || path === '/new' || path === '/studio') && auth.ready && !auth.user;
+  // 旧工作台需要登录；/studio 不强拦：未登录也能看到启动弹窗与欢迎界面，
+  // 真正点「开始一个新设计」时才去登录（项目按账号存档，数据必须归属到人）
+  const needLogin = (isOldFlow || path === '/new') && auth.ready && !auth.user;
   if (needLogin) {
     /* 不再半路拦一个「请登录」空页：直接进登录页，成功后自动回到这里 */
     page = <OldRouteRedirect to={`/login?next=${encodeURIComponent(path)}`} />;
