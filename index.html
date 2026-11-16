@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#ffffff" />
-    <meta name="description" content="LunaSol AI Packaging Studio — 不需要设计经验，告诉 AI 你想做什么，从创意到印刷文件一站完成。" />
+    <meta name="description" content="LunaSol — AI Packaging Design Studio。无需设计经验，从一个想法到一份完整的包装设计：AI 生成方向、拆解结构、编辑并导出可印刷的刀版。" />
     <!-- 图标：全部由 public/logo.png（高分辨率透明底）生成，见 scripts/icons.py。
          多文件名而非同一路径加版本号，是为了绕开浏览器对 favicon 的强缓存。 -->
     <link rel="icon" href="./favicon.ico" sizes="any" />
@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16.png" />
     <link rel="icon" type="image/png" sizes="256x256" href="./favicon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
-    <title>LunaSol — 人人都能成为设计师</title>
+    <title>LunaSol — AI 包装设计工作室</title>
     <!--
       启动兜底层（必须内联，不能是外部文件）
       原因：每次发版都会换 JS 哈希并删除旧文件。若浏览器仍持着缓存里的旧 index.html，
@@ -58,8 +58,8 @@
         #boot-fail button { background: #f4f4f5; color: #171717; }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-u5IV516Q.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-fb_HBYgR.css">
+    <script type="module" crossorigin src="./assets/index-mO10mswR.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BBnRSNQQ.css">
   </head>
   <body>
     <div id="root"></div>
@@ -90,7 +90,7 @@
         function isEn() { try { return localStorage.getItem(LANG_KEY) === 'en'; } catch (e) { return false; } }
         function applyBootLang() {
           var en = isEn();
-          if (en) document.title = 'LunaSol — Everyone can be a designer';
+          if (en) document.title = 'LunaSol — AI Packaging Design Studio';
           var els = document.querySelectorAll('#boot-fail [data-zh]');
           for (var i = 0; i < els.length; i++) {
             els[i].textContent = en ? els[i].getAttribute('data-en') : els[i].getAttribute('data-zh');
