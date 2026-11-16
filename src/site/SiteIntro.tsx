@@ -1,0 +1,75 @@
+/* ============================================================
+   品牌开场动画
+   ------------------------------------------------------------
+   构成：方形（纸盒边界）描边生长 → 橙色圆（太阳）弹出 →
+   一枚纸色圆偏移压上去，切出月牙（Luna）→ 字标逐字落位 →
+   副标出现 → 整层淡出。
+   约束：纯 SVG + CSS 动画（不加载视频、不拉字体、不用位图）；
+   2.4 秒结束，右下角随时可跳过；同一会话只播一次（sessionStorage）；
+   系统开了「减少动态效果」时直接跳过。
+   ============================================================ */
+import React, { useEffect, useRef, useState } from 'react';
+import { useLang } from '../i18n';
+
+const KEY = 'lunasol.intro.seen.v2';
+const LETTERS = ['L', 'u', 'n', 'a', 'S', 'o', 'l'];
+
+export default function SiteIntro({ enabled }: { enabled: boolean }) {
+  const { t } = useLang();
+  const [show, setShow] = useState(false);
+  const [out, setOut] = useState(false);
+  const timers = useRef<number[]>([]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let seen = true;
+    try { seen = sessionStorage.getItem(KEY) === '1'; } catch { seen = false; }
+    if (seen) return;
+
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // 让首页先画出来，再盖开场层：首屏永远不会被动画挡住渲染
+    const raf = window.requestAnimationFrame(() => {
+      setShow(true);
+      try { sessionStorage.setItem(KEY, '1'); } catch { /* 隐私模式：本次仍可播放 */ }
+      const life = reduce ? 600 : 2500;
+      timers.current.push(window.setTimeout(() => finish(false), life));
+    });
+    return () => {
+      window.cancelAnimationFrame(raf);
+      timers.current.forEach((id) => window.clearTimeout(id));
+      timers.current = [];
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
+
+  // 播完必须把滚动锁解开：开场层盖着时滚动被禁，不还原会「整页不能滚」
+  useEffect(() => {
+    if (!show) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [show]);
+
+  function finish(byUser: boolean) {
+    if (out) return;
+    setOut(true);
+    timers.current.push(window.setTimeout(() => setShow(false), byUser ? 220 : 440));
+  }
+
+  if (!show) return null;
+
+  return <div className={`site-intro ${out ? 'is-out' : ''}`} role="presentation">
+    <div className="site-intro-in">
+      <svg className="site-intro-mark" viewBox="0 0 92 92" aria-hidden>
+        <rect className="si-sq" x="14" y="14" width="64" height="64" rx="7" />
+        <circle className="si-circle" cx="46" cy="46" r="17" />
+        <circle className="si-moon" cx="40" cy="41" r="17" />
+      </svg>
+      <div className="site-intro-word" aria-label="LunaSol">
+        {LETTERS.map((ch, i) => <span key={i}>{ch}</span>)}
+      </div>
+      <div className="site-intro-sub">{t('AI 包装设计工作室', 'AI Packaging Design Studio')}</div>
+    </div>
+    <button className="site-intro-skip" onClick={() => finish(true)}>{t('跳过', 'Skip')}</button>
+  </div>;
+}

@@ -9,8 +9,10 @@ import { applyTheme, readTheme } from './theme';
 import './styles.css';
 import './v3.css';
 import './v4.css';
-import './brand.css';
+// 独立登录页的样式（保留 V5 那版）
 import './login.css';
+// 2.0 品牌站点的视觉层：所有规则都限定在 .site-root 下，不影响旧应用
+import './site.css';
 
 declare global {
   interface Window {

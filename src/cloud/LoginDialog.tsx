@@ -128,7 +128,7 @@ export function LoginDialog({ open, onClose, onDone }: {
       <img src={brand.logo} alt="" />
       <div>
         <div className="login-brand-name">{brand.name}</div>
-        <span className="login-brand-tag">{t(brand.tagline, 'Everyone can be a designer')}</span>
+        <span className="login-brand-tag">{t(brand.tagline, 'AI Packaging Design Studio')}</span>
       </div>
     </div>}
 

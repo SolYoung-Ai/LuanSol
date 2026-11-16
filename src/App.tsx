@@ -1,10 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, toastTone } from './store';
 import { Button, Nav, Notice, PageHead, go, useHash } from './ui';
-import Home from './pages/home';
-import Product from './pages/product';
-import About from './pages/about';
-import BrandSplash from './components/BrandSplash';
 import { useAuth } from './cloud/auth';
 import { SubscriptionProvider } from './cloud/subscription';
 import { ProfileProvider } from './cloud/profile';
@@ -12,6 +8,9 @@ import { ChatStoreProvider } from './cloud/useChatStore';
 import { CloudSyncProvider } from './cloud/useCloudSync';
 import { cloudConfigured } from './cloud/config';
 import { LunaLoader } from './components/LunaLoader';
+import SiteNav from './site/SiteNav';
+import SiteFooter from './site/SiteFooter';
+import SiteIntro from './site/SiteIntro';
 import SideNav from './components/SideNav';
 import { useLang } from './i18n';
 
@@ -19,6 +18,12 @@ import { useLang } from './i18n';
 // 这样首屏不会拉起 three.js（3D 预览）、jsPDF / JSZip（导出）等重库，
 // 它们只在访问对应页面时才下载。manualChunks 已把重库拆成独立 vendor chunk，
 // 配合这里的动态 import，浏览器只需在真正用到时才请求对应 chunk。
+// 2.0 公开站点（首页 / Product / About / Studio 空壳）与旧应用分开打包：
+// 公开页不该为工作台的依赖付首屏成本。
+const SiteHome = lazy(() => import('./site/HomePage'));
+const SiteProduct = lazy(() => import('./site/ProductPage'));
+const SiteAbout = lazy(() => import('./site/AboutPage'));
+const StudioShell = lazy(() => import('./site/StudioShell'));
 const Account = lazy(() => import('./pages/account'));
 const Structures = lazy(() => import('./pages/library').then((m) => ({ default: m.Structures })));
 const ProjectDetail = lazy(() => import('./pages/library').then((m) => ({ default: m.ProjectDetail })));
@@ -29,7 +34,9 @@ const Subscribe = lazy(() => import('./pages/subscribe'));
 const Help = lazy(() => import('./pages/help'));
 const Luna = lazy(() => import('./pages/luna'));
 const Start = lazy(() => import('./pages/start'));
-const Studio = lazy(() => import('./pages/studio'));
+/* 旧版整屏编辑器（pages/studio）在 2.0 阶段 1 不再挂到 /studio：
+   该路径已经交给新的 Studio 空壳。文件先留着，等阶段 2 的新流程
+   接好之后再决定复用还是删除，不在本阶段做破坏性改动。 */
 const NewDesign = lazy(() => import('./pages/new'));
 const Admin = lazy(() => import('./pages/admin'));
 const Replicate = lazy(() => import('./pages/replicate'));
@@ -111,8 +118,6 @@ export default function App() {
   const isFullBleed = path.startsWith('/luna') || path.startsWith('/studio') || path === '/login';
   /* 登录页是独立整屏版式：自带顶栏，隐藏全站导航与侧栏 */
   const isAuthPage = path === '/login';
-  /* 营销页（首页 / 产品 / 关于）：全宽、暖白、无左栏，导航仍是全站同一条。 */
-  const isMarketing = path === '/' || path === '/product' || path === '/about';
 
   /* 预取主入口页面的 chunk。懒加载 fallback 是一整屏高的字标，
      首次点进 Luna 时「loader → 真实页面」的高度变化也会被看成整页跳一下。
@@ -173,19 +178,24 @@ export default function App() {
   const OLD_FLOW_ROUTES = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
   const isOldFlow = OLD_FLOW_ROUTES.some((p) => path.startsWith(p));
 
-  // 工作台与 AI 新建设计流程需要登录
-  const needLogin = (isOldFlow || path === '/studio' || path === '/new') && auth.ready && !auth.user;
+  /* 2.0 公开站点：独立壳（顶部导航 + 页脚），不套旧应用的侧栏，
+     也不加载侧栏依赖的 store 逻辑。 */
+  const isPublic = path === '/' || path === '/product' || path === '/about' || path === '/studio';
+
+  // 工作台与 AI 新建设计流程需要登录（/studio 现在只是空壳，不再拦登录）
+  const needLogin = (isOldFlow || path === '/new') && auth.ready && !auth.user;
   if (needLogin) {
     /* 不再半路拦一个「请登录」空页：直接进登录页，成功后自动回到这里 */
     page = <OldRouteRedirect to={`/login?next=${encodeURIComponent(path)}`} />;
   } else if (isOldFlow) {
-    // 旧路由直接重定向到新工作台
+    // 旧路由直接重定向到新的 Studio
     page = <OldRouteRedirect />;
-  } else if (path === '/') page = <Home onLogin={() => requestLogin('/studio')} />;
-  else if (path === '/product') page = <Product />;
-  else if (path === '/about') page = <About />;
+  } else if (path === '/') page = <SiteHome />;
+  else if (path === '/product') page = <SiteProduct />;
+  else if (path === '/about') page = <SiteAbout />;
+  /* 独立登录页（V5 那版做的，保留）：整屏左右分栏，登录后回 ?next= */
   else if (isAuthPage) page = <Login />;
-  else if (path === '/studio') page = <Studio />;
+  else if (path === '/studio') page = <StudioShell />;
   else if (path === '/new') page = <NewDesign />;
   else if (path === '/structures') page = <Structures />;
   /* 包装设计：/workspace 与历史路径 /projects 指向同一个页面，旧链接不 404 */
@@ -213,7 +223,6 @@ export default function App() {
   else if (path === '/help') page = <Help />;
   else if (path === '/start' || path === '/home') page = <Start />;
   else if (path === '/luna') page = <Luna />;
-  else if (path === '/studio') page = <Studio />;
   else if (path === '/admin') page = <Admin />;
   else page = <div className="page page-narrow">
     <h1>{t('页面不存在', 'Page not found')}</h1>
@@ -224,28 +233,43 @@ export default function App() {
     <CloudSyncProvider>
       <ProfileProvider>
         <ChatStoreProvider>
-          {/* Luna 现在也用全站左栏（会话区挂在左栏分界线下方），所以只有编辑器是 no-side。
-              这样从工作台 / 开始页切到 Luna 时左栏原地不动，只换中间内容，不再闪一下。 */}
-          <div className={`app ${path.startsWith('/studio') || isMarketing || isAuthPage ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''} ${isMarketing ? 'is-marketing' : ''} ${isAuthPage ? 'is-auth' : ''}`}>
-            <BrandSplash />
+          {/* 两套壳，互不嵌套：
+              · .site-root = 2.0 公开站点（顶部导航 + 页脚，没有侧栏）
+              · .app      = 旧应用（左栏 + 正文卡），工作台 / 账户 / 积分仍在用
+              登录页虽然走 .app，但它是整屏版式，所以挂 no-side + is-auth。 */}
+          <div className={isPublic
+            ? 'site-root'
+            : `app ${isAuthPage ? 'no-side is-auth' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''}`}>
             <RouteBar active={navigating} />
-            <Nav onLogin={requestLogin} />
-            {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
-                其中 /studio 保留顶部条，避免工具栏页连导航都没有 */}
-            <SideNav onLogin={requestLogin} />
-            <main className="main" ref={mainRef}>
-              {/* 全局返回：非首页且非 Luna 对话页显示 */}
-              {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
-                if (window.history.length > 1) window.history.back(); else go('/');
-              }} aria-label={t('返回', 'Back')}>← {t('返回', 'Back')}</button>}
-              <Suspense fallback={<PageFallback />}>
+
+            {isPublic ? <>
+              <SiteNav onLogin={requestLogin} />
+              <Suspense fallback={null}>
                 {page}
                 <RouteReady key={`ready:${hash}`} onReady={markShown} />
               </Suspense>
-              {/* 页脚不在这里：正文卡是固定高度、卡内滚动的，
-                  滚到底多出一条页脚只会让每一页多出一段「滑下来才看到」的白条。
-                  站内导航、法务链接与版权统一收在帮助与反馈页的最后一屏。 */}
-            </main>
+              <SiteFooter />
+              {/* 品牌开场：只在首页、且同一会话没播过时出现 */}
+              <SiteIntro enabled={path === '/'} />
+            </> : <>
+              <Nav onLogin={requestLogin} />
+              {/* 桌面端左栏 */}
+              <SideNav onLogin={requestLogin} />
+              <main className="main" ref={mainRef}>
+                {/* 全局返回：非首页且非 Luna 对话页显示 */}
+                {path !== '/' && !path.startsWith('/luna') && <button className="global-back" onClick={() => {
+                  if (window.history.length > 1) window.history.back(); else go('/');
+                }} aria-label={t('返回', 'Back')}>← {t('返回', 'Back')}</button>}
+                <Suspense fallback={<PageFallback />}>
+                  {page}
+                  <RouteReady key={`ready:${hash}`} onReady={markShown} />
+                </Suspense>
+                {/* 页脚不在这里：正文卡是固定高度、卡内滚动的，
+                    滚到底多出一条页脚只会让每一页多出一段「滑下来才看到」的白条。
+                    站内导航、法务链接与版权统一收在帮助与反馈页的最后一屏。 */}
+              </main>
+            </>}
+
             {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
             {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>{t('本地模式', 'Local mode')}</span>}
           </div>

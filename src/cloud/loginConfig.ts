@@ -31,7 +31,7 @@ export const LOGIN_CONFIG = {
   /** 品牌化配置。Logo 用站点自己的资源，按钮沿用站点主色，不照抄控制台预览的平台蓝紫色。 */
   brand: {
     name: 'LunaSol',
-    tagline: '人人都能成为设计师',
+    tagline: 'AI 包装设计工作室',
     logo: '/logo.png',
   },
 

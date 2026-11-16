@@ -36,7 +36,9 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem(LANG_KEY, lang); } catch { /* 隐私模式下写不进去，忽略即可 */ }
     document.documentElement.setAttribute('lang', lang === 'en' ? 'en' : 'zh-CN');
     // 标签页标题也跟着语言走：它是最容易被漏掉的界面文案
-    document.title = lang === 'en' ? 'LunaSol — Everyone can be a designer' : 'LunaSol — 人人都能成为设计师';
+    document.title = lang === 'en'
+      ? 'LunaSol — AI Packaging Design Studio'
+      : 'LunaSol — AI 包装设计工作室';
   }, [lang]);
 
   const t = (zh: string, en: string) => (lang === 'en' ? en : zh);
