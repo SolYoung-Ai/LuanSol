@@ -6,7 +6,6 @@ import Product from './pages/product';
 import About from './pages/about';
 import BrandSplash from './components/BrandSplash';
 import { useAuth } from './cloud/auth';
-import { LoginDialog } from './cloud/LoginDialog';
 import { SubscriptionProvider } from './cloud/subscription';
 import { ProfileProvider } from './cloud/profile';
 import { ChatStoreProvider } from './cloud/useChatStore';
@@ -36,6 +35,7 @@ const Admin = lazy(() => import('./pages/admin'));
 const Replicate = lazy(() => import('./pages/replicate'));
 const ReplicateList = lazy(() => import('./pages/replicate-list'));
 const ReplicateTemplates = lazy(() => import('./pages/replicate-templates'));
+const Login = lazy(() => import('./pages/login'));
 
 /** 页面级加载态统一交给品牌加载组件：LunaSol 字标被橙色填满 + Sol 三字轻跳。
  *  但**延迟 150ms** 才出现：chunk 已在缓存里时切换只要一帧，
@@ -75,11 +75,14 @@ export default function App() {
   const hash = useHash();
   const { toast, setToast } = useApp();
   const auth = useAuth();
-  const [loginOpen, setLoginOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   // 必须稳定引用：SubscriptionProvider 会把它放进 useEffect 依赖，
   // 每次渲染都新建函数会让闸门反复注销重注册，中间存在计量空窗。
-  const requestLogin = useCallback(() => setLoginOpen(true), []);
+  const requestLogin = useCallback((target?: string) => {
+    const cur = target || window.location.hash.replace(/^#/, '') || '/';
+    if (cur.startsWith('/login')) return;            // 已经在登录页，不要自我跳转
+    go(`/login?next=${encodeURIComponent(cur)}`);    // 登录后回到发起登录的位置
+  }, []);
   // 路由切换后必须回到顶部：懒加载页面在 effect 之后才挂载，只调用一次 scrollTo 会被
   // 后来的内容撑高 / 滚动锚定带偏（实测进入工作台会停在中段，标题被导航遮住），所以补一帧再归零。
   // 桌面端正文卡是独立滚动容器（.main 固定高度 + 内部滚动），
@@ -105,7 +108,9 @@ export default function App() {
   // 自带整屏工作区的页面：内部有 fixed 抽屉与贴底输入栏。
   // 给 .main 加 transform 会把 .main 变成这些 fixed 元素的包含块，动画期间抽屉会错位，
   // 所以这两页的切换过渡只允许淡入，不允许位移。
-  const isFullBleed = path.startsWith('/luna') || path.startsWith('/studio');
+  const isFullBleed = path.startsWith('/luna') || path.startsWith('/studio') || path === '/login';
+  /* 登录页是独立整屏版式：自带顶栏，隐藏全站导航与侧栏 */
+  const isAuthPage = path === '/login';
   /* 营销页（首页 / 产品 / 关于）：全宽、暖白、无左栏，导航仍是全站同一条。 */
   const isMarketing = path === '/' || path === '/product' || path === '/about';
 
@@ -171,24 +176,15 @@ export default function App() {
   // 工作台与 AI 新建设计流程需要登录
   const needLogin = (isOldFlow || path === '/studio' || path === '/new') && auth.ready && !auth.user;
   if (needLogin) {
-    page = <div className="page page-narrow">
-      <PageHead kicker="SIGN IN"
-        title={t('先登录，再开始设计', 'Sign in to start designing')}
-        desc={t('包装设计会按账号保存项目、同步云端并记录 AI 额度。请先登录或注册账号。',
-          'Projects are saved to your account, synced to the cloud and counted against your AI quota. Sign in or create an account first.')} />
-      <Notice tone="info">
-        {t('登录免费，新用户自动获得免费体验积分。', 'Signing up is free, and new accounts get trial credits.')}
-      </Notice>
-      <div style={{ marginTop: 20 }}>
-        <Button size="lg" onClick={requestLogin}>{t('登录 / 注册', 'Sign in')}</Button>
-      </div>
-    </div>;
+    /* 不再半路拦一个「请登录」空页：直接进登录页，成功后自动回到这里 */
+    page = <OldRouteRedirect to={`/login?next=${encodeURIComponent(path)}`} />;
   } else if (isOldFlow) {
     // 旧路由直接重定向到新工作台
     page = <OldRouteRedirect />;
-  } else if (path === '/') page = <Home onLogin={requestLogin} />;
+  } else if (path === '/') page = <Home onLogin={() => requestLogin('/studio')} />;
   else if (path === '/product') page = <Product />;
   else if (path === '/about') page = <About />;
+  else if (isAuthPage) page = <Login />;
   else if (path === '/studio') page = <Studio />;
   else if (path === '/new') page = <NewDesign />;
   else if (path === '/structures') page = <Structures />;
@@ -230,7 +226,7 @@ export default function App() {
         <ChatStoreProvider>
           {/* Luna 现在也用全站左栏（会话区挂在左栏分界线下方），所以只有编辑器是 no-side。
               这样从工作台 / 开始页切到 Luna 时左栏原地不动，只换中间内容，不再闪一下。 */}
-          <div className={`app ${path.startsWith('/studio') || isMarketing ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''} ${isMarketing ? 'is-marketing' : ''}`}>
+          <div className={`app ${path.startsWith('/studio') || isMarketing || isAuthPage ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''} ${isMarketing ? 'is-marketing' : ''} ${isAuthPage ? 'is-auth' : ''}`}>
             <BrandSplash />
             <RouteBar active={navigating} />
             <Nav onLogin={requestLogin} />
@@ -251,7 +247,6 @@ export default function App() {
                   站内导航、法务链接与版权统一收在帮助与反馈页的最后一屏。 */}
             </main>
             {toast && <div className={`toast ${toastTone(toast)}`} onClick={() => setToast(null)}><span aria-hidden>{toastTone(toast) === 'warn' ? '!' : '✓'}</span>{toast}</div>}
-            <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
             {!cloudConfigured && <span className="cloud-off-flag" aria-hidden>{t('本地模式', 'Local mode')}</span>}
           </div>
         </ChatStoreProvider>

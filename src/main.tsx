@@ -10,6 +10,7 @@ import './styles.css';
 import './v3.css';
 import './v4.css';
 import './brand.css';
+import './login.css';
 
 declare global {
   interface Window {
