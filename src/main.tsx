@@ -13,6 +13,8 @@ import './v4.css';
 import './login.css';
 // 2.0 品牌站点的视觉层：所有规则都限定在 .site-root 下，不影响旧应用
 import './site.css';
+// Studio 2.0 工作区（所有规则限定在 .st- 前缀与 .st-home/.st-wizard 之下）
+import './studio/studio.css';
 
 declare global {
   interface Window {

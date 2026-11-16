@@ -34,6 +34,11 @@ import { TEMPLATES } from '../src/replicate/templates';
 import { migrateProductInfo, migrateProject, migrateWorkflow } from '../src/migrations';
 import { humanizeAuthError, isSessionNoise } from '../src/cloud/authErrors';
 import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
+import {
+  CATEGORIES, FORMS_BY_CATEGORY, STUDIO_ID_PREFIX, createStudioProject, emptyAnswers,
+  exportStructured, isBlankStudio, missingRequired, normalizeStudioProject, projectName,
+  recommendSize, sizeOk, ans, type StudioProject,
+} from '../src/studio/types';
 
 export interface Result { name: string; ok: boolean; detail: string }
 const A = (cond: unknown, msg: string) => { if (!cond) throw new Error(msg); };
@@ -983,6 +988,104 @@ export async function runTests(): Promise<Result[]> {
     // 至少覆盖一个分类，避免「全填成同一种、其它分类点进去是空页」
     A(KINDS.some((k) => TEMPLATES.some((m) => m.kind === k.id)), '没有任何分类有可用模版');
     return `${TEMPLATES.length} 个模版，覆盖 ${new Set(TEMPLATES.map((m) => m.kind)).size} 个分类`;
+  });
+
+
+  /* ---------------------------- Studio 2.0 需求收集 ---------------------------- */
+
+  await t('Studio · 包装形式必须属于所选类别', () => {
+    for (const c of CATEGORIES) {
+      const list = FORMS_BY_CATEGORY[c.id];
+      A(list.length > 0, `${c.zh} 没有任何可选包装形式`);
+      A(new Set(list).size === list.length, `${c.zh} 的包装形式有重复项`);
+      for (const f of list) {
+        A(!!recommendSize(f), `${c.zh} 的 ${f} 没有推荐尺寸，第四步会是空的`);
+      }
+    }
+    const tea = FORMS_BY_CATEGORY.tea.map((f) => f);
+    A(tea.includes('box') && tea.includes('sachet'), '茶叶类应包含茶盒与独立茶包');
+    return `${CATEGORIES.length} 个类别，全部有可选项与推荐尺寸`;
+  });
+
+  await t('Studio · 推荐尺寸必须由用户确认才算定稿', () => {
+    const p = createStudioProject('u_test', 1_000);
+    p.answers.category = ans('tea', 'option');
+    p.answers.productName = ans('山隐·明前龙井', 'user');
+    p.answers.form = ans('box', 'option');
+    const dims = recommendSize('box')!;
+    p.answers.size = { mode: 'recommended', dims, src: 'ai', confirmed: false };
+
+    A(sizeOk(dims), '推荐尺寸本身应合法');
+    A(missingRequired(p).some((m) => m.step === 4), '未确认的 AI 尺寸必须出现在缺失项里');
+    p.answers.size.confirmed = true;
+    A(!missingRequired(p).some((m) => m.step === 4), '确认后不应再算缺失');
+
+    // 自定义尺寸由用户填写，直接算已确认
+    p.answers.size = { mode: 'custom', dims: { l: 200, w: 100, h: 60 }, src: 'user', confirmed: true };
+    A(sizeOk(p.answers.size.dims), '自定义尺寸应合法');
+    A(!missingRequired(p).some((m) => m.step === 4), '自定义尺寸不应再要求确认');
+
+    // 越界尺寸必须挡住（0 / 负数 / 过小）
+    A(!sizeOk({ l: 0, w: 100, h: 60 }), '0mm 不应通过');
+    A(!sizeOk({ l: 5, w: 100, h: 60 }), '小于 10mm 不应通过');
+    A(!sizeOk({ l: 2000, w: 100, h: 60 }), '大于 1000mm 不应通过');
+    return 'AI 建议 → 待确认 → 已确认，自定义尺寸独立计';
+  });
+
+  await t('Studio · 结构化需求必须分清你写的 / 你选的 / AI 给的 / 还没确认的', () => {
+    const p = createStudioProject('u_test', 2_000);
+    p.answers.category = ans('tea', 'option');
+    p.answers.productName = ans('山隐·明前龙井', 'user');
+    p.answers.productContent = ans('100g 明前龙井', 'user');
+    p.answers.form = ans('gift', 'option');
+    p.answers.size = { mode: 'recommended', dims: recommendSize('gift')!, src: 'ai', confirmed: false };
+    p.answers.stylePrimary = ans('oriental', 'option');
+    p.answers.colors = ans(['#191919', '#F7F3EC'], 'option');
+    p.answers.patterns = ans(['botanical', 'orientalPattern'], 'option');
+
+    const out = exportStructured(p);
+    A(out.written.productName === '山隐·明前龙井', '产品名称应归入「你填写」');
+    A(out.selected.category === '茶叶', `类别应归入「你选择」，实际 ${out.selected.category}`);
+    A(out.selected.form === '礼盒', '包装形式应归入「你选择」');
+    A(Array.isArray(out.selected.patterns) && out.selected.patterns.length === 2, '图案多选应完整导出');
+    A(out.ai.size && out.ai.size.confirmed === false, 'AI 尺寸必须带未确认标记');
+    A(out.pending.includes('包装尺寸（AI 建议待确认）'), '未确认的 AI 尺寸必须出现在 pending 里');
+    A(out.pending.includes('产品卖点'), '没填的卖点应出现在 pending 里');
+    A(!('sellingPointPrimary' in out.selected), '不得凭空补出用户没给的字段');
+    A(out.notes.some((n) => /尚未生成/.test(n)), '必须声明本阶段没有生成图片');
+    return `${Object.keys(out.written).length} 项填写 / ${Object.keys(out.selected).length} 项选择 / ${out.pending.length} 项待补`;
+  });
+
+  await t('Studio · 项目名优先用产品名称，空项目不进列表', () => {
+    const p = createStudioProject('u_test', 3_000);
+    A(p.id.startsWith(STUDIO_ID_PREFIX), 'Studio 项目 id 必须带 st_ 前缀，否则会混进旧工作台');
+    A(p.ownerId === 'u_test', '项目必须记录用户 ID');
+    A(p.status === 'draft' && p.createdAt === 3_000 && p.updatedAt === 3_000, '新建项目应带创建 / 更新时间与 draft 状态');
+    A(isBlankStudio(p), '一条都没填的新项目应判为空');
+    A(projectName(p.answers) === '未命名设计', '空项目名应有兜底');
+    p.answers.productName = ans('山隐·明前龙井', 'user');
+    A(projectName(p.answers) === '山隐·明前龙井', '项目名必须优先用产品名称');
+    A(!isBlankStudio(p), '填了产品名就不再是空项目');
+    return 'id / ownerId / 名称 / 时间 / 状态 全部就位';
+  });
+
+  await t('Studio · 旧数据缺字段也能恢复，别的项目不会被误认', () => {
+    const legacy = {
+      id: 'st_abc123', ownerId: 'u1', name: '旧项目', status: 'draft', createdAt: 1, updatedAt: 2,
+      step: 4, answers: { productName: { v: '旧名称', src: 'user', confirmed: true } },
+    };
+    const p = normalizeStudioProject(legacy);
+    A(!!p, '缺字段的旧项目应能被补全');
+    A(p!.answers.category.v === '' && p!.answers.logo.mode === '', '缺失项应补成空值，不能 undefined');
+    A(p!.answers.colors.v.length === 0, '缺失的颜色数组要补成空数组');
+    A(p!.step === 4, '步骤应保留');
+
+    A(normalizeStudioProject({ id: 'proj_x', name: '旧包装项目' }) === null, '非 st_ 前缀的项目不能被当成 Studio 项目');
+    A(normalizeStudioProject(null) === null, '空数据应安全返回 null');
+
+    const empty = createStudioProject('u1', 10);
+    A(Object.keys(emptyAnswers()).length === Object.keys(empty.answers).length, '空答案模板字段必须齐全');
+    return '旧数据补全 + 前缀隔离';
   });
 
   return R;

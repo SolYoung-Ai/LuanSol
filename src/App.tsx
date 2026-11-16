@@ -22,7 +22,8 @@ import { useLang } from './i18n';
 const SiteHome = lazy(() => import('./site/HomePage'));
 const SiteProduct = lazy(() => import('./site/ProductPage'));
 const SiteAbout = lazy(() => import('./site/AboutPage'));
-const StudioShell = lazy(() => import('./site/StudioShell'));
+/* Studio 2.0：欢迎界面 + 九步需求收集（阶段 3） */
+const StudioPage = lazy(() => import('./studio/StudioPage'));
 const Account = lazy(() => import('./pages/account'));
 const Structures = lazy(() => import('./pages/library').then((m) => ({ default: m.Structures })));
 const ProjectDetail = lazy(() => import('./pages/library').then((m) => ({ default: m.ProjectDetail })));
@@ -179,7 +180,8 @@ export default function App() {
   const OLD_FLOW_ROUTES = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
   const isOldFlow = OLD_FLOW_ROUTES.some((p) => path.startsWith(p));
 
-  /* 2.0 公开站点：首页 / 产品 / 关于 / Studio 空壳。 */
+  /* 2.0 公开站点：首页 / 产品 / 关于 / 工作室。工作室沿用同一条顶部导航，
+     不再套第二层工具壳，页脚不出现（工作区不打断流程）。 */
   const isPublic = path === '/' || path === '/product' || path === '/about' || path === '/studio';
   /* 账户类页面（积分 / 账户 / 帮助）现在是独立页：套同一条顶部导航，
      不再有左侧栏。它们也吃页脚，读到底有个收尾。 */
@@ -187,8 +189,8 @@ export default function App() {
     || path === '/security' || path === '/help';
   const showFooter = (isPublic && path !== '/studio') || isDoc;
 
-  // 工作台与 AI 新建设计流程需要登录（/studio 现在只是空壳，不再拦登录）
-  const needLogin = (isOldFlow || path === '/new') && auth.ready && !auth.user;
+  // 工作室与旧工作台都需要登录：项目按账号存档，未登录没有可读写的项目
+  const needLogin = (isOldFlow || path === '/new' || path === '/studio') && auth.ready && !auth.user;
   if (needLogin) {
     /* 不再半路拦一个「请登录」空页：直接进登录页，成功后自动回到这里 */
     page = <OldRouteRedirect to={`/login?next=${encodeURIComponent(path)}`} />;
@@ -200,7 +202,7 @@ export default function App() {
   else if (path === '/about') page = <SiteAbout />;
   /* 独立登录页（V5 那版做的，保留）：整屏左右分栏，登录后回 ?next= */
   else if (isAuthPage) page = <Login />;
-  else if (path === '/studio') page = <StudioShell />;
+  else if (path === '/studio') page = <StudioPage />;
   else if (path === '/new') page = <NewDesign />;
   else if (path === '/structures') page = <Structures />;
   /* 包装设计：/workspace 与历史路径 /projects 指向同一个页面，旧链接不 404 */

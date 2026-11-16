@@ -10,6 +10,15 @@ import type { Project } from '../types';
 import { db, sdkUsable } from './sdk';
 import { rowId } from './keys';
 import { tl } from '../langStore';
+import { STUDIO_ID_PREFIX } from '../studio/types';
+
+/** Studio 2.0 的需求项目与旧包装项目共用同一张表（RLS 已经就位，不必动生产库 DDL），
+ *  靠本地 id 前缀区分。旧同步链路必须跳过这些行，否则会把「需求单」当成
+ *  Project 塞进工作台、还会被 migrateProject 二次改写。 */
+const isStudioRow = (cloudId: string) => {
+  const i = cloudId.indexOf(':');
+  return (i > 0 ? cloudId.slice(i + 1) : cloudId).startsWith(STUDIO_ID_PREFIX);
+};
 
 export interface CloudMeta {
   id: string;
@@ -91,7 +100,8 @@ export async function listProjects(): Promise<CloudResult<CloudMeta[]>> {
     const r = await d.from(TABLE).select('id,title,updated_at').order('updated_at', { ascending: false }).limit(100);
     if (!r) return { ok: true, data: [] }; // SDK 返回 undefined 时降级为空列表
     if (r.error) return fail(`读取失败：${errText(r.error)}`);
-    return { ok: true, data: ((r.data || []) as CloudMeta[]) };
+    const rows = ((r.data || []) as CloudMeta[]).filter((x) => !isStudioRow(String(x.id)));
+    return { ok: true, data: rows };
   } catch (e) {
     return fail(errText(e) || '读取请求异常');
   }
