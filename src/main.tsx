@@ -9,6 +9,7 @@ import { applyTheme, readTheme } from './theme';
 import './styles.css';
 import './v3.css';
 import './v4.css';
+import './brand.css';
 
 declare global {
   interface Window {

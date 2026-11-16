@@ -28,12 +28,13 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
  *  V4.1 信息架构：左侧品牌字标，中间三个主入口，右侧「语言 / 深浅色 / 个人中心」。
  *  个人功能（登录、账号、订阅、设置、帮助）全部收进右上角的头像菜单，
  *  顶级导航不允许再出现重复的「登录」「订阅」按钮。 */
+/* V5 信息架构：顶级导航只保留营销三页。
+   工作台 / 复刻 / Luna 对话仍然存在，但入口收进「开始设计」与账号菜单，
+   不再和产品介绍混在同一层。 */
 const NAV_ITEMS = [
-  { zh: '开始', en: 'Start', enShort: 'Start', path: '/' },
-  /* 与桌面左栏保持同名；窄屏用短标签，避免入口挤成省略号 */
-  { zh: 'Luna Ai', en: 'Luna AI', enShort: 'Luna', path: '/luna' },
-  { zh: '包装设计', en: 'Packaging', enShort: 'Pack', path: '/workspace' },
-  { zh: '复刻设计', en: 'Recreate', enShort: 'Copy', path: '/replicate' },
+  { zh: '首页', en: 'Home', enShort: 'Home', path: '/' },
+  { zh: '产品', en: 'Product', enShort: 'Product', path: '/product' },
+  { zh: '关于', en: 'About', enShort: 'About', path: '/about' },
 ];
 
 export function Nav({ onLogin }: { onLogin: () => void }) {
@@ -74,8 +75,8 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   // 「开始」是一个区域而不是单页：首页、九步向导、方案、编辑器、3D、印前、导出都属于它
   const CREATE_PATHS = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
   const active = (p: string) => {
-    if (p === '/') return path === '/' || CREATE_PATHS.some((x) => path.startsWith(x));
-    return path.startsWith(p);
+    if (p === '/') return path === '/';
+    return path === p || path.startsWith(p + '/') || path.startsWith(p + '?');
   };
 
   const guestItems: { label: string; path?: string; action?: () => void; primary?: boolean }[] = [
@@ -88,6 +89,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
   /* 个人资料与账号安全已合并成「账户信息」一页：
      资料、密码、换绑邮箱都在 /account，菜单里不再拆成两个入口。 */
   const userItems: { label: string; path?: string; action?: () => void; adminOnly?: boolean }[] = [
+    { label: t('我的设计', 'My designs'), path: '/workspace' },
     { label: t('账户信息', 'Account'), path: '/account' },
     { label: t('积分', 'Credits'), path: '/credits' },
     { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
@@ -204,7 +206,8 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
               {sub.usedLeft}
             </button>
           )}
-          <button className={`v4-avatar-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={t('个人中心', 'Account menu')}>
+          {!auth.user && <button className="v4-login-btn" onClick={requestLogin}>{t('登录', 'Log in')}</button>}
+          <button className={`v4-avatar-btn ${open ? 'open' : ''} ${auth.user ? '' : 'is-guest'}`} onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={t('个人中心', 'Account menu')}>
             {auth.user
               ? (() => {
                   const cloudAvatar = profile.profile?.avatar_url || '';

@@ -2,6 +2,9 @@ import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 
 import { useApp, toastTone } from './store';
 import { Button, Nav, Notice, PageHead, go, useHash } from './ui';
 import Home from './pages/home';
+import Product from './pages/product';
+import About from './pages/about';
+import BrandSplash from './components/BrandSplash';
 import { useAuth } from './cloud/auth';
 import { LoginDialog } from './cloud/LoginDialog';
 import { SubscriptionProvider } from './cloud/subscription';
@@ -103,6 +106,8 @@ export default function App() {
   // 给 .main 加 transform 会把 .main 变成这些 fixed 元素的包含块，动画期间抽屉会错位，
   // 所以这两页的切换过渡只允许淡入，不允许位移。
   const isFullBleed = path.startsWith('/luna') || path.startsWith('/studio');
+  /* 营销页（首页 / 产品 / 关于）：全宽、暖白、无左栏，导航仍是全站同一条。 */
+  const isMarketing = path === '/' || path === '/product' || path === '/about';
 
   /* 预取主入口页面的 chunk。懒加载 fallback 是一整屏高的字标，
      首次点进 Luna 时「loader → 真实页面」的高度变化也会被看成整页跳一下。
@@ -181,7 +186,9 @@ export default function App() {
   } else if (isOldFlow) {
     // 旧路由直接重定向到新工作台
     page = <OldRouteRedirect />;
-  } else if (path === '/') page = <Home />;
+  } else if (path === '/') page = <Home onLogin={requestLogin} />;
+  else if (path === '/product') page = <Product />;
+  else if (path === '/about') page = <About />;
   else if (path === '/studio') page = <Studio />;
   else if (path === '/new') page = <NewDesign />;
   else if (path === '/structures') page = <Structures />;
@@ -223,7 +230,8 @@ export default function App() {
         <ChatStoreProvider>
           {/* Luna 现在也用全站左栏（会话区挂在左栏分界线下方），所以只有编辑器是 no-side。
               这样从工作台 / 开始页切到 Luna 时左栏原地不动，只换中间内容，不再闪一下。 */}
-          <div className={`app ${path.startsWith('/studio') ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''}`}>
+          <div className={`app ${path.startsWith('/studio') || isMarketing ? 'no-side' : 'has-side'} ${isFullBleed ? 'is-fullbleed' : ''} ${path.startsWith('/luna') ? 'is-luna' : ''} ${isMarketing ? 'is-marketing' : ''}`}>
+            <BrandSplash />
             <RouteBar active={navigating} />
             <Nav onLogin={requestLogin} />
             {/* 桌面端左栏：Luna 与编辑器自带整屏工作区，这两种页面返回 null；
