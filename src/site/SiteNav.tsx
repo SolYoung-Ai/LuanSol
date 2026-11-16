@@ -86,7 +86,10 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
         </div>
 
         <div className="site-actions" ref={menuRef}>
-          {auth.ready && !user && <button className="site-login" onClick={onLogin}>{t('登录', 'Log in')}</button>}
+          {/* 不等 auth.ready：云端会话恢复在冷启动时可能要几秒，
+              期间右侧空白会让人以为「没有登录入口」。
+              已登录用户会短暂看到「登录」再换成头像，比空着可接受。 */}
+          {!user && <button className="site-login" onClick={onLogin}>{t('登录', 'Log in')}</button>}
 
           {user && <>
             <button
