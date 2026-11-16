@@ -37,7 +37,7 @@ export default function SiteFooter() {
 
   return <section className="gl-card sf-card" aria-label={t('站点信息', 'Site information')}>
     <div className="sf-head">
-      <div className="sf-brand"><Logo compact /><span>AI PACKAGING DESIGN STUDIO</span></div>
+      <div className="sf-brand"><Logo compact /><span>{t('人人都能成为设计师', 'EVERYONE CAN BE A DESIGNER')}</span></div>
       <span className="sf-copy">© 2026 LunaSol · {t('从想法，到一件作品', 'From an idea to a finished piece')}</span>
     </div>
 

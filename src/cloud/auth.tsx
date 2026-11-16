@@ -223,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /** 邮箱验证码登录。控制台「注册模式 = 自动注册并登录」，未注册邮箱由云端自动建号；
-   *  若云端返回「用户不存在」，LoginDialog 会降级展示邮箱注册表单。 */
+   *  若云端返回「用户不存在」，登录页会降级展示邮箱注册表单。 */
   const startCodeLogin = useCallback(async (target: string): Promise<ActionResult> => {
     const t = emailTarget(target);
     if (!t) return { ok: false, message: tl(`请输入正确的邮箱地址。${NO_SMS_HINT}`, `Enter a valid email address. ${NO_SMS_HINT_EN}`) };

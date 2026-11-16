@@ -26,6 +26,6 @@ export default function BrandLoop() {
     <div className="bl-word" aria-hidden>
       {LETTERS.map((ch, i) => <span key={i} className={`bl-l${i + 1}`}>{ch}</span>)}
     </div>
-    <div className="bl-sub">{t('AI 包装设计工作室', 'AI Packaging Design Studio')}</div>
+    <div className="bl-sub">{t('人人都能成为设计师', 'Everyone can be a designer')}</div>
   </div>;
 }

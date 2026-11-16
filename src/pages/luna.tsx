@@ -16,8 +16,8 @@ import { useAuth } from '../cloud/auth';
 import { useChatStore } from '../cloud/useChatStore';
 import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
-import { LoginDialog } from '../cloud/LoginDialog';
-import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageListCost, imageModel, imagePromoLabel, isPromoTier, resolveTier } from '../cloud/models';
+import { go } from '../ui';
+import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageShort, imageListCost, imageModel, imageModelNote, imagePromoLabel, isPromoTier, resolveTier } from '../cloud/models';
 import { LunaChats } from '../components/SideNav';
 import { compressImageForUpload } from '../workflow/imageUtils';
 import { useLang } from '../i18n';
@@ -166,14 +166,26 @@ function Pick({
   );
 }
 
-/** 「对话」只是一颗模式标识：纯积分制下不提供语言模型选择，
- *  也不显示额度、轮数或模型名。平台在服务端统一接入模型并自动兜底。 */
+/** 「对话」模式的说明：平台统一模型，免费不扣积分，
+ *  纯积分制下界面不提供语言模型选择（模式切换在输入区上方）。 */
 function ChatTag() {
   const { t } = useLang();
   return (
-    <span className="lc-tag on lc-tag-static" title={t('对话由平台 AI 提供，免费不扣积分', 'Chat is powered by platform AI, free and spends no credits')}>
-      <Icon name="message" size={14} />{t('对话', 'Chat')}
+    <span className="lc-tag lc-tag-static" title={t('对话由平台 AI 提供，免费不扣积分', 'Chat is powered by platform AI, free and spends no credits')}>
+      <Icon name="spark" size={14} />{t('平台模型 · 免费不扣积分', 'Platform model · free')}
     </span>
+  );
+}
+
+/** 未登录：不在页面里弹登录框，直接送去独立登录页，登录完回到 /luna。
+ *  全站只有一个登录界面（/login），避免「弹窗版 / 整页版」两套并存。 */
+function LoginGate() {
+  const { t } = useLang();
+  useEffect(() => { go(`/login?next=${encodeURIComponent('/luna')}`); }, []);
+  return (
+    <div className="lc-gate">
+      <span>{t('正在前往登录…', 'Taking you to sign in…')}</span>
+    </div>
   );
 }
 
@@ -231,7 +243,6 @@ export default function Luna() {
   const { lang, t } = useLang();
   /** 双语常量取当前语言 */
   const L = (v: L) => (lang === 'en' ? v.en : v.zh);
-  const [loginOpen, setLoginOpen] = useState(false);
   const [mode, setMode] = useState<LunaMode>('chat');
   const [input, setInput] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
@@ -376,23 +387,9 @@ export default function Luna() {
   };
 
   /* ------------------------------ 未登录 ------------------------------ */
-  if (!auth.user) {
-    return (
-      <div className="page page-narrow">
-        <div style={{ textAlign: 'center', paddingTop: 80 }}>
-          <h1 style={{ fontSize: 32, marginBottom: 12 }}>
-            {t('先登录，再和 Luna 聊设计', 'Sign in to talk design with Luna')}
-          </h1>
-          <p style={{ color: '#737373', marginBottom: 24 }}>
-            {t('对话会按账号保存到云端，换设备也能看到。',
-              'Conversations are saved to your account, so they follow you across devices.')}
-          </p>
-          <button className="v4-btn-dark" onClick={() => setLoginOpen(true)}>{t('登录 / 注册', 'Sign in')}</button>
-        </div>
-        <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={() => {}} />
-      </div>
-    );
-  }
+  // 会话加载完（ready）才判断，避免已登录用户在刷新的那一瞬被送去登录页
+  if (!auth.ready) return <div className="lc-gate" aria-hidden />;
+  if (!auth.user) return <LoginGate />;
 
   const initial = (auth.user.label || auth.user.email || 'U').slice(0, 1).toUpperCase();
   // 只有真的同步成功才说「已同步」：未登录 / 尚未同步时都如实显示「本机保存」
@@ -409,13 +406,12 @@ export default function Luna() {
       <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
 
       {/* ------------------------------ 左侧栏 ------------------------------
-          桌面端（≥861px）不再自己画侧栏：品牌 / 导航 / 会话列表 / 账号卡全部由全站左栏
-          （components/SideNav.tsx）渲染。以前这里另起一条整屏侧栏，从别的页面点进 Luna 时
-          左栏会「消失再出现」，.app 的 padding-left 还要从 244px 过渡到 0，
-          整块内容横移一下，看起来像刷新闪了一帧。
-          手机端（≤860px）保持原来的左滑抽屉，一行都不动。 */}
-      {isMobile && <aside className={`lc-side ${drawerOpen ? 'drawer-open' : ''}`}>
+          桌面端常驻（参考豆包的信息架构）：上面是新建对话 + 搜索 + 会话列表，
+          底部是账号卡。手机端（≤860px）同一份内容变成左滑抽屉，
+          由顶栏的菜单按钮打开——DOM 只写一份，两边共用。 */}
+      <aside className={`lc-side ${drawerOpen ? 'drawer-open' : ''}`}>
         <div className="lc-side-inner">
+          <div className="lc-side-brand">Luna<span>AI</span></div>
           <LunaChats onPicked={() => setDrawerOpen(false)} />
 
           <div className="lc-side-foot">
@@ -433,7 +429,7 @@ export default function Luna() {
           </div>
         </div>
 
-        <button
+        {isMobile && <button
           className="lc-side-toggle"
           onClick={() => setDrawerOpen(false)}
           title={t('关闭菜单', 'Close menu')}
@@ -441,8 +437,8 @@ export default function Luna() {
         >
           <Icon name="close" size={16} />
           <span className="lc-side-toggle-text">{t('关闭菜单', 'Close menu')}</span>
-        </button>
-      </aside>}
+        </button>}
+      </aside>
 
       {/* 移动端抽屉遮罩：点击空白处关闭 */}
       <div
@@ -503,24 +499,49 @@ export default function Luna() {
                 : t('产品、品牌、包装、海报，任何设计想法都可以丢给我。',
                   'Product, brand, packaging, poster — any design idea is welcome.')}
             </p>
-            <div className="lc-seg" role="tablist" aria-label={t('对话模式', 'Mode')}>
-              <button
-                className={`lc-seg-btn ${mode === 'chat' ? 'on' : ''}`}
-                role="tab" aria-selected={mode === 'chat'}
-                onClick={() => setMode('chat')}
-              >{t('对话', 'Chat')}</button>
-              <button
-                className={`lc-seg-btn ${mode === 'image' ? 'on' : ''}`}
-                role="tab" aria-selected={mode === 'image'}
-                onClick={() => setMode('image')}
-              >{t('图像生成', 'Image')}</button>
-            </div>
           </div>
         )}
 
         {/* ------------------------------ 输入区 ------------------------------ */}
         <div className="lc-dock">
           <div className="lc-dock-inner">
+          {/* 模式切换：对话由平台模型完成、免费不扣分；图像生成按档位扣分。
+              放在输入框正上方（参考豆包的「对话 / 工作」），随时可见、随时能切。 */}
+          <div className="lc-modes" role="tablist" aria-label={t('对话模式', 'Mode')}>
+            <button
+              className={`lc-mode ${mode === 'chat' ? 'on' : ''}`}
+              role="tab" aria-selected={mode === 'chat'}
+              onClick={() => setMode('chat')}
+            ><Icon name="message" size={14} />{t('对话', 'Chat')}</button>
+            <button
+              className={`lc-mode ${mode === 'image' ? 'on' : ''}`}
+              role="tab" aria-selected={mode === 'image'}
+              onClick={() => setMode('image')}
+            ><Icon name="image" size={14} />{t('图像生成', 'Image')}</button>
+          </div>
+
+          {/* 图像生成的模型档位：每颗都直接标出这一档的积分，选中就按这个价扣。
+              价格来自 cloud/models.ts，界面不另写常量。 */}
+          {mode === 'image' && (
+            <div className="lc-models" role="radiogroup" aria-label={t('图像模型', 'Image model')}>
+              {OPEN_IMAGE_MODELS.map((m) => (
+                <button
+                  key={m.id}
+                  role="radio"
+                  aria-checked={tier === m.id}
+                  className={`lc-model ${tier === m.id ? 'on' : ''}`}
+                  onClick={() => chat.setTier(m.id)}
+                  title={imageModelNote(m, lang)}
+                >
+                  <span className="lc-model-name">{m.short}</span>
+                  <span className="lc-model-cost">
+                    {t(`${m.cost} 积分`, `${m.cost} cr`)}
+                    {m.cost < m.listCost && <s>{m.listCost}</s>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           {pendingImage && (
             <div className="lc-pending">
               <img src={pendingImage} alt={t('待发送', 'Pending')} />
@@ -563,32 +584,9 @@ export default function Luna() {
                 <span className="lc-bar-sep" />
 
                 {mode === 'chat' ? (
-                  <>
-                    <ChatTag />
-                    <button className="lc-tag" onClick={() => setMode('image')} title={t('切换到图像生成', 'Switch to image generation')}>
-                      <Icon name="image" size={14} />{t('图像生成', 'Image')}
-                      <Icon name="chevronRight" size={12} className="lc-tag-chev" />
-                    </button>
-                  </>
+                  <ChatTag />
                 ) : (
                   <>
-                    <button className="lc-tag on removable" onClick={() => setMode('chat')} title={t('退出图像生成', 'Leave image generation')}>
-                      <Icon name="image" size={14} />{t('图像生成', 'Image')}
-                      <Icon name="close" size={12} className="lc-tag-chev" />
-                    </button>
-                    <Pick
-                      icon="spark"
-                      caption={t('模型', 'Model')}
-                      value={tierName(tier)}
-                      options={OPEN_IMAGE_MODELS.map((m) => ({
-                        id: m.id,
-                        label: m.label,
-                        hint: m.cost < m.listCost
-                          ? t(`${m.cost} 积分 · 原价 ${m.listCost}`, `${m.cost} credits · was ${m.listCost}`)
-                          : t(`${m.cost} 积分`, `${m.cost} credits`),
-                      }))}
-                      onPick={(id) => chat.setTier(id as ImageTier)}
-                    />
                     <Pick
                       caption={t('比例', 'Ratio')}
                       value={L(ratio.label)}

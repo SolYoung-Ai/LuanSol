@@ -7,11 +7,11 @@
  * ⚠️ 为什么必须有这个文件（接手前请先读懂）：
  *  1. 控制台那一页配置的是 CloudBase **托管默认登录页**。它只在调用
  *     auth.toDefaultLoginPage()、HTTP 网关开启身份认证、或 OAuth/SSO 流程时出现。
- *  2. 本站登录 UI 是自建 React 弹窗（src/cloud/LoginDialog.tsx），全项目没有
+ *  2. 本站登录 UI 是自建独立登录页（src/pages/login.tsx，路由 /login），全项目没有
  *     任何 toDefaultLoginPage 调用，所以控制台的品牌化配置**不会**自动显示到网站上。
  *  3. CloudBase 没有提供「前端只读登录页配置」的公开 API；管理侧读取配置需要
  *     密钥，而密钥绝不能进前端。
- *  → 因此把控制台开关手工镜像成下面的常量，由 LoginDialog / auth 统一读取。
+ *  → 因此把控制台开关手工镜像成下面的常量，由登录页 / auth 统一读取。
  *
  * 🔁 同步规则：以后在控制台改了登录方式、注册模式或企业名称，
  *    必须同步修改本文件，否则会出现「界面有入口、服务端已关闭」的死按钮，
@@ -31,7 +31,7 @@ export const LOGIN_CONFIG = {
   /** 品牌化配置。Logo 用站点自己的资源，按钮沿用站点主色，不照抄控制台预览的平台蓝紫色。 */
   brand: {
     name: 'LunaSol',
-    tagline: 'AI 包装设计工作室',
+    tagline: '人人都能成为设计师',
     logo: '/logo.png',
   },
 

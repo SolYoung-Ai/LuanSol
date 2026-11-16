@@ -68,7 +68,7 @@ export default function SiteIntro({ enabled }: { enabled: boolean }) {
       <div className="site-intro-word" aria-label="LunaSol">
         {LETTERS.map((ch, i) => <span key={i}>{ch}</span>)}
       </div>
-      <div className="site-intro-sub">{t('AI 包装设计工作室', 'AI Packaging Design Studio')}</div>
+      <div className="site-intro-sub">{t('人人都能成为设计师', 'Everyone can be a designer')}</div>
     </div>
     <button className="site-intro-skip" onClick={() => finish(true)}>{t('跳过', 'Skip')}</button>
   </div>;

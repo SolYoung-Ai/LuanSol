@@ -27,7 +27,6 @@ import { useSubscription, recordUsage } from '../cloud/subscription';
 import { callImage } from '../engine/seedream';
 import { OPEN_IMAGE_MODELS, imageCost, imageLabel, imageModel, resolveTier } from '../cloud/models';
 import { compressImageForUpload } from '../workflow/imageUtils';
-import { LoginDialog } from '../cloud/LoginDialog';
 import { Icon } from '../components/icons';
 import { useLang } from '../i18n';
 import type { ImageTier, ReplicateImage, ReplicateProject, ReplicateResult } from '../types';
@@ -247,7 +246,6 @@ function ReplicateEditor() {
   const [ratioId, setRatioId] = useState(opened?.ratio ?? tpl?.ratio ?? '1:1');
   const [fidelity, setFidelity] = useState(opened?.fidelity ?? tpl?.fidelity ?? 70);
   const [busy, setBusy] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
   /** 大图查看：结果点击后放大，能看清文字与材质再决定用哪张 */
   const [zoomId, setZoomId] = useState<string | null>(null);
   /** 上传图的预览（轻量）：只看不改 */
@@ -445,7 +443,12 @@ function ReplicateEditor() {
   };
 
   const ensureQuota = (need: number) => {
-    if (!auth.user) { setLoginOpen(true); return false; }
+    // 未登录：走独立登录页（全站唯一登录界面），登录完回到当前这条复刻记录
+    if (!auth.user) {
+      const cur = window.location.hash.replace(/^#/, '') || '/replicate';
+      go(`/login?next=${encodeURIComponent(cur)}`);
+      return false;
+    }
     const left = sub.usedLeft ?? 0;
     if (left < need) {
       setToast(t(`积分不足：本次需要 ${need} 积分，当前余额 ${left}。`, `Not enough credits: ${need} needed, ${left} left.`));
@@ -903,7 +906,5 @@ function ReplicateEditor() {
       </div>,
       document.body,
     )}
-
-    <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onDone={(m) => setToast(m)} />
   </div>;
 }

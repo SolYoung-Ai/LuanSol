@@ -20,7 +20,7 @@ export function Logo({ compact = false, onClick }: { compact?: boolean; onClick?
   const { t } = useLang();
   return <button className="logo" onClick={onClick || (() => go('/'))} aria-label={t('LunaSol 首页', 'LunaSol home')}>
     <span className="logo-word">Luna<span style={{ color: '#e8783a' }}>Sol</span></span>
-    {!compact && <span className="logo-sub">{t('AI 包装设计工作室', 'AI Packaging Design Studio')}</span>}
+    {!compact && <span className="logo-sub">{t('人人都能成为设计师', 'Everyone can be a designer')}</span>}
   </button>;
 }
 

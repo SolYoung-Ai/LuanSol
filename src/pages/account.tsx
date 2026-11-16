@@ -21,7 +21,6 @@ import { useLang } from '../i18n';
 import { useAuth } from '../cloud/auth';
 import { useProfile } from '../cloud/profile';
 import { useSubscription } from '../cloud/subscription';
-import { LoginDialog } from '../cloud/LoginDialog';
 import { cloudConfigured, cloudOriginSupported, CLOUD_SITE_URL } from '../cloud/config';
 import { Icon, type IconName } from '../components/icons';
 
@@ -43,7 +42,6 @@ export default function Account() {
   const sub = useSubscription();
   const { setToast } = useApp();
   const { lang, t } = useLang();
-  const [loginOpen, setLoginOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const toggle = (p: Exclude<Panel, null>) => setPanel((cur) => (cur === p ? null : p));
 
@@ -159,7 +157,7 @@ export default function Account() {
         <h2>{t('登录后管理账户信息', 'Sign in to manage your account')}</h2>
         <p>{t('登录后可修改头像与称呼、设置密码、换绑邮箱。项目管理在工作台。',
           'Once signed in you can change your avatar and name, set a password and swap your email. Projects live in the workspace.')}</p>
-        <button className="ag-btn" onClick={() => setLoginOpen(true)}>{t('登录 / 注册', 'Sign in')}</button>
+        <button className="ag-btn" onClick={() => go(`/login?next=${encodeURIComponent('/account')}`)}>{t('登录 / 注册', 'Sign in')}</button>
       </section>
     ) : <>
       {/* ---------- 身份卡 ---------- */}
@@ -362,8 +360,5 @@ export default function Account() {
         setToast(r.message);
       }}><Icon name="logOut" size={15} /> {t('退出登录', 'Sign out')}</button>
     </>}
-
-    <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)}
-      onDone={(m) => { setToast(m); }} />
   </div>;
 }

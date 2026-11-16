@@ -102,10 +102,147 @@ body:has(.app.is-site) { background: #ffffff; }
 .app.is-site::before { display: none; }
 /* 顶部已经有导航，浮动的「返回」按钮会压在导航上，去掉 */
 .app.is-site .global-back { display: none; }
-/* Luna 对话页：全站左栏撤掉之后，对话列表会贴到视口边缘，
-   补回一档与导航左右对齐的呼吸位（手机端不动，那里是抽屉） */
+/* ------------------------------------------------------------
+   Luna AI：桌面常驻左栏 + 输入区「对话 / 图像生成」切换
+   ------------------------------------------------------------
+   左栏由页面自己画（LunaChats），跟顶部导航的 28px 对齐；
+   手机端同一份 DOM 变抽屉，这里的规则只在桌面生效。
+   ------------------------------------------------------------ */
+.lc-gate {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* 左栏顶部的产品名：豆包那一条「豆包」的位置 */
+.lc-side-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0 8px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  color: var(--ink);
+}
+.lc-side-brand span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--brand);
+}
+
 @media (min-width: 861px) {
-  .app.is-site.is-luna .lc-shell { padding-left: 28px; padding-right: 28px; }
+  /* 视口高度要减掉顶部导航：旧规则是按「桌面没有顶部导航」写的（100vh），
+     在 2.0 里会让输入框整体掉到折叠线以下。 */
+  .app.is-site.is-luna .lc-shell {
+    height: calc(100dvh - var(--nav-h));
+    min-height: 0;
+    padding: 0;
+    gap: 0;
+    max-width: none;
+    margin: 0;
+    overflow: hidden;
+  }
+  /* 左栏：纯白通栏 + 一条发丝线，与顶部导航同一条竖直基准线 */
+  .app.is-site.is-luna .lc-side {
+    width: 264px;
+    margin: 0;
+    padding: 18px 14px 14px;
+    border: 0;
+    border-right: 1px solid var(--line);
+    border-radius: 0;
+    background: #ffffff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .app.is-site.is-luna .lc-side-inner { min-width: 0; }
+  .app.is-site.is-luna .lc-side-foot {
+    padding-top: 12px;
+    border-top: 1px solid var(--line-soft);
+  }
+}
+
+/* 模式切换：灰凹槽 + 白色滑块，与顶部导航的语气一致 */
+.lc-modes {
+  display: inline-flex;
+  gap: 3px;
+  margin-bottom: 10px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(25, 25, 25, .045);
+}
+.lc-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b6661;
+  cursor: pointer;
+  transition: background .18s var(--ease), color .18s var(--ease), box-shadow .18s var(--ease);
+}
+.lc-mode:hover { color: var(--ink); }
+.lc-mode.on {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(16, 16, 16, .1), inset 0 0 0 1px rgba(25, 25, 25, .05);
+}
+
+/* 图像生成的模型档位：每颗直接标这一档的积分，选中就按这个价扣 */
+.lc-models {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lc-models::-webkit-scrollbar { display: none; }
+.lc-model {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #ffffff;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .18s var(--ease), background .18s var(--ease), color .18s var(--ease);
+}
+.lc-model:hover { border-color: #d9d5ce; color: var(--ink); }
+.lc-model.on { background: #191919; border-color: #191919; color: #ffffff; }
+.lc-model-name { white-space: nowrap; }
+.lc-model-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.lc-model.on .lc-model-cost { color: rgba(255, 255, 255, .64); }
+.lc-model-cost s { text-decoration: line-through; opacity: .65; }
+
+/* 窄屏：模型档位换成换行排列，不横向滚动——被裁掉半颗胶囊会像 bug */
+@media (max-width: 640px) {
+  .lc-models { flex-wrap: wrap; overflow: visible; }
+  .lc-model { height: 30px; padding: 0 10px; font-size: 12px; }
 }
 
 /* 可访问性：键盘聚焦统一给一圈品牌橙，不用浏览器默认蓝 */
@@ -865,42 +1002,24 @@ body:has(.app.is-site) { background: #ffffff; }
   border-top: 1px solid var(--line);
   padding: 44px 0 52px;
 }
+/* 页脚只有两段：字标在左，版权 + 法务在右。
+   中间那组「积分价格 / 帮助与反馈 / 邮箱」按需求撤掉，不再占一行。 */
 .site-foot-in {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 40px;
+  gap: 32px;
   flex-wrap: wrap;
 }
 .site-foot-brand { display: flex; flex-direction: column; gap: 8px; }
 .site-foot-brand b { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
 .site-foot-brand b i { font-style: normal; color: var(--brand); }
 .site-foot-brand span { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
-.site-foot-links { display: flex; gap: 26px; flex-wrap: wrap; }
-.site-foot-links a,
-.site-foot-links button {
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  font-size: 13px;
-  color: var(--muted);
-  text-decoration: none;
-  cursor: pointer;
-  transition: color .2s var(--ease);
-}
-.site-foot-links a:hover,
-.site-foot-links button:hover { color: var(--ink); }
 .site-foot-legal {
-  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
   flex-wrap: wrap;
-  margin-top: 30px;
-  padding-top: 22px;
-  border-top: 1px solid var(--line-soft);
   font-size: 11.5px;
   color: #a09a93;
 }
@@ -1138,8 +1257,7 @@ body:has(.app.is-site) { background: #ffffff; }
   .site-about-grid { grid-template-columns: 1fr; gap: 30px; margin-top: 56px; padding-top: 32px; }
   .site-about-quote { margin-top: 56px; padding: 36px 0; }
   .site-foot { padding: 32px 0 40px; }
-  .site-foot-in { gap: 24px; }
-  .site-foot-links { gap: 18px; }
+  .site-foot-in { gap: 18px; }
   .site-studio-bar { padding: 14px 22px; }
   .site-studio-canvas { margin: 14px; border-radius: 16px; padding: 32px 20px; }
   .site-intro-skip { right: 20px; bottom: 22px; }

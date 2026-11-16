@@ -29,7 +29,7 @@ export function SiteLogo({ onClick, sub = false }: { onClick?: () => void; sub?:
   const { t } = useLang();
   return <button className="site-logo" onClick={onClick || (() => go('/'))} aria-label={t('LunaSol 首页', 'LunaSol home')}>
     <b>Luna<i>Sol</i></b>
-    {sub && <span>{t('AI 包装设计工作室', 'AI Packaging Studio')}</span>}
+    {sub && <span>{t('人人都能成为设计师', 'Everyone can be a designer')}</span>}
   </button>;
 }
 

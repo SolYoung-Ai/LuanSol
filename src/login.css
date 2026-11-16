@@ -295,7 +295,8 @@
 .lg-primary:disabled {
   background: #ebe7e1;
   border-color: #e2ddd6;
-  color: #a29c94;
+  /* 文本不能只靠 0.45 透明度：白底上会糊成一片，用户直接说「按钮根本看不到」 */
+  color: #8f8981;
   cursor: not-allowed;
   box-shadow: none;
 }

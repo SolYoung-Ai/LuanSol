@@ -18,6 +18,7 @@ import { go } from '../ui';
 import { useAuth, isEmail } from '../cloud/auth';
 import { humanizeAuthError } from '../cloud/authErrors';
 import { LOGIN_CONFIG, NO_SMS_HINT, NO_SMS_HINT_EN } from '../cloud/loginConfig';
+import { PRICING } from '../cloud/plans';
 import { useLang } from '../i18n';
 import BrandLoop from '../site/BrandLoop';
 
@@ -284,7 +285,7 @@ export default function Login() {
       <footer className="lg-foot">
         <span className="lg-foot-word">Luna<i>Sol</i></span>
         <span className="lg-foot-help">
-          {t('需要帮助？', 'Need help?')} <a href="mailto:hello@solyoung.top">hello@solyoung.top</a>
+          {t('需要帮助？', 'Need help?')} <a href={`mailto:${PRICING.supportEmail}`}>{PRICING.supportEmail}</a>
         </span>
       </footer>
     </section>
