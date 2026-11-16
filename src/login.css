@@ -1,9 +1,10 @@
 /* ============================================================
  * LunaSol 2.0 · 登录 / 注册页（/login）
  * ------------------------------------------------------------
- * 结构：左 50% 深色品牌视觉（橙色粒子场）+ 右 50% 暖白表单。
- * 所有动效只用 transform / opacity，且尊重 prefers-reduced-motion。
- * 与营销页共用 --mk-* token，不引入新字体。
+ * 结构：左 50% 品牌视觉（白底 + 橙色晨光）+ 右 50% 表单。
+ * 注意：品牌 token 定义在本文件里——brand.css 已经不引入了，
+ *       之前 --mk-* 全是空值，边框会退化成 currentColor。
+ * 视觉口径与公开站点一致：纯白底 + 液态玻璃的按钮与输入框。
  * ============================================================ */
 
 .app.is-auth { padding-left: 0 !important; background: var(--mk-bg); }
@@ -19,6 +20,13 @@
 }
 
 .lg {
+  --mk-bg: #ffffff;
+  --mk-ink: #191919;
+  --mk-sub: #89847e;
+  --mk-line: #eae7e1;
+  --mk-brand: #f47735;
+  --mk-ease: cubic-bezier(.22, .61, .36, 1);
+  --mk-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Segoe UI", Roboto, sans-serif;
   display: grid;
   grid-template-columns: 1fr 1fr;
   min-height: 100vh;
@@ -33,63 +41,62 @@
 .lg-visual {
   position: relative;
   overflow: hidden;
-  background: #070706;
+  background:
+    radial-gradient(120% 78% at 50% 64%, rgba(244, 119, 53, .1) 0%, rgba(244, 119, 53, 0) 62%),
+    linear-gradient(180deg, #ffffff 0%, #fbf8f4 100%);
+  border-right: 1px solid var(--mk-line);
   isolation: isolate;
 }
-.lg-v-dots {
-  position: absolute; left: -55%; right: -55%; top: 57%; bottom: -18%;
-  background-image:
-    radial-gradient(circle, rgba(255, 152, 88, 0.95) 1.1px, transparent 1.8px),
-    radial-gradient(circle, rgba(244, 119, 53, 0.55) 0.8px, transparent 1.4px);
-  background-size: 26px 26px, 13px 13px;
-  background-position: 0 0, 6px 6px;
-  opacity: 0.55;
-  transform: perspective(420px) rotateX(70deg);
-  transform-origin: 50% 0%;
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.85) 9%, #000 30%, rgba(0, 0, 0, 0.35) 78%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.85) 9%, #000 30%, rgba(0, 0, 0, 0.35) 78%, transparent 100%);
-  animation: lg-drift 26s ease-in-out infinite;
+/* 三件包装：底边贴着地平线，轻微重叠建立层次 */
+.lg-v-packs {
+  position: absolute;
+  left: 50%;
+  bottom: 42%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  pointer-events: none;
+  /* 必须压在白雾（vignette）之上：它写在 DOM 后面会把三件包装洗成半透明 */
+  z-index: 1;
 }
+.lg-v-packs > * { flex: 0 0 auto; margin-left: -6px; filter: drop-shadow(0 20px 24px rgba(120, 96, 70, .18)); }
+.lg-v-packs > *:first-child { margin-left: 0; }
+
 .lg-v-horizon {
   position: absolute; left: -10%; right: -10%; top: 58%; height: 1.5px;
-  background: linear-gradient(90deg, transparent 4%, rgba(255, 163, 104, 0.35) 22%,
-    rgba(255, 186, 132, 0.95) 50%, rgba(255, 163, 104, 0.35) 78%, transparent 96%);
-  box-shadow: 0 0 34px 6px rgba(244, 119, 53, 0.4), 0 0 90px 24px rgba(244, 119, 53, 0.16);
+  background: linear-gradient(90deg, transparent 4%, rgba(244, 119, 53, 0.28) 24%,
+    rgba(244, 119, 53, 0.72) 50%, rgba(244, 119, 53, 0.28) 76%, transparent 96%);
+  box-shadow: 0 0 30px 5px rgba(244, 119, 53, 0.16);
 }
 .lg-v-glow {
   position: absolute; left: 50%; top: 58%;
   width: 96%; aspect-ratio: 1 / 0.44;
   transform: translate(-50%, -50%);
-  background: radial-gradient(closest-side, rgba(255, 145, 76, 0.5), rgba(244, 119, 53, 0.2) 40%, transparent 70%);
-  filter: blur(30px);
+  background: radial-gradient(closest-side, rgba(255, 152, 88, 0.26), rgba(244, 119, 53, 0.1) 42%, transparent 70%);
+  filter: blur(26px);
   animation: lg-breathe 9s ease-in-out infinite;
 }
 .lg-v-beam {
   position: absolute; left: 50%; top: 58%;
   width: 1px; height: 34%;
   transform-origin: 50% 0;
-  background: linear-gradient(180deg, rgba(255, 186, 138, 0.55), rgba(244, 119, 53, 0.08) 55%, transparent);
+  background: linear-gradient(180deg, rgba(244, 119, 53, 0.3), rgba(244, 119, 53, 0.06) 55%, transparent);
   filter: blur(1.4px);
-  opacity: 0.5;
+  opacity: 0.55;
 }
 .lg-v-beam-a { transform: rotate(15deg) translateY(0); }
 .lg-v-beam-b { transform: rotate(-16deg) translateY(3%); opacity: 0.35; height: 26%; }
 .lg-v-vignette {
   position: absolute; inset: 0;
   background:
-    radial-gradient(90% 70% at 50% 55%, transparent 30%, rgba(0, 0, 0, 0.55) 100%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 34%, rgba(0, 0, 0, 0.6));
+    radial-gradient(95% 75% at 50% 55%, transparent 42%, rgba(255, 255, 255, 0.92) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), transparent 34%, rgba(255, 255, 255, 0.85));
 }
 .lg-v-mark {
   position: absolute; left: 40px; bottom: 48px;
   display: flex; align-items: center; gap: 10px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--mk-ink);
   font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase;
-}
-.lg-v-line {
-  position: absolute; left: 40px; bottom: 96px;
-  margin: 0; color: rgba(255, 255, 255, 0.42);
-  font-size: 13px; line-height: 1.9; letter-spacing: 0.02em;
 }
 
 @keyframes lg-drift {
@@ -126,9 +133,10 @@
 .lg-toggle {
   display: inline-flex; gap: 2px;
   padding: 3px;
-  border: 1px solid var(--mk-line);
+  border: 1px solid rgba(25, 25, 25, .09);
   border-radius: 999px;
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f5f2 100%);
+  box-shadow: inset 0 1px 0 #fff;
 }
 .lg-toggle button {
   height: 34px; padding: 0 18px;
@@ -140,7 +148,7 @@
 .lg-toggle button:hover { color: var(--mk-ink); }
 .lg-toggle button.is-on {
   background: #fff; color: var(--mk-ink); font-weight: 500;
-  box-shadow: 0 1px 2px rgba(25, 25, 25, 0.08), 0 4px 14px -6px rgba(25, 25, 25, 0.16);
+  box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(25, 25, 25, 0.08), 0 6px 16px -8px rgba(25, 25, 25, 0.2);
 }
 
 .lg-form {
@@ -170,8 +178,10 @@
 .lg-input {
   width: 100%; height: 50px;
   margin-bottom: 18px; padding: 0 16px;
-  border: 1px solid var(--mk-line); border-radius: 12px;
-  background: #fff; color: var(--mk-ink);
+  border: 1px solid rgba(25, 25, 25, .09); border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #faf8f5 100%);
+  box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(16, 16, 16, .03);
+  color: var(--mk-ink);
   font: inherit; font-size: 15px;
   transition: border-color 0.2s var(--mk-ease), box-shadow 0.2s var(--mk-ease);
   -webkit-appearance: none; appearance: none;
@@ -187,14 +197,27 @@
   display: flex; align-items: center; justify-content: center; gap: 10px;
   width: 100%; height: 50px; margin-top: 6px;
   border: 0; border-radius: 12px;
-  background: var(--mk-brand); color: #fff;
+  border: 1px solid rgba(255, 255, 255, .34);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .34) 0%, rgba(255, 255, 255, .06) 46%, rgba(255, 255, 255, 0) 70%),
+    linear-gradient(180deg, #f8873f 0%, #ef6a27 100%);
+  color: #fff;
   font: inherit; font-size: 15px; font-weight: 500; letter-spacing: 0.01em;
   cursor: pointer;
-  box-shadow: 0 10px 24px -14px rgba(244, 119, 53, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .5),
+    inset 0 -1px 0 rgba(150, 60, 10, .18),
+    0 14px 28px -16px rgba(244, 119, 53, 0.9);
   transition: background 0.22s var(--mk-ease), transform 0.22s var(--mk-ease), box-shadow 0.22s var(--mk-ease);
 }
 .lg-primary span { transition: transform 0.22s var(--mk-ease); }
-.lg-primary:hover:not(:disabled) { background: #e86a2a; box-shadow: 0 14px 28px -14px rgba(244, 119, 53, 0.95); }
+.lg-primary:hover:not(:disabled) {
+  filter: saturate(1.04) brightness(1.02);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .55),
+    inset 0 -1px 0 rgba(150, 60, 10, .18),
+    0 18px 32px -16px rgba(244, 119, 53, 0.95);
+}
 .lg-primary:hover:not(:disabled) span { transform: translateX(3px); }
 .lg-primary:active:not(:disabled) { transform: translateY(1px); }
 .lg-primary:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
@@ -202,13 +225,15 @@
 .lg-oauth {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   width: 100%; height: 50px;
-  border: 1px solid var(--mk-line); border-radius: 12px;
-  background: #fff; color: var(--mk-ink);
+  border: 1px solid rgba(25, 25, 25, .09); border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #faf8f5 100%);
+  box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(16, 16, 16, .03);
+  color: var(--mk-ink);
   font: inherit; font-size: 14.5px;
   cursor: pointer;
   transition: border-color 0.22s var(--mk-ease), background 0.22s var(--mk-ease);
 }
-.lg-oauth:hover:not(:disabled) { border-color: #d8d3cb; background: #fdfcfa; }
+.lg-oauth:hover:not(:disabled) { border-color: rgba(25, 25, 25, .16); background: #fff; }
 .lg-oauth:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .lg-or {
@@ -266,9 +291,15 @@
 /* ---------- 移动端：单栏，深色视觉压成顶部横幅 ---------- */
 @media (max-width: 900px) {
   .lg { grid-template-columns: 1fr; }
-  .lg-visual { min-height: 188px; }
-  .lg-v-line { display: none; }
-  .lg-v-mark { left: 26px; bottom: 22px; }
+  /* 横幅：包装按比例缩到 0.5 并贴着地平线，否则原尺寸会从顶部被切掉 */
+  .lg-visual { min-height: 210px; }
+  /* 地平线下移到 68%，包装按 0.5 缩放后正好站在线上且不顶出横幅 */
+  .lg-v-horizon { top: 68%; }
+  .lg-v-glow { top: 68%; }
+  .lg-v-beam { display: none; }
+  .lg-v-packs { transform: translateX(-50%) scale(.5); transform-origin: center bottom; bottom: 32%; }
+  /* 页头已经有字标，横幅里再放一个会撞在一起 */
+  .lg-v-mark { display: none; }
   .lg-panel { padding: 20px 22px 18px; }
   .lg-form { padding: 34px 0 26px; justify-content: flex-start; }
   .lg-h1 { margin-bottom: 26px; font-size: 28px; }
@@ -276,11 +307,12 @@
 }
 @media (max-width: 420px) {
   .lg-toggle button { padding: 0 12px; font-size: 12.5px; }
-  .lg-brand-name { display: none; }
+  /* 字标留着：之前隐藏后会剩一个孤零零的橙点 */
+  .lg-brand-name { font-size: 13.5px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lg-v-dots, .lg-v-glow { animation: none; }
+  .lg-v-glow { animation: none; }
   .lg-top, .lg-form, .lg-foot { animation: none; }
   .lg-primary, .lg-primary span, .lg-input { transition: none; }
 }
