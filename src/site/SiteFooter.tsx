@@ -18,8 +18,9 @@ export default function SiteFooter() {
     <div className="site-wrap">
       <div className="site-foot-in">
         <div className="site-foot-brand">
-          <SiteLogo sub />
-          <span>{t('从一个想法，到一份完整的包装设计。', 'From one idea to a complete packaging design.')}</span>
+          {/* 页脚只留字标：副标与「从一个想法……」这类小字已经去掉，
+              品牌层不再自证口号，留白本身就是语气 */}
+          <SiteLogo />
         </div>
         <div className="site-foot-links">
           <a href="./pricing/">{t('积分价格', 'Pricing')}</a>
@@ -28,7 +29,7 @@ export default function SiteFooter() {
         </div>
       </div>
       <div className="site-foot-legal">
-        <span>© 2026 LunaSol · {t('AI 包装设计工作室', 'AI Packaging Design Studio')}</span>
+        <span>© 2026 LunaSol</span>
         <span>
           <a href="./terms/">{t('服务条款', 'Terms')}</a>
           {' · '}

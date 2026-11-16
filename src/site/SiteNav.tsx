@@ -1,8 +1,10 @@
 /* ============================================================
    公开站点的顶部导航
    ------------------------------------------------------------
-   左：字标。中：Home / Product / About（真居中，不用 flex 挤）。
+   左：字标。中：首页 / 产品 / 关于（真居中，不用 flex 挤）。
    右：未登录是「登录」，已登录是「头像 + 积分 + 账户菜单」。
+   「产品」是一个下拉菜单而不是直达链接——2.0 的产品线只有一条，
+   菜单里只放「包装设计」，以后新增能力往同一个菜单里加即可。
    不使用旧站 Nav 的原因：旧 Nav 顶部挂着「Luna Ai / 包装设计 / 复刻设计」
    四个产品入口，那是旧信息架构，2.0 的公开站点只讲三件事。
    账户菜单只做「余额 / 账户 / 帮助 / 退出」——不把用户送回旧版工作台。
@@ -14,10 +16,10 @@ import { useProfile } from '../cloud/profile';
 import { go, useHash } from '../ui';
 import { useLang } from '../i18n';
 
-const LINKS = [
-  { zh: 'Home', en: 'Home', path: '/' },
-  { zh: 'Product', en: 'Product', path: '/product' },
-  { zh: 'About', en: 'About', path: '/about' },
+/** 产品下拉里的条目：目前只有包装设计。
+ *  用数组而不是写死一行，是为了以后加「复刻设计」「结构库」时不用改结构。 */
+const PRODUCT_MENU = [
+  { zh: '包装设计', en: 'Packaging design', desc: '从想法到可印刷的刀版', descEn: 'From idea to a print-ready dieline', path: '/product' },
 ];
 
 /** 字标：导航里只留 LunaSol（顶部 72px 内加一行 9px 副标会变成噪点），
@@ -39,7 +41,10 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const [stuck, setStuck] = useState(false);
   const [menu, setMenu] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [drop, setDrop] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const hoverTimer = useRef<number | undefined>(undefined);
   const path = hash.split('?')[0];
 
   useEffect(() => {
@@ -60,8 +65,31 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
   }, [menu]);
 
+  // 产品下拉：点开之后点空白或 Esc 都要收起（桌面悬停走下面的 enter/leave）
+  useEffect(() => {
+    if (!drop) return;
+    const away = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDrop(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrop(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [drop]);
+
   // 换路由关掉所有浮层，否则从菜单里跳页后菜单还挂在那儿
-  useEffect(() => { setMenu(false); setSheet(false); }, [path]);
+  useEffect(() => { setMenu(false); setSheet(false); setDrop(false); }, [path]);
+
+  // 桌面悬停即展开：鼠标移开留 120ms 宽限，避免斜着划过时闪断
+  const openDrop = () => {
+    window.clearTimeout(hoverTimer.current);
+    setDrop(true);
+  };
+  const closeDropSoon = () => {
+    window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => setDrop(false), 120);
+  };
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
 
   const user = auth.user;
   const credits = sub.usedLeft;
@@ -75,21 +103,56 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
         <SiteLogo />
 
         <div className="site-links">
-          {LINKS.map((l) => (
+          <button
+            className={`site-link ${path === '/' ? 'is-on' : ''}`}
+            onClick={() => go('/')}
+            aria-current={path === '/' ? 'page' : undefined}
+          >{t('首页', 'Home')}</button>
+
+          <div
+            className="site-drop-wrap"
+            ref={dropRef}
+            onMouseEnter={openDrop}
+            onMouseLeave={closeDropSoon}
+          >
             <button
-              key={l.path}
-              className={`site-link ${path === l.path ? 'is-on' : ''}`}
-              onClick={() => go(l.path)}
-              aria-current={path === l.path ? 'page' : undefined}
-            >{t(l.zh, l.en)}</button>
-          ))}
+              className={`site-link site-drop-btn ${path === '/product' ? 'is-on' : ''} ${drop ? 'is-open' : ''}`}
+              onClick={() => setDrop((v) => !v)}
+              aria-expanded={drop}
+              aria-haspopup="menu"
+            >
+              {t('产品', 'Product')}
+              <svg className="site-link-caret" viewBox="0 0 12 12" aria-hidden>
+                <path d="M3 4.6 6 7.6 9 4.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            {drop && <div className="site-drop" role="menu">
+              {PRODUCT_MENU.map((m) => <button
+                key={m.path}
+                className="site-drop-item"
+                role="menuitem"
+                onClick={() => { setDrop(false); go(m.path); }}
+              >
+                <b>{t(m.zh, m.en)}</b>
+                <span>{t(m.desc, m.descEn)}</span>
+              </button>)}
+            </div>}
+          </div>
+
+          <button
+            className={`site-link ${path === '/about' ? 'is-on' : ''}`}
+            onClick={() => go('/about')}
+            aria-current={path === '/about' ? 'page' : undefined}
+          >{t('关于', 'About')}</button>
         </div>
 
         <div className="site-actions" ref={menuRef}>
           {/* 不等 auth.ready：云端会话恢复在冷启动时可能要几秒，
               期间右侧空白会让人以为「没有登录入口」。
-              已登录用户会短暂看到「登录」再换成头像，比空着可接受。 */}
-          {!user && <button className="site-login" onClick={onLogin}>{t('登录', 'Log in')}</button>}
+              已登录用户会短暂看到「登录」再换成头像，比空着可接受。
+              注意 onClick 必须包一层：直接挂 onLogin 会把 MouseEvent 当参数传进去。 */}
+          {!user && <button className="site-login" onClick={() => onLogin()}>{t('登录', 'Log in')}</button>}
 
           {user && <>
             <button
@@ -148,11 +211,19 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
     </nav>
 
     {sheet && <div className="site-sheet">
-      {LINKS.map((l) => (
-        <button key={l.path} className="site-sheet-link" onClick={() => go(l.path)}>
-          {t(l.zh, l.en)}<span>→</span>
-        </button>
-      ))}
+      <button className="site-sheet-link" onClick={() => go('/')}>
+        {t('首页', 'Home')}<span>→</span>
+      </button>
+      {/* 手机上不做二级浮层：产品菜单只有一条，直接摊平成「产品 / 包装设计」两级行 */}
+      <button className="site-sheet-link" onClick={() => go('/product')}>
+        {t('产品', 'Product')}<span>→</span>
+      </button>
+      <button className="site-sheet-link is-sub" onClick={() => go('/product')}>
+        {t('包装设计', 'Packaging design')}<span>→</span>
+      </button>
+      <button className="site-sheet-link" onClick={() => go('/about')}>
+        {t('关于', 'About')}<span>→</span>
+      </button>
       {user
         ? <>
           <button className="site-sheet-link" onClick={() => go('/credits')}>

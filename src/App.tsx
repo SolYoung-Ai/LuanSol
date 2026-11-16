@@ -86,7 +86,9 @@ export default function App() {
   // 必须稳定引用：SubscriptionProvider 会把它放进 useEffect 依赖，
   // 每次渲染都新建函数会让闸门反复注销重注册，中间存在计量空窗。
   const requestLogin = useCallback((target?: string) => {
-    const cur = target || window.location.hash.replace(/^#/, '') || '/';
+    // 只接受字符串：这个词也会被当作 onClick 直接挂到按钮上，
+    // 那时第一个参数是 MouseEvent，`.startsWith` 会直接抛错（登录点了没反应就是这个）
+    const cur = (typeof target === 'string' && target) || window.location.hash.replace(/^#/, '') || '/';
     if (cur.startsWith('/login')) return;            // 已经在登录页，不要自我跳转
     go(`/login?next=${encodeURIComponent(cur)}`);    // 登录后回到发起登录的位置
   }, []);
