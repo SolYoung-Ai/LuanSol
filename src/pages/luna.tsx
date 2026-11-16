@@ -166,17 +166,6 @@ function Pick({
   );
 }
 
-/** 「对话」模式的说明：平台统一模型，免费不扣积分，
- *  纯积分制下界面不提供语言模型选择（模式切换在输入区上方）。 */
-function ChatTag() {
-  const { t } = useLang();
-  return (
-    <span className="lc-tag lc-tag-static" title={t('对话由平台 AI 提供，免费不扣积分', 'Chat is powered by platform AI, free and spends no credits')}>
-      <Icon name="spark" size={14} />{t('平台模型 · 免费不扣积分', 'Platform model · free')}
-    </span>
-  );
-}
-
 /** 未登录：不在页面里弹登录框，直接送去独立登录页，登录完回到 /luna。
  *  全站只有一个登录界面（/login），避免「弹窗版 / 整页版」两套并存。 */
 function LoginGate() {
@@ -247,6 +236,16 @@ export default function Luna() {
   const [input, setInput] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /* 桌面左栏可收起：收起后留一条窄轨（新建对话 + 头像），跨会话记忆。
+     移动端抽屉不用这个状态，抽屉永远按展开态渲染。 */
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('lunasol_luna_rail') === '1'; } catch { return false; }
+  });
+  const toggleCollapsed = () => setCollapsed((v) => {
+    const next = !v;
+    try { localStorage.setItem('lunasol_luna_rail', next ? '1' : '0'); } catch { /* 隐私模式忽略 */ }
+    return next;
+  });
   const [ratioId, setRatioId] = useState('auto');
   const [styleId, setStyleId] = useState('none');
   const [templateId, setTemplateId] = useState('none');
@@ -407,37 +406,72 @@ export default function Luna() {
 
       {/* ------------------------------ 左侧栏 ------------------------------
           桌面端常驻（参考豆包的信息架构）：上面是新建对话 + 搜索 + 会话列表，
-          底部是账号卡。手机端（≤860px）同一份内容变成左滑抽屉，
-          由顶栏的菜单按钮打开——DOM 只写一份，两边共用。 */}
-      <aside className={`lc-side ${drawerOpen ? 'drawer-open' : ''}`}>
-        <div className="lc-side-inner">
+          底部是账号卡。整块做成一张浮起来的液态玻璃卡片（不是通栏白板），
+          标题行右侧的 « 可以把它收成一条窄轨，状态记在本机。
+          手机端（≤860px）同一份内容变成左滑抽屉，由顶栏的菜单按钮打开。 */}
+      <aside className={`lc-side ${collapsed && !isMobile ? 'is-collapsed' : ''} ${drawerOpen ? 'drawer-open' : ''}`}>
+        <div className="lc-side-head">
           <div className="lc-side-brand">Luna<span>AI</span></div>
-          <LunaChats onPicked={() => setDrawerOpen(false)} />
+          {isMobile ? (
+            <button
+              className="lc-side-icon"
+              onClick={() => setDrawerOpen(false)}
+              title={t('关闭菜单', 'Close menu')}
+              aria-label={t('关闭菜单', 'Close menu')}
+            ><Icon name="close" size={16} /></button>
+          ) : (
+            <button
+              className="lc-side-icon"
+              onClick={toggleCollapsed}
+              title={collapsed ? t('展开对话栏', 'Expand sidebar') : t('收起对话栏', 'Collapse sidebar')}
+              aria-label={collapsed ? t('展开对话栏', 'Expand sidebar') : t('收起对话栏', 'Collapse sidebar')}
+              aria-expanded={!collapsed}
+            ><Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={16} /></button>
+          )}
+        </div>
 
-          <div className="lc-side-foot">
-            <div className="lc-user">
+        {collapsed && !isMobile ? (
+          /* 收起态：只留「新建对话 / 展开列表」两颗按钮和头像 */
+          <div className="lc-rail">
+            <button
+              className="lc-rail-btn"
+              onClick={() => chat.newConversation()}
+              title={t('新建对话', 'New chat')}
+              aria-label={t('新建对话', 'New chat')}
+            ><Icon name="plus" size={18} /></button>
+            <button
+              className="lc-rail-btn"
+              onClick={toggleCollapsed}
+              title={t('展开对话列表', 'Show chat list')}
+              aria-label={t('展开对话列表', 'Show chat list')}
+            ><Icon name="message" size={17} /></button>
+            <div className="lc-rail-foot" title={auth.user.label || auth.user.email}>
               <div className="lc-user-avatar">
                 {auth.user.avatarUrl
                   ? <img src={auth.user.avatarUrl} alt={t('头像', 'Avatar')} />
                   : initial}
               </div>
-              <div className="lc-user-meta">
-                <div className="lc-user-name">{auth.user.label || auth.user.email}</div>
-                <div className={`lc-user-sync ${chat.syncState}`}>{syncLabel}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="lc-side-inner">
+            <LunaChats onPicked={() => setDrawerOpen(false)} />
+
+            <div className="lc-side-foot">
+              <div className="lc-user">
+                <div className="lc-user-avatar">
+                  {auth.user.avatarUrl
+                    ? <img src={auth.user.avatarUrl} alt={t('头像', 'Avatar')} />
+                    : initial}
+                </div>
+                <div className="lc-user-meta">
+                  <div className="lc-user-name">{auth.user.label || auth.user.email}</div>
+                  <div className={`lc-user-sync ${chat.syncState}`}>{syncLabel}</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-
-        {isMobile && <button
-          className="lc-side-toggle"
-          onClick={() => setDrawerOpen(false)}
-          title={t('关闭菜单', 'Close menu')}
-          aria-label={t('关闭菜单', 'Close menu')}
-        >
-          <Icon name="close" size={16} />
-          <span className="lc-side-toggle-text">{t('关闭菜单', 'Close menu')}</span>
-        </button>}
+        )}
       </aside>
 
       {/* 移动端抽屉遮罩：点击空白处关闭 */}
@@ -581,11 +615,11 @@ export default function Luna() {
                 <button className="lc-round" title={t('上传参考图', 'Upload reference')} onClick={() => fileRef.current?.click()}>
                   <Icon name="plus" size={18} />
                 </button>
-                <span className="lc-bar-sep" />
 
-                {mode === 'chat' ? (
-                  <ChatTag />
-                ) : (
+                {/* 对话模式不再挂「平台模型 · 免费不扣积分」那枚说明胶囊：
+                    模式切换本身已经交代了在聊还是在出图，多一行字只是噪音。
+                    图像模式仍然保留比例 / 风格 / 模板三个参数。 */}
+                {mode === 'image' && (
                   <>
                     <Pick
                       caption={t('比例', 'Ratio')}

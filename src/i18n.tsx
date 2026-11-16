@@ -37,8 +37,8 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute('lang', lang === 'en' ? 'en' : 'zh-CN');
     // 标签页标题也跟着语言走：它是最容易被漏掉的界面文案
     document.title = lang === 'en'
-      ? 'LunaSol — AI Packaging Design Studio'
-      : 'LunaSol — AI 包装设计工作室';
+      ? 'LunaSol — Design, made simple'
+      : 'LunaSol — 让设计不再复杂';
   }, [lang]);
 
   const t = (zh: string, en: string) => (lang === 'en' ? en : zh);
