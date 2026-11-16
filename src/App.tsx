@@ -244,7 +244,9 @@ export default function App() {
 
             {isPublic ? <>
               <SiteNav onLogin={requestLogin} />
-              <Suspense fallback={null}>
+              {/* 公开页的 chunk 都是几十 KB，但首屏遇到发版瞬间仍可能等一两秒。
+                  这里不给「空白 + 页脚顶上来」的画面，先占住一屏高度。 */}
+              <Suspense fallback={<div className="site-page" style={{ minHeight: '72vh' }} />}>
                 {page}
                 <RouteReady key={`ready:${hash}`} onReady={markShown} />
               </Suspense>
