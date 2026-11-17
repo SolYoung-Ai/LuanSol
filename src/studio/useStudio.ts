@@ -13,7 +13,9 @@ import {
 import { projectName, type StudioProject } from './types';
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'local' | 'error';
-export type LoadState = 'loading' | 'ready' | 'missing';
+/** locked = 未登录。项目按账号存档，没登录时既读不到本机缓存也读不到云端，
+ *  必须给一个明确的出口，不能让转圈一直转下去。 */
+export type LoadState = 'loading' | 'ready' | 'missing' | 'locked';
 
 export function useStudioProject(id: string) {
   const auth = useAuth();
@@ -37,7 +39,11 @@ export function useStudioProject(id: string) {
 
   /* ------------------------------ 读取 ------------------------------ */
   useEffect(() => {
-    if (!uid) return;
+    /* 会话还没确认完就先等；确认完了没有账号，直接进「需要登录」，
+       否则这个页面会永远停在「正在打开…」——这条路由不强制登录，
+       用户从旧链接进来时正好会踩到。 */
+    if (!auth.ready) return;
+    if (!uid) { setLoadState('locked'); return; }
     let alive = true;
     void (async () => {
       const r = await pullStudioByRow(uid, id);
@@ -59,7 +65,7 @@ export function useStudioProject(id: string) {
       setLoadState('ready');
     })();
     return () => { alive = false; };
-  }, [uid, id]);
+  }, [uid, id, auth.ready]);
 
   /* ------------------------------ 写云端 ------------------------------ */
   const flush = useCallback(async (p: StudioProject) => {

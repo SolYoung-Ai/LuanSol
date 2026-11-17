@@ -11,9 +11,16 @@ import {
   CATEGORIES, COLORS, PATTERNS, STYLES, ans, formsFor, recommendSize, sizeOk, sizeText,
   type FormId, type PatternId, type SizeMM, type StyleId, type StudioProject,
 } from './types';
-import { CategoryArt, FormArt, PatternArt, StyleArt, Check } from './art';
 import { compressImageForUpload } from '../workflow/imageUtils';
 import { tl } from '../langStore';
+
+/** 选中标记：白勾 + 描边，压在深底上时换成纯白 */
+const Check = ({ light = false }: { light?: boolean }) => (
+  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+    <path d="M3.2 8.4l3 3.1 6.6-6.9" fill="none" stroke={light ? '#fff' : '#191919'}
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 export interface StepProps {
   p: StudioProject;
@@ -146,7 +153,6 @@ function StepCategory({ p, set, t }: StepProps) {
         })}
         aria-pressed={on}
       >
-        <span className="st-cat-art"><CategoryArt id={c.id} /></span>
         <b>{t(c.zh, c.en)}</b>
         <em>{t(c.hintZh, c.hintEn)}</em>
         {on && <span className="st-tick"><Check light /></span>}
@@ -225,7 +231,6 @@ function StepForm({ p, set, t }: StepProps) {
           };
         })}
       >
-        <span className="st-form-art"><FormArt id={f.id} /></span>
         <b>{t(f.zh, f.en)}</b>
         <em>{t('约 ', 'about ')}{f.size.l}×{f.size.w}×{f.size.h} mm</em>
         {on && <span className="st-tick"><Check light /></span>}
@@ -343,7 +348,6 @@ function StepStyle({ p, set, t }: StepProps) {
             },
           }))}
         >
-          <span className="st-style-art"><StyleArt id={s.id} /></span>
           <span className="st-style-meta"><b>{t(s.zh, s.en)}</b><em>{t(s.hintZh, s.hintEn)}</em></span>
           {on && <span className="st-style-on">{t('主风格', 'Lead')}</span>}
         </button>;
@@ -468,9 +472,8 @@ function StepPattern({ p, set, t }: StepProps) {
       {PATTERNS.map((x) => {
         const picked = on.includes(x.id);
         return <button key={x.id} className={`st-pat ${picked ? 'on' : ''}`} aria-pressed={picked} onClick={() => toggle(x.id)}>
-          <span className="st-pat-art"><PatternArt id={x.id} /></span>
           <b>{t(x.zh, x.en)}</b>
-          {picked && <span className="st-tick"><Check light /></span>}
+          {picked && <span className="st-pat-on" aria-hidden><Check /></span>}
         </button>;
       })}
     </div>

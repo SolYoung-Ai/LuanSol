@@ -4,7 +4,8 @@
    版式参考 B.AI：字标贴最左，导航项紧跟字标右侧（左对齐，不再居中），
    右侧只放账户动作。这样宽屏上眼睛从左往右读，不会被中间一块空白劈开。
    顺序：首页 / 产品⌄ / Luna AI / 关于。
-   「产品」是下拉：包装设计（介绍页）、复刻设计（按参考图出稿）。
+   「产品」是下拉：包装设计（直接进工作台）、复刻设计（按参考图出稿）。
+   产品介绍页已撤掉——点「包装设计」就是进 /studio 开工，中间不再夹一页说明。
    左边栏（开始 / Luna AI / 包装设计 / 复刻设计）已经整块撤掉，
    入口全部收到这条导航与账户菜单里，所以这里必须能到达每个真实页面。
    账户菜单只做「余额 / 账户 / 帮助 / 退出」。
@@ -17,9 +18,10 @@ import { go, useHash } from '../ui';
 import { useLang } from '../i18n';
 
 /** 产品下拉里的条目。
+ *  包装设计直接进 /studio 工作台（没有中间的产品介绍页）；
  *  复刻设计原来只挂在左侧栏，侧栏撤掉之后必须在这里给一个真实入口。 */
 const PRODUCT_MENU = [
-  { zh: '包装设计', en: 'Packaging design', desc: '从想法到可印刷的刀版', descEn: 'From idea to a print-ready dieline', path: '/product' },
+  { zh: '包装设计', en: 'Packaging design', desc: '进工作台，九步说清需求', descEn: 'Open the studio and brief it in nine steps', path: '/studio' },
   { zh: '复刻设计', en: 'Replicate', desc: '按参考图一比一出稿', descEn: 'Reproduce a reference pack exactly', path: '/replicate' },
 ];
 
@@ -117,7 +119,7 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
             onMouseLeave={closeDropSoon}
           >
             <button
-              className={`site-link site-drop-btn ${path === '/product' ? 'is-on' : ''} ${drop ? 'is-open' : ''}`}
+              className={`site-link site-drop-btn ${path === '/studio' ? 'is-on' : ''} ${drop ? 'is-open' : ''}`}
               onClick={() => setDrop((v) => !v)}
               aria-expanded={drop}
               aria-haspopup="menu"
@@ -221,11 +223,11 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
       <button className="site-sheet-link" onClick={() => go('/')}>
         {t('首页', 'Home')}<span>→</span>
       </button>
-      {/* 手机上不做二级浮层：产品菜单只有一条，直接摊平成「产品 / 包装设计」两级行 */}
-      <button className="site-sheet-link" onClick={() => go('/product')}>
+      {/* 手机上不做二级浮层：产品菜单只有两条，直接摊平成「产品 / 包装设计」两级行 */}
+      <button className="site-sheet-link" onClick={() => go('/studio')}>
         {t('产品', 'Product')}<span>→</span>
       </button>
-      <button className="site-sheet-link is-sub" onClick={() => go('/product')}>
+      <button className="site-sheet-link is-sub" onClick={() => go('/studio')}>
         {t('包装设计', 'Packaging design')}<span>→</span>
       </button>
       <button className="site-sheet-link is-sub" onClick={() => go('/replicate')}>

@@ -143,11 +143,10 @@
 
 .st-home { padding-top: 64px; }
 
+/* 首页只留文字：标题、一句说明、两个动作。
+   右侧那三张示意卡（类别插画的拼贴）已经撤掉——几何图形撑不起这个位置，
+   与其凑一个不如空着，等有真实成品图再放。 */
 .st-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
-  gap: 40px;
-  align-items: center;
   padding-bottom: 56px;
 }
 
@@ -167,30 +166,6 @@
 }
 .st-hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .st-lede-mini { margin-top: 16px; font-size: 12.5px; }
-
-.st-hero-art {
-  position: relative;
-  height: 260px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 10px;
-}
-.st-hero-art > * {
-  width: 96px;
-  height: 120px;
-  padding: 18px;
-  border-radius: 20px;
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, #fff 0%, #faf9f6 100%);
-  color: var(--ink);
-  box-shadow: var(--glass-hi), 0 24px 50px -40px rgba(16, 16, 16, .8);
-  transform-origin: bottom center;
-}
-.st-hero-art > *:nth-child(1) { transform: rotate(-7deg) translateY(-6px); }
-.st-hero-art > *:nth-child(2) { transform: translateY(-24px); z-index: 1; }
-.st-hero-art > *:nth-child(3) { transform: rotate(7deg) translateY(-6px); }
-.st-hero-art svg { width: 100%; height: 100%; }
 
 .st-resume {
   display: flex;
@@ -469,6 +444,13 @@
 
 .st-wizard { max-width: 920px; padding-top: 22px; scroll-margin-top: 92px; }
 
+/* 工作台里全站导航是收起的（.is-nonav），向导自己顶到最上面：
+   顶部那条栏就是页面第一行，不需要再给导航留 92px 的滚动余量 */
+.app.is-site.is-nonav .st-wizard {
+  padding-top: 28px;
+  scroll-margin-top: 0;
+}
+
 .st-loading {
   display: flex;
   align-items: center;
@@ -491,6 +473,7 @@
 .st-missing { max-width: 520px; margin: 12vh auto 0; text-align: center; }
 .st-missing h1 { font-size: 26px; letter-spacing: -.03em; margin: 0 0 12px; }
 .st-missing p { color: var(--muted); font-size: 14px; line-height: 1.8; margin: 0 0 26px; }
+.st-locked-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
 
 .st-bar {
   display: flex;
@@ -628,15 +611,15 @@
   background: var(--ink);
 }
 
-/* 类别卡 */
+/* 类别卡：只有名字 + 一行说明，没有配图（插画已撤，见文件顶部的口径） */
 .st-cat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .st-cat {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
-  padding: 16px;
+  gap: 5px;
+  padding: 18px 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: #fff;
@@ -648,29 +631,18 @@
 }
 .st-cat:hover { border-color: rgba(25, 25, 25, .16); transform: translateY(-2px); box-shadow: 0 18px 36px -34px rgba(16, 16, 16, .9); }
 .st-cat.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink), 0 18px 34px -30px rgba(16, 16, 16, .7); }
-.st-cat-art {
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  margin-bottom: 10px;
-  border-radius: 15px;
-  background: var(--wash);
-  color: var(--ink);
-}
-.st-cat-art svg { width: 38px; height: 38px; }
 .st-cat b { font-size: 14px; font-weight: 500; }
 .st-cat em { font-style: normal; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 
 /* 包装形式卡 */
-.st-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px; }
+.st-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); gap: 10px; }
 .st-form-card {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  padding: 16px 16px 14px;
+  gap: 5px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: #fff;
@@ -682,15 +654,6 @@
 }
 .st-form-card:hover { border-color: rgba(25, 25, 25, .16); transform: translateY(-2px); }
 .st-form-card.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
-.st-form-art {
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 58px;
-  margin-bottom: 8px;
-  color: var(--ink);
-}
-.st-form-art svg { width: 58px; height: 58px; }
 .st-form-card b { font-size: 13.5px; font-weight: 500; }
 .st-form-card em { font-style: normal; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 
@@ -757,15 +720,14 @@ button.st-size-card:hover { border-color: rgba(25, 25, 25, .16); }
   font-size: 13px;
 }
 
-/* 风格 */
-.st-style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+/* 风格：文字卡（原本每张上方有一块 4:5 的风格示意，已撤掉） */
+.st-style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
 .st-style-card {
   position: relative;
-  padding: 0;
+  padding: 15px 16px 16px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
-  overflow: hidden;
   font: inherit;
   text-align: left;
   color: var(--ink);
@@ -774,15 +736,13 @@ button.st-size-card:hover { border-color: rgba(25, 25, 25, .16); }
 }
 .st-style-card:hover { transform: translateY(-2px); border-color: rgba(25, 25, 25, .16); }
 .st-style-card.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink), 0 20px 40px -34px rgba(16, 16, 16, .9); }
-.st-style-art { display: block; aspect-ratio: 4 / 5; overflow: hidden; }
-.st-art-svg { display: block; width: 100%; height: 100%; }
-.st-style-meta { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 12px; }
-.st-style-meta b { font-size: 12.5px; font-weight: 500; }
-.st-style-meta em { font-style: normal; font-size: 10.5px; color: var(--muted); line-height: 1.45; }
+.st-style-meta { display: flex; flex-direction: column; gap: 4px; }
+.st-style-meta b { padding-right: 50px; font-size: 13.5px; font-weight: 500; }
+.st-style-meta em { font-style: normal; font-size: 11px; color: var(--muted); line-height: 1.5; }
 .st-style-on {
   position: absolute;
-  top: 8px;
-  left: 8px;
+  top: 12px;
+  right: 12px;
   padding: 3px 9px;
   border-radius: 999px;
   background: rgba(25, 25, 25, .86);
@@ -888,26 +848,28 @@ button.st-size-card:hover { border-color: rgba(25, 25, 25, .16); }
   cursor: pointer;
 }
 
-/* 图案 */
-.st-pat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+/* 图案：文字胶囊卡（原本每张配一块 1:1 小样图，已撤掉） */
+.st-pat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .st-pat {
   position: relative;
-  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
-  overflow: hidden;
   font: inherit;
   text-align: left;
   color: var(--ink);
   cursor: pointer;
-  transition: border-color .18s var(--ease), transform .18s var(--ease);
+  transition: border-color .18s var(--ease), transform .18s var(--ease), background .18s var(--ease);
 }
 .st-pat:hover { transform: translateY(-2px); border-color: rgba(25, 25, 25, .16); }
-.st-pat.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
-.st-pat-art { display: block; aspect-ratio: 1 / 1; overflow: hidden; }
-.st-pat-svg { display: block; width: 100%; height: 100%; }
-.st-pat b { display: block; padding: 9px 12px 11px; font-size: 12.5px; font-weight: 500; }
+.st-pat.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); background: var(--wash); }
+.st-pat b { font-size: 13px; font-weight: 500; }
+.st-pat-on { display: inline-flex; flex: 0 0 auto; }
 
 /* 上传 */
 .st-upload { margin-top: 8px; }
@@ -1039,9 +1001,6 @@ button.st-size-card:hover { border-color: rgba(25, 25, 25, .16); }
 .st-sum-colors { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .st-sum-colors i { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(25, 25, 25, .12); }
 .st-sum-colors em { font-style: normal; font-size: 11px; color: var(--muted); }
-.st-sum-pats { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-.st-sum-pats i { display: block; width: 30px; height: 30px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); }
-.st-sum-pats svg { width: 100%; height: 100%; display: block; }
 
 .st-sum-note { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.7; }
 .st-missing-list {
@@ -1069,47 +1028,6 @@ button.st-size-card:hover { border-color: rgba(25, 25, 25, .16); }
 /* ------------------------- 待开发状态 ------------------------- */
 
 .st-result { padding: 40px 0 8px; max-width: 660px; }
-.st-result-art {
-  position: relative;
-  height: 150px;
-  margin-bottom: 30px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #fcfbf9;
-  overflow: hidden;
-}
-.st-result-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(to right, var(--line-soft) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--line-soft) 1px, transparent 1px);
-  background-size: 26px 26px;
-  opacity: .8;
-}
-.st-result-box {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 74px;
-  height: 74px;
-  margin: -42px 0 0 -37px;
-  border: 1.5px dashed #c9c4bd;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, .7);
-}
-.st-result-tag {
-  position: absolute;
-  right: 14px;
-  bottom: 12px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #fff;
-  border: 1px solid var(--line);
-  font-size: 10.5px;
-  color: var(--muted);
-  letter-spacing: .04em;
-}
 .st-result h1 { margin: 12px 0 0; font-size: clamp(24px, 3.2vw, 34px); line-height: 1.3; letter-spacing: -.035em; font-weight: 600; }
 .st-result p { margin: 16px 0 0; font-size: 13.5px; line-height: 1.85; color: var(--muted); }
 .st-result-meta { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 22px; font-size: 12px; color: var(--muted); }
@@ -1118,11 +1036,7 @@ button.st-size-card:hover { border-color: rgba(25, 25, 25, .16); }
 
 @media (max-width: 860px) {
   .st-home { padding: 36px 22px 76px; }
-  .st-hero { grid-template-columns: 1fr; gap: 8px; padding-bottom: 40px; }
-  /* 手机首屏只留「标题 + 两个动作」，装饰卡片会把主按钮挤到折叠线以下 */
-  .st-hero-art { display: none; }
-  .st-hero-art > * { width: 74px; height: 92px; padding: 14px; border-radius: 16px; }
-  .st-hero-art > *:nth-child(2) { transform: translateY(-16px); }
+  .st-hero { padding-bottom: 40px; }
   .st-wizard { padding: 14px 20px 80px; }
   .st-step { padding-top: 26px; }
   .st-step-title { font-size: 25px; }

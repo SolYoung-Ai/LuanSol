@@ -18,7 +18,6 @@ import {
   CATEGORIES, PATTERNS, STYLES, formDef, recommendSize, sizeText,
   missingRequired, type Ans, type StudioProject,
 } from './types';
-import { PatternArt } from './art';
 
 const TOTAL = STEPS.length;
 
@@ -112,6 +111,24 @@ export default function StudioWizard({ id }: { id: string }) {
       <div className="st-loading">
         <span className="st-spin" aria-hidden />
         {t('正在打开这个设计项目…', 'Opening this design…')}
+      </div>
+    </div>;
+  }
+
+  if (loadState === 'locked') {
+    /* 项目按账号存档：没登录时本机缓存与云端都读不到。
+       这时候不能继续转圈，也不能说「找不到」，要说清是没登录。 */
+    return <div className="st-wizard">
+      <div className="st-missing">
+        <h1>{t('登录后才能打开这个设计', 'Sign in to open this design')}</h1>
+        <p>{t('设计按账号存档，登录后就能接着填这份需求，换设备也一样。',
+          'Designs are stored per account — sign in and this brief picks up where it stopped, on any device.')}</p>
+        <div className="st-locked-actions">
+          <button className="st-btn st-btn-dark" onClick={() => go(`/login?next=${encodeURIComponent(`/studio?id=${id}`)}`)}>
+            {t('去登录', 'Sign in')}<span aria-hidden>→</span>
+          </button>
+          <button className="st-btn st-btn-ghost" onClick={() => go('/studio')}>{t('回到工作室', 'Back to studio')}</button>
+        </div>
       </div>
     </div>;
   }
@@ -282,7 +299,7 @@ function Summary({ p, missing, onEdit, onConfirm, warn, t }: {
           : <i className="st-emptyv">{t('未选择', 'None')}</i>} />
       <Row label={t('图案', 'Graphics')} onEdit={() => onEdit(7)} badge={badgeOf(a.patterns, t)}
         value={patterns.length
-          ? <span className="st-sum-pats">{patterns.map((x) => <i key={x.id} title={t(x.zh, x.en)}><PatternArt id={x.id} /></i>)}</span>
+          ? patterns.map((x) => t(x.zh, x.en)).join(' · ')
           : <i className="st-emptyv">{t('未选择', 'None')}</i>} />
       <Row label={t('品牌 Logo', 'Logo')} onEdit={() => onEdit(8)}
         badge={{ text: a.logo.mode ? t('你选择', 'You picked') : t('未填写', 'Empty'), tone: a.logo.mode ? 'pick' : 'none' }}
@@ -328,11 +345,6 @@ function ResultPending({ p, t, onEdit }: {
   onEdit: () => void;
 }) {
   return <div className="st-result">
-    <div className="st-result-art" aria-hidden>
-      <span className="st-result-grid" />
-      <span className="st-result-box" />
-      <span className="st-result-tag">{t('开发中', 'In build')}</span>
-    </div>
     <span className="st-eyebrow">{t('需求已保存', 'Brief saved')}</span>
     <h1>{t('创意生成正在开发中。', 'Concept generation is in development.')}</h1>
     <p>

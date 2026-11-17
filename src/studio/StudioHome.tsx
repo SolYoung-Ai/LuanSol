@@ -16,7 +16,6 @@ import {
   type StudioMeta,
 } from './api';
 import { createStudioProject, isBlankStudio, type StudioProject } from './types';
-import { CategoryArt } from './art';
 
 const LAUNCH_KEY = 'lunasol.studio.launch.v1';
 /* 未登录点「开始一个新设计」→ 去登录 → 回来继续建项目。
@@ -194,11 +193,6 @@ export default function StudioHome() {
           {t('开始设计需要登录：你的需求会按账号保存，换设备也能继续。',
             'Sign in to start — briefs are saved to your account and follow you across devices.')}
         </p>}
-      </div>
-      <div className="st-hero-art" aria-hidden>
-        <CategoryArt id="gift" />
-        <CategoryArt id="tea" />
-        <CategoryArt id="beauty" />
       </div>
     </section>
 
