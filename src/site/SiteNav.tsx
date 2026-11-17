@@ -3,11 +3,10 @@
    ------------------------------------------------------------
    版式参考 B.AI：字标贴最左，导航项紧跟字标右侧（左对齐，不再居中），
    右侧只放账户动作。这样宽屏上眼睛从左往右读，不会被中间一块空白劈开。
-   顺序：首页 / 产品⌄ / Luna AI / 关于。
-   「产品」是下拉：包装设计（直接进工作台）、复刻设计（按参考图出稿）。
-   产品介绍页已撤掉——点「包装设计」就是进 /studio 开工，中间不再夹一页说明。
-   左边栏（开始 / Luna AI / 包装设计 / 复刻设计）已经整块撤掉，
-   入口全部收到这条导航与账户菜单里，所以这里必须能到达每个真实页面。
+   顺序：首页 / 包装工作台 / Luna AI / 关于。
+   包装工作台就是 /studio：点开直接进编辑器，中间没有介绍页。
+   复刻设计整条产品线已下线（2026-11-17），导航里不再留入口，
+   老链接由 App 里的路由兜到底，不做 404。
    账户菜单只做「余额 / 账户 / 帮助 / 退出」。
    ============================================================ */
 import React, { useEffect, useRef, useState } from 'react';
@@ -17,13 +16,14 @@ import { useProfile } from '../cloud/profile';
 import { go, useHash } from '../ui';
 import { useLang } from '../i18n';
 
-/** 产品下拉里的条目。
- *  包装设计直接进 /studio 工作台（没有中间的产品介绍页）；
- *  复刻设计原来只挂在左侧栏，侧栏撤掉之后必须在这里给一个真实入口。 */
-const PRODUCT_MENU = [
-  { zh: '包装设计', en: 'Packaging design', desc: '进工作台，九步说清需求', descEn: 'Open the studio and brief it in nine steps', path: '/studio' },
-  { zh: '复刻设计', en: 'Replicate', desc: '按参考图一比一出稿', descEn: 'Reproduce a reference pack exactly', path: '/replicate' },
-];
+/** 悬停即预热工作台的 chunk：点下去时组件已经在内存里，不再等一次下载。
+ *  只在第一次真的 hover 时取，失败也无所谓（点下去还有一次正常加载）。 */
+let studioWarmed = false;
+function warmStudio() {
+  if (studioWarmed) return;
+  studioWarmed = true;
+  void import('../studio/StudioPage').catch(() => { studioWarmed = false; });
+}
 
 /** 字标：导航里只留 LunaSol（顶部 72px 内加一行 9px 副标会变成噪点），
  *  页脚空间宽裕时才带副标。 */
@@ -44,10 +44,7 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const [stuck, setStuck] = useState(false);
   const [menu, setMenu] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const [drop, setDrop] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const dropRef = useRef<HTMLDivElement>(null);
-  const hoverTimer = useRef<number | undefined>(undefined);
   const path = hash.split('?')[0];
 
   useEffect(() => {
@@ -68,31 +65,8 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
   }, [menu]);
 
-  // 产品下拉：点开之后点空白或 Esc 都要收起（桌面悬停走下面的 enter/leave）
-  useEffect(() => {
-    if (!drop) return;
-    const away = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDrop(false);
-    };
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrop(false); };
-    document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
-  }, [drop]);
-
-  // 换路由关掉所有浮层，否则从菜单里跳页后菜单还挂在那儿
-  useEffect(() => { setMenu(false); setSheet(false); setDrop(false); }, [path]);
-
-  // 桌面悬停即展开：鼠标移开留 120ms 宽限，避免斜着划过时闪断
-  const openDrop = () => {
-    window.clearTimeout(hoverTimer.current);
-    setDrop(true);
-  };
-  const closeDropSoon = () => {
-    window.clearTimeout(hoverTimer.current);
-    hoverTimer.current = window.setTimeout(() => setDrop(false), 120);
-  };
-  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
+  // 换路由关掉浮层，否则从菜单里跳页后菜单还挂在那儿
+  useEffect(() => { setMenu(false); setSheet(false); }, [path]);
 
   const user = auth.user;
   const credits = sub.usedLeft;
@@ -112,36 +86,13 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
             aria-current={path === '/' ? 'page' : undefined}
           >{t('首页', 'Home')}</button>
 
-          <div
-            className="site-drop-wrap"
-            ref={dropRef}
-            onMouseEnter={openDrop}
-            onMouseLeave={closeDropSoon}
-          >
-            <button
-              className={`site-link site-drop-btn ${path === '/studio' ? 'is-on' : ''} ${drop ? 'is-open' : ''}`}
-              onClick={() => setDrop((v) => !v)}
-              aria-expanded={drop}
-              aria-haspopup="menu"
-            >
-              {t('产品', 'Product')}
-              <svg className="site-link-caret" viewBox="0 0 12 12" aria-hidden>
-                <path d="M3 4.6 6 7.6 9 4.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-
-            {drop && <div className="site-drop" role="menu">
-              {PRODUCT_MENU.map((m) => <button
-                key={m.path}
-                className="site-drop-item"
-                role="menuitem"
-                onClick={() => { setDrop(false); go(m.path); }}
-              >
-                <b>{t(m.zh, m.en)}</b>
-                <span>{t(m.desc, m.descEn)}</span>
-              </button>)}
-            </div>}
-          </div>
+          <button
+            className={`site-link ${path === '/studio' ? 'is-on' : ''}`}
+            onClick={() => go('/studio')}
+            onMouseEnter={warmStudio}
+            onFocus={warmStudio}
+            aria-current={path === '/studio' ? 'page' : undefined}
+          >{t('包装工作台', 'Workbench')}</button>
 
           <button
             className={`site-link ${path.startsWith('/luna') ? 'is-on' : ''}`}
@@ -194,7 +145,7 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
               <button className="site-menu-item" role="menuitem" onClick={() => go('/account')}>
                 {t('账户设置', 'Account')} <em>→</em>
               </button>
-              <button className="site-menu-item" role="menuitem" onClick={() => go('/help')}>
+              <button className="site-menu-item" role="menuitem" onClick={() => go('/about')}>
                 {t('帮助与反馈', 'Help')} <em>→</em>
               </button>
               <button
@@ -223,15 +174,8 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
       <button className="site-sheet-link" onClick={() => go('/')}>
         {t('首页', 'Home')}<span>→</span>
       </button>
-      {/* 手机上不做二级浮层：产品菜单只有两条，直接摊平成「产品 / 包装设计」两级行 */}
       <button className="site-sheet-link" onClick={() => go('/studio')}>
-        {t('产品', 'Product')}<span>→</span>
-      </button>
-      <button className="site-sheet-link is-sub" onClick={() => go('/studio')}>
-        {t('包装设计', 'Packaging design')}<span>→</span>
-      </button>
-      <button className="site-sheet-link is-sub" onClick={() => go('/replicate')}>
-        {t('复刻设计', 'Replicate')}<span>→</span>
+        {t('包装工作台', 'Workbench')}<span>→</span>
       </button>
       <button className="site-sheet-link" onClick={() => go('/luna')}>
         Luna AI<span>→</span>

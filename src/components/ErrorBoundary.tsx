@@ -17,6 +17,17 @@ interface Props {
 interface State {
   error: Error | null;
   copied: boolean;
+  /** 是不是「按需加载的代码没拿到」这一类错误（发版后旧 chunk 已删） */
+  chunk: boolean;
+}
+
+/** 动态 import 失败的几种长相：Chrome / Safari / Firefox 说法都不一样，
+ *  加上 React.lazy 拿不到模块时的 reading 'default'。这类错误刷新一次就好，
+ *  不该丢给用户一张「页面没能显示」的红脸。 */
+function isChunkError(e: Error | null): boolean {
+  if (!e) return false;
+  const m = String(e.message || '');
+  return /dynamically imported module|Importing a module script|Loading chunk|Unexpected token '<'|Expected a JavaScript module|reading 'default'/i.test(m);
 }
 
 const wrap: React.CSSProperties = {
@@ -67,16 +78,31 @@ const ghostBtn: React.CSSProperties = {
   fontFamily: 'inherit',
 };
 
+/** 一个会话里只自动重载一次：真出问题（比如离线）不能无限刷新 */
+const RECOVER_KEY = 'lunasol.boundary.recover';
+function claimAutoRecover(): boolean {
+  try {
+    if (sessionStorage.getItem(RECOVER_KEY) === '1') return false;
+    sessionStorage.setItem(RECOVER_KEY, '1');
+    return true;
+  } catch { return false; }   // 隐私模式没有 storage：宁可不重载，也不要死循环
+}
+
 export default class ErrorBoundary extends React.Component<Props, State> {
-  state: State = { error: null, copied: false };
+  state: State = { error: null, copied: false, chunk: false };
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    return { error };
+    return { error, chunk: isChunkError(error) };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // 留一份在控制台，用户反馈时可以直接截图
     console.error('[LunaSol] 页面渲染失败：', error, info?.componentStack);
+    /* 发版瞬间：旧页面要一个已经被删掉的 chunk。这里不再让用户读「页面没能显示」，
+       直接换新版本重载一次——他看到的只是「正在更新」，一秒后就进来了。 */
+    if (isChunkError(error) && claimAutoRecover()) {
+      try { window.__lunasolReload?.(); } catch { /* ignore */ }
+    }
   }
 
   /** 回到工作台并清掉错误态：工作台不依赖出问题的那个页面数据，能正常渲染 */
@@ -101,8 +127,26 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   };
 
   render() {
-    const { error } = this.state;
+    const { error, chunk } = this.state;
     if (!error) return this.props.children;
+
+    /* 加载不到新代码：不吓人，说清在更新，并给一个手动的出口 */
+    if (chunk) {
+      return (
+        <div style={wrap}>
+          <div style={card}>
+            <div style={{ fontSize: 30, lineHeight: 1, marginBottom: 14 }} aria-hidden>🌙</div>
+            <h1 style={{ fontSize: 17, fontWeight: 600, margin: '0 0 8px', letterSpacing: '-0.01em' }}>
+              正在更新到最新版本
+            </h1>
+            <p style={{ fontSize: 13, color: '#737373', margin: '0 0 18px' }}>
+              刚刚发布了一个新版本，页面正在重新加载。你的需求都已经存在本机，不会丢。
+            </p>
+            <button type="button" style={primaryBtn} onClick={this.reload}>立即重新加载</button>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div style={wrap}>

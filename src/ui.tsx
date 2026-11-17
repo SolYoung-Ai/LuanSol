@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from './cloud/auth';
 import { useSubscription } from './cloud/subscription';
 import { useProfile } from './cloud/profile';
-import { useApp, visibleProjects, visibleReplicas } from './store';
+import { useApp, visibleProjects } from './store';
 import { useLang } from './i18n';
 import { applyTheme, readTheme, saveTheme, type Theme } from './theme';
 
@@ -84,7 +84,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     { label: t('我的工作台', 'Workspace'), path: '/workspace' },
     { label: t('账户信息', 'Account'), path: '/account' },
     { label: t('积分', 'Credits'), path: '/credits' },
-    { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
+    { label: t('帮助与反馈', 'Help & feedback'), path: '/about' },
   ];
   /* 个人资料与账号安全已合并成「账户信息」一页：
      资料、密码、换绑邮箱都在 /account，菜单里不再拆成两个入口。 */
@@ -92,7 +92,7 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
     { label: t('我的设计', 'My designs'), path: '/workspace' },
     { label: t('账户信息', 'Account'), path: '/account' },
     { label: t('积分', 'Credits'), path: '/credits' },
-    { label: t('帮助与反馈', 'Help & feedback'), path: '/help' },
+    { label: t('帮助与反馈', 'Help & feedback'), path: '/about' },
     { label: t('开发者管理', 'Developer'), path: '/admin', adminOnly: true },
   ];
   const isAdmin = auth.user?.email === 'solyoungwork@gmail.com';
@@ -108,17 +108,6 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
           label: t('项目', 'Projects'), path: '/workspace?tab=all',
           on: path === '/workspace' || path === '/projects', count: visibleProjects(s.projects).length,
         },
-      ],
-    },
-    {
-      label: t('复刻设计', 'Recreate'),
-      items: [
-        { label: t('新建复刻', 'New recreation'), path: '/replicate/new', on: path.startsWith('/replicate/') && !path.startsWith('/replicate/templates') && path !== '/replicate/models' },
-        {
-          label: t('项目', 'Projects'), path: '/replicate',
-          on: path === '/replicate', count: visibleReplicas(s.replicates).length,
-        },
-        { label: t('模版', 'Templates'), path: '/replicate/templates', on: path === '/replicate/templates' || path === '/replicate/models' },
       ],
     },
   ];

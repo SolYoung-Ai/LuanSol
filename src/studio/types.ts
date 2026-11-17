@@ -91,6 +91,16 @@ export interface StudioAnswers {
 
 export type StudioStatus = 'draft' | 'confirmed';
 
+/** 工作台右侧的顾问对话：跟着项目走，刷新/换设备都能看到。
+ *  只存文字（图片素材在 answers 里），上限 60 条，避免 payload 无限长。 */
+export interface StudioChatMsg {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  at: number;
+  error?: boolean;
+}
+
 export interface StudioProject {
   schema: typeof STUDIO_SCHEMA;
   id: string;
@@ -105,6 +115,8 @@ export interface StudioProject {
   /** AI 推荐记录：按当前包装形式算出的尺寸建议，供「AI 建议 · 待确认」展示 */
   suggestion: { form: FormId | ''; dims: SizeMM | null; at: number };
   confirmedAt: number | null;
+  /** 右侧顾问对话（项目私有的那一段） */
+  chat: StudioChatMsg[];
 }
 
 /* ============================ 选项表 ============================ */
@@ -265,6 +277,7 @@ export function createStudioProject(ownerId: string, now = Date.now()): StudioPr
     answers: emptyAnswers(),
     suggestion: { form: '', dims: null, at: 0 },
     confirmedAt: null,
+    chat: [],
   };
 }
 
@@ -426,5 +439,10 @@ export function normalizeStudioProject(raw: unknown): StudioProject | null {
       ? { form: (o.suggestion.form || '') as FormId | '', dims: o.suggestion.dims || null, at: Number(o.suggestion.at) || 0 }
       : { form: '', dims: null, at: 0 },
     confirmedAt: o.confirmedAt ? Number(o.confirmedAt) : null,
+    chat: Array.isArray(o.chat)
+      ? o.chat
+        .filter((m): m is StudioChatMsg => !!m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .slice(-60)
+      : [],
   };
 }

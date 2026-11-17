@@ -707,7 +707,10 @@ export default function AboutPage() {
                     <path d="M2.5 8h11M9 3.5 13.5 8 9 12.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
-                <button className="site-btn-ghost" onClick={() => go('/help')}>
+                <button
+                  className="site-btn-ghost"
+                  onClick={() => document.getElementById('hub-contact')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                >
                   {t('帮助与反馈', 'Help & feedback')}
                 </button>
               </div>

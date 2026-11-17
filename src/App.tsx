@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, toastTone } from './store';
 import { Button, go, useHash } from './ui';
 import { useAuth } from './cloud/auth';
@@ -12,6 +12,7 @@ import SiteNav from './site/SiteNav';
 import SiteFooter from './site/SiteFooter';
 import SiteIntro from './site/SiteIntro';
 import { useLang } from './i18n';
+import { lazyPage } from './lazyPage';
 
 // 路由级代码分割：除首页外壳外，所有页面按需加载。
 // 这样首屏不会拉起 three.js（3D 预览）、jsPDF / JSZip（导出）等重库，
@@ -19,29 +20,25 @@ import { useLang } from './i18n';
 // 配合这里的动态 import，浏览器只需在真正用到时才请求对应 chunk。
 // 2.0 公开站点（首页 / Product / About / Studio 空壳）与旧应用分开打包：
 // 公开页不该为工作台的依赖付首屏成本。
-const SiteHome = lazy(() => import('./site/HomePage'));
-const SiteAbout = lazy(() => import('./site/AboutPage'));
+const SiteHome = lazyPage(() => import('./site/HomePage'));
+const SiteAbout = lazyPage(() => import('./site/AboutPage'));
 /* Studio 2.0：欢迎界面 + 九步需求收集（阶段 3） */
-const StudioPage = lazy(() => import('./studio/StudioPage'));
-const Account = lazy(() => import('./pages/account'));
-const Structures = lazy(() => import('./pages/library').then((m) => ({ default: m.Structures })));
-const ProjectDetail = lazy(() => import('./pages/library').then((m) => ({ default: m.ProjectDetail })));
-const Workspace = lazy(() => import('./pages/workspace'));
-const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
-const ModelConfig = lazy(() => import('./pages/settings').then((m) => ({ default: m.ModelConfig })));
-const Subscribe = lazy(() => import('./pages/subscribe'));
-const Help = lazy(() => import('./pages/help'));
-const Luna = lazy(() => import('./pages/luna'));
-const Start = lazy(() => import('./pages/start'));
+const StudioPage = lazyPage(() => import('./studio/StudioPage'));
+const Account = lazyPage(() => import('./pages/account'));
+const Structures = lazyPage(() => import('./pages/library').then((m) => ({ default: m.Structures })));
+const ProjectDetail = lazyPage(() => import('./pages/library').then((m) => ({ default: m.ProjectDetail })));
+const Workspace = lazyPage(() => import('./pages/workspace'));
+const Settings = lazyPage(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
+const ModelConfig = lazyPage(() => import('./pages/settings').then((m) => ({ default: m.ModelConfig })));
+const Subscribe = lazyPage(() => import('./pages/subscribe'));
+const Luna = lazyPage(() => import('./pages/luna'));
+const Start = lazyPage(() => import('./pages/start'));
 /* 旧版整屏编辑器（pages/studio）在 2.0 阶段 1 不再挂到 /studio：
    该路径已经交给新的 Studio 空壳。文件先留着，等阶段 2 的新流程
    接好之后再决定复用还是删除，不在本阶段做破坏性改动。 */
-const NewDesign = lazy(() => import('./pages/new'));
-const Admin = lazy(() => import('./pages/admin'));
-const Replicate = lazy(() => import('./pages/replicate'));
-const ReplicateList = lazy(() => import('./pages/replicate-list'));
-const ReplicateTemplates = lazy(() => import('./pages/replicate-templates'));
-const Login = lazy(() => import('./pages/login'));
+const NewDesign = lazyPage(() => import('./pages/new'));
+const Admin = lazyPage(() => import('./pages/admin'));
+const Login = lazyPage(() => import('./pages/login'));
 
 /** 页面级加载态统一交给品牌加载组件：LunaSol 字标被橙色填满 + Sol 三字轻跳。
  *  但**延迟 150ms** 才出现：chunk 已在缓存里时切换只要一帧，
@@ -119,10 +116,10 @@ export default function App() {
   const isFullBleed = path.startsWith('/luna') || path.startsWith('/studio') || path === '/login';
   /* 登录页是独立整屏版式：自带顶栏，隐藏全站导航与侧栏 */
   const isAuthPage = path === '/login';
-  /* 工作台（/studio?id=…）自带一条「← 工作室 / 项目名 / 保存状态」的栏。
-     进到这一步，全站导航自动收起来：屏幕上只留一条栏，
-     填需求时不被两排导航分神；回工作室点左上角那个返回箭头。 */
-  const isStudioWizard = path === '/studio' && /[?&]id=/.test(hash);
+  /* 包装工作台（/studio）是整屏编辑器，自带顶栏（← 首页 / 项目名 / 保存状态）。
+     进到这里全站导航自动收起：屏幕上只留一条栏，填写时不被两排导航分神，
+     回站内点左上角那个返回箭头。 */
+  const isStudioWizard = path === '/studio';
 
   /* 预取主入口页面的 chunk。懒加载 fallback 是一整屏高的字标，
      首次点进 Luna 时「loader → 真实页面」的高度变化也会被看成整页跳一下。
@@ -132,13 +129,11 @@ export default function App() {
       void import('./pages/luna');
       void import('./pages/start');
       void import('./pages/workspace');
-      void import('./pages/replicate');
-      void import('./pages/replicate-list');
-      void import('./pages/replicate-templates');
+      // 工作台是最常点的入口，提前取回来：点「包装工作台」时不再等一个 chunk
+      void import('./studio/StudioPage');
       // 顶栏与账号卡会频繁点到的几页，一并预热：chunk 到位后切页只剩一帧
       void import('./pages/subscribe');
       void import('./pages/account');
-      void import('./pages/help');
     }, 1400);
     return () => window.clearTimeout(timer);
   }, []);
@@ -187,10 +182,10 @@ export default function App() {
      不再套第二层工具壳，页脚不出现（工作区不打断流程）。
      产品介绍页已经撤掉：「产品 → 包装设计」直接进工作室，中间不再有一页自夸的说明。 */
   const isPublic = path === '/' || path === '/about' || path === '/studio';
-  /* 账户类页面（积分 / 账户 / 帮助）现在是独立页：套同一条顶部导航，
+  /* 账户类页面（积分 / 账户）现在是独立页：套同一条顶部导航，
      不再有左侧栏。它们也吃页脚，读到底有个收尾。 */
   const isDoc = path === '/credits' || path === '/subscribe' || path === '/account'
-    || path === '/security' || path === '/help';
+    || path === '/security';
   const showFooter = (isPublic && path !== '/studio') || isDoc;
 
   // 旧工作台需要登录；/studio 不强拦：未登录也能看到启动弹窗与欢迎界面，
@@ -214,16 +209,9 @@ export default function App() {
   else if (path === '/structures') page = <Structures />;
   /* 包装设计：/workspace 与历史路径 /projects 指向同一个页面，旧链接不 404 */
   else if (path === '/workspace' || path === '/projects') page = <Workspace />;
-  /* 复刻设计：/replicate 是复刻记录（独立草稿箱），
-     /replicate/templates 是模版库（参考图已备好，点一下直接进工作区），
-     /replicate/new 与 /replicate/edit?id= 是工作区。
-     key 用 hash：从「新建」切到「编辑某条记录」时组件必须重挂，
-     否则会沿用上一条记录已输入的状态。 */
-  else if (path === '/replicate') page = <ReplicateList />;
-  /* 模版库必须排在 /replicate/ 通配之前，否则会被当成工作区渲染。
-     /replicate/models 是上一版的地址，保留同页渲染，别让老书签 404。 */
-  else if (path === '/replicate/templates' || path === '/replicate/models') page = <ReplicateTemplates />;
-  else if (path.startsWith('/replicate/')) page = <Replicate key={hash} />;
+  /* 复刻设计已下线（2026-11-17）：整条产品线不再维护，
+     老书签统一送回包装工作台，不做 404。 */
+  else if (path.startsWith('/replicate')) page = <OldRouteRedirect to="/studio" />;
   /* 审美市场已永久下线：老书签（/market、/market/site/*、/inspiration）统一送回工作台，
      不做 404，也不再保留任何入口与数据。 */
   else if (path.startsWith('/market') || path === '/inspiration') page = <OldRouteRedirect to="/workspace" />;
@@ -234,7 +222,8 @@ export default function App() {
   else if (path === '/models') page = <ModelConfig />;
   // /credits 是纯积分制的主路径；/subscribe 是旧链接兼容别名，不再对外展示
   else if (path === '/credits' || path === '/subscribe') page = <Subscribe />;
-  else if (path === '/help') page = <Help />;
+  /* 帮助与反馈已经并入「关于 · 帮助中心」：那一页可搜索，比旧的 FAQ 长页好找 */
+  else if (path === '/help') page = <OldRouteRedirect to="/about" />;
   else if (path === '/start' || path === '/home') page = <Start />;
   else if (path === '/luna') page = <Luna />;
   else if (path === '/admin') page = <Admin />;

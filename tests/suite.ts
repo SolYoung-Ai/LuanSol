@@ -28,9 +28,6 @@ import { buildAIContext, contextText } from '../src/ai/context';
 import { runAITask, registerAITransport, resetAITransport, aiCapabilitySummary } from '../src/ai/provider';
 import { assembleDesign, inferStructure } from '../src/workflow/assembler';
 import { createInitialWorkflow } from '../src/types';
-import { KINDS, RATIOS, kindById } from '../src/replicate/kinds';
-import { FIDELITIES, buildReplicatePrompt, fidelityLevel } from '../src/replicate/prompt';
-import { TEMPLATES } from '../src/replicate/templates';
 import { migrateProductInfo, migrateProject, migrateWorkflow } from '../src/migrations';
 import { humanizeAuthError, isSessionNoise } from '../src/cloud/authErrors';
 import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
@@ -935,62 +932,6 @@ export async function runTests(): Promise<Result[]> {
     } finally { g.window = prev; }
   });
 
-  await t('复刻提示词 · 复刻度分带必须真的改变指令，标题必须强制替换', () => {
-    const main = KINDS.find((k) => k.id === 'main')!;
-    const cover = KINDS.find((k) => k.id === 'cover')!;
-    const exact = buildReplicatePrompt(main, 100, '', true, true);
-    const layout = buildReplicatePrompt(main, 70, '', true, true);
-    const loose = buildReplicatePrompt(main, 30, '', true, true);
-    A(exact !== layout && layout !== loose && exact !== loose, '三带提示词完全相同，等于复刻度白拖');
-    A(/一比一/.test(exact), '一比一带必须写明一比一');
-    // 一比一不能拼类型场景句：那句话在要求重新构图，会把「照参考图」抵消掉
-    A(!exact.includes(main.scene), '一比一档不应拼入会要求重新构图的场景句');
-    A(layout.includes(main.scene), '参考版式带应保留场景规则');
-    A(/重新设计/.test(loose), '只借感觉带必须明确要求重新设计版式');
-    A(!/一比一/.test(loose), '只借感觉带不能出现一比一字样');
-    // 滑杆是连续的：带内数值要出现在指令里，让「拖到多少」可追溯
-    A(/复刻度 70%/.test(layout) && /复刻度 55%/.test(buildReplicatePrompt(main, 55, '', true, true)),
-      '带内数值没有写进指令');
-    // 标题：用户的标题必须是最高优先级指令，禁止照抄参考图原文字
-    const withTitle = buildReplicatePrompt(cover, 100, '', true, true, '从零代码到 AI 产品矩阵');
-    A(withTitle.includes('「从零代码到 AI 产品矩阵」'), '用户标题没有进入提示词');
-    A(/严禁照抄或残留/.test(withTitle), '标题指令必须禁止照抄参考图原文字');
-    const noTitle = buildReplicatePrompt(cover, 100, '', true, true);
-    A(!noTitle.includes('严禁照抄'), '不填标题时不应出现替换指令');
-    // 历史草稿里的 20–100 要能反查回档位，不能落到默认档以外
-    A(fidelityLevel(95) === 'exact' && fidelityLevel(64) === 'layout' && fidelityLevel(35) === 'loose',
-      '数值到档位的映射不正确');
-    // 带参考图时收尾句不得再禁拼贴/分栏——分屏模版本身就是分栏
-    A(!/无拼贴/.test(buildReplicatePrompt(cover, 100, '', true, false)), '有参考图时不应禁止拼贴分栏');
-    A(/无拼贴/.test(buildReplicatePrompt(cover, 100, '', false, false)), '无参考图时应保留禁止拼贴');
-    return '三带互不相同 + 标题强制替换 + 拼贴规则随参考图切换';
-  });
-
-  await t('模版库 · 每个模版都必须能直接开工', () => {
-    // 允许为空：正式素材还没到位时这一页显示「准备中」的空状态，不是故障
-    if (!TEMPLATES.length) return '模版库为空（等待正式素材，页面走空状态）';
-    const ids = new Set<string>();
-    const imgs = new Set<string>();
-    for (const m of TEMPLATES) {
-      A(!ids.has(m.id), `模版 id 重复：${m.id}`); ids.add(m.id);
-      // 分类必须落在真实的复刻类型上，否则点进去会没有场景规则
-      A(!!kindById(m.kind), `模版 ${m.id} 的类型 ${m.kind} 不存在`);
-      // 比例必须是 RATIOS 里的值：界面按钮按它高亮，生图按它取尺寸
-      A(RATIOS.some((r) => r.id === m.ratio), `模型 ${m.id} 的比例 ${m.ratio} 不在尺寸表里`);
-      // 复刻度只允许三档，和历史草稿的数值映射保持同一套
-      A(FIDELITIES.some((f) => f.value === m.fidelity), `模型 ${m.id} 的复刻度 ${m.fidelity} 不是合法档位`);
-      A(m.img.startsWith('./tpl/'), `模型 ${m.id} 的参考图必须走站内相对路径`);
-      A(!imgs.has(m.img), `模型 ${m.id} 与其它模型共用同一张参考图`); imgs.add(m.img);
-      A(!!m.name.zh && !!m.name.en, `模型 ${m.id} 缺少双语名称`);
-      A(!!m.desc.zh && !!m.desc.en, `模型 ${m.id} 缺少双语说明`);
-      A(m.prompt.trim().length > 6, `模型 ${m.id} 没有预设提示词，预填就白做了`);
-    }
-    // 至少覆盖一个分类，避免「全填成同一种、其它分类点进去是空页」
-    A(KINDS.some((k) => TEMPLATES.some((m) => m.kind === k.id)), '没有任何分类有可用模版');
-    return `${TEMPLATES.length} 个模版，覆盖 ${new Set(TEMPLATES.map((m) => m.kind)).size} 个分类`;
-  });
-
-
   /* ---------------------------- Studio 2.0 需求收集 ---------------------------- */
 
   await t('Studio · 包装形式必须属于所选类别', () => {
@@ -1086,6 +1027,24 @@ export async function runTests(): Promise<Result[]> {
     const empty = createStudioProject('u1', 10);
     A(Object.keys(emptyAnswers()).length === Object.keys(empty.answers).length, '空答案模板字段必须齐全');
     return '旧数据补全 + 前缀隔离';
+  });
+
+  await t('Studio · 顾问对话跟着项目走，坏数据与超长历史都要收口', () => {
+    const p = createStudioProject('u1', 10);
+    A(Array.isArray(p.chat) && p.chat.length === 0, '新项目应带一个空的对话数组');
+
+    const many = Array.from({ length: 90 }, (_, i) => ({
+      id: `m${i}`, role: i % 2 ? 'assistant' as const : 'user' as const, content: `第 ${i} 句`, at: i,
+    }));
+    const restored = normalizeStudioProject({ ...p, chat: [...many, { id: 'x', role: 'system', content: '越权角色' }] });
+    A(!!restored, '带对话的项目应能被读回');
+    A(restored!.chat.length === 60, `历史应裁到 60 条，实际 ${restored!.chat.length}`);
+    A(restored!.chat.every((m) => m.role === 'user' || m.role === 'assistant'), '非 user/assistant 的脏数据要被丢掉');
+    A(restored!.chat[restored!.chat.length - 1].content === `第 89 句`, '裁剪应保留最近的对话');
+
+    const noChat = normalizeStudioProject({ id: 'st_old', ownerId: 'u1', name: '旧项目' });
+    A(!!noChat && noChat.chat.length === 0, '没有对话字段的旧项目应补成空数组，不能 undefined');
+    return '60 条上限 + 脏角色过滤 + 旧项目兜底';
   });
 
   return R;

@@ -22,8 +22,6 @@ export default function SiteFooter() {
   const site: { label: string; path: string }[] = [
     { label: t('开始设计', 'Start designing'), path: '/start' },
     { label: t('包装设计', 'Packaging'), path: '/workspace' },
-    { label: t('复刻设计', 'Recreate'), path: '/replicate' },
-    { label: t('模版库', 'Templates'), path: '/replicate/templates' },
     { label: t('积分说明', 'Credits'), path: '/credits' },
   ];
 
