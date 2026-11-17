@@ -428,8 +428,6 @@ function buildSections(t: Dict): Sec[] {
       id: 'changelog',
       nav: t('更新日志', 'Changelog'),
       title: t('更新日志', 'Changelog'),
-      lead: t('只记对用户有影响的变化，不记内部重构。',
-        'Only user-visible changes, not internal refactors.'),
       items: [
         {
           id: 'log-1117',
