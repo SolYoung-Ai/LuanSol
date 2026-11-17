@@ -34,8 +34,12 @@ import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
 import {
   CATEGORIES, FORMS_BY_CATEGORY, STUDIO_ID_PREFIX, createStudioProject, emptyAnswers,
   exportStructured, isBlankStudio, missingRequired, normalizeStudioProject, projectName,
-  recommendSize, sizeOk, ans, type StudioProject,
+  recommendSize, sizeOk, ans, normalizeDesign, type StudioProject,
 } from '../src/studio/types';
+import {
+  addText, buildDesign, moveEl, patchEl, ratioFor, removeEl, reorderEl, resizeEl, setSticker,
+  stickerPrompt,
+} from '../src/studio/design';
 
 export interface Result { name: string; ok: boolean; detail: string }
 const A = (cond: unknown, msg: string) => { if (!cond) throw new Error(msg); };
@@ -1045,6 +1049,111 @@ export async function runTests(): Promise<Result[]> {
     const noChat = normalizeStudioProject({ id: 'st_old', ownerId: 'u1', name: '旧项目' });
     A(!!noChat && noChat.chat.length === 0, '没有对话字段的旧项目应补成空数组，不能 undefined');
     return '60 条上限 + 脏角色过滤 + 旧项目兜底';
+  });
+
+
+  await t('Studio · 编辑器第一版版面只排用户真的填过的内容', () => {
+    const p = createStudioProject('u1', 10);
+    const bare = buildDesign(p, 10);
+    A(bare.els.every((e) => e.kind !== 'sticker'), '没选图案时不应该有贴纸位');
+    A(!bare.els.some((e) => e.id === 'name'), '没填产品名称时不应该有标题文字');
+    A(!bare.els.some((e) => e.id === 'sell'), '没填卖点时不能自己编一句');
+    A(bare.els.some((e) => e.id === 'mark'), '水印行一直有');
+
+    p.answers.productName = ans('云杉面霜', 'user');
+    p.answers.sellingPoints = ans('冷白质地，不闷痘', 'user');
+    p.answers.patterns = ans(['botanical'], 'option');
+    p.answers.colors = ans(['#F7F3EC', '#2F5D4A'], 'option');
+    p.answers.form = ans('box', 'option');
+    const d = buildDesign(p, 20);
+    A(d.els.find((e) => e.id === 'name')?.text === '云杉面霜', '标题取产品名称');
+    A(d.els.some((e) => e.kind === 'sticker'), '选了图案要留贴纸位');
+    A(d.bg === '#F7F3EC' && d.ink === '#2F5D4A', `底色取浅色、字色取深色，实际 ${d.bg}/${d.ink}`);
+    A(d.ratio[0] === ratioFor('box')[0], '画布比例跟着包装形式走');
+    return '空字段不排元素 · 有值才出现 · 色板与比例正确';
+  });
+
+  await t('Studio · 画布元素可移可拉可换图，且不会跑出画布', () => {
+    const p = createStudioProject('u1', 10);
+    p.answers.productName = ans('云杉面霜', 'user');
+    let d = buildDesign(p, 10);
+    const name = d.els.find((e) => e.id === 'name')!;
+
+    d = moveEl(d, 'name', -500, 200);
+    const moved = d.els.find((e) => e.id === 'name')!;
+    A(moved.x >= -name.w + 8 && moved.x <= 96, `横向拖动应被夹住，实际 ${moved.x}`);
+    A(moved.y <= 98, '纵向拖动应被夹住');
+
+    d = resizeEl(d, 'name', 0);
+    A(d.els.find((e) => e.id === 'name')!.w >= 8, '文字宽度有下限，不能被拉到看不见');
+    d = resizeEl(d, 'name', 200);
+    A(d.els.find((e) => e.id === 'name')!.w === 100, '宽度上限 100%');
+
+    d = setSticker(d, 'data:image/png;base64,AAA');
+    A(d.els.filter((e) => e.kind === 'sticker').length === 1, '换贴纸是原地替换，不应该越堆越多');
+    A(d.els.find((e) => e.kind === 'sticker')!.src!.startsWith('data:image/'), '贴纸以 data URL 存');
+
+    const added = addText(d);
+    A(added.els.length === d.els.length + 1, '加文字应新增一个元素');
+    const lastId = added.els[added.els.length - 1].id;
+    const up = reorderEl(added, lastId, -1);
+    A(up.els[up.els.length - 2].id === lastId, '下移一层应真的换位置');
+    const gone = removeEl(added, lastId);
+    A(!gone.els.some((e) => e.id === lastId), '删除应真的删掉');
+
+    const painted = patchEl(added, lastId, { text: '改过的字', id: 'hack', kind: 'sticker' });
+    const target = painted.els.find((e) => e.text === '改过的字')!;
+    A(target.id === lastId && target.kind === 'text', 'patch 不允许改 id 与 kind');
+    return '夹边界 · 宽度上下限 · 贴纸原地换 · 层级与删除 · patch 防串改';
+  });
+
+  await t('Studio · 设计稿读写要夹住脏数据（坐标越界、巨图、怪比例）', () => {
+    A(normalizeDesign(null) === null, '空数据返回 null');
+    A(normalizeDesign({ els: [] }) === null, '没有元素的设计稿不算设计稿');
+
+    const dirty = normalizeDesign({
+      ratio: [0, -3],
+      bg: 'red',
+      els: [
+        { id: 'a', kind: 'text', text: 'x', x: 999, y: -80, w: 500, size: 0, color: 'blue' },
+        { id: 'b', kind: 'sticker', src: 'javascript:alert(1)', x: 10, y: 10, w: 20 },
+        { id: 'c', kind: 'svg', x: 10, y: 10, w: 10 },
+        { id: 'd', kind: 'sticker', src: 'data:image/png;base64,' + 'A'.repeat(6_000_001) },
+      ],
+    });
+    A(!!dirty, '有元素就能读回');
+    A(dirty!.ratio[0] === 3 && dirty!.ratio[1] === 4, '非法比例回落到 3:4');
+    A(dirty!.bg === '#FFFFFF', '非法底色回落到纸白');
+    const a = dirty!.els.find((e) => e.id === 'a')!;
+    A(a.x <= 100 && a.y >= 0 && a.w <= 100 && (a.size || 0) >= 0.8, '越界坐标与字号都被夹住');
+    A(a.color === undefined, '非法色值被丢掉而不是照抄');
+    A(dirty!.els.find((e) => e.id === 'b')!.src === undefined, '非图片 data URL 的 src 必须丢掉');
+    A(dirty!.els.find((e) => e.id === 'c')!.kind === 'text', '未知 kind 归一到 text');
+    A(!dirty!.els.some((e) => e.id === 'd'), '超过 6MB 的贴纸不进项目，避免 payload 撑爆');
+
+    const p = createStudioProject('u1', 10);
+    A(p.design === null, '新项目没有设计稿');
+    const restored = normalizeStudioProject({ ...p, design: { els: [{ id: 'x', kind: 'text', text: '你好', x: 10, y: 10, w: 30 }] } });
+    A(!!restored!.design, '带设计稿的项目能读回');
+    A(normalizeStudioProject({ ...p, design: { els: [] } })!.design === null, '空设计稿当成没有');
+    return '比例/底色回落 · 坐标夹紧 · 巨图与非图片被拒 · 项目级拼装';
+  });
+
+  await t('Studio · 贴纸提示词只写用户给过的信息，并带负向约束', () => {
+    const p = createStudioProject('u1', 10);
+    const bare = stickerPrompt(p);
+    A(bare.includes('几何图案'), '没选图案时用中性默认，不乱猜');
+    A(!/香|甜|配方|功效/.test(bare), '不能凭空补产品事实');
+    A(bare.includes('不要出现文字') && bare.includes('商标'), '必须带「不要文字/商标」的负向约束');
+
+    p.answers.category = ans('skincare', 'option');
+    p.answers.stylePrimary = ans('minimal', 'option');
+    p.answers.patterns = ans(['botanical'], 'option');
+    p.answers.colors = ans(['#F7F3EC'], 'option');
+    const s = stickerPrompt(p);
+    A(s.includes('护肤') && s.includes('极简现代') && s.includes('植物元素'), '类别/风格/图案都要进提示词');
+    A(s.includes('象牙白'), '色值要翻成人能读的色名');
+    return '默认中性 · 无编造 · 负向约束 · 需求入词';
   });
 
   return R;

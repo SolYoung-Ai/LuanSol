@@ -180,7 +180,7 @@ export default function App() {
 
   /* 2.0 公开站点：首页 / 关于 / 工作室。工作室沿用同一条顶部导航，
      不再套第二层工具壳，页脚不出现（工作区不打断流程）。
-     产品介绍页已经撤掉：「产品 → 包装设计」直接进工作室，中间不再有一页自夸的说明。 */
+     产品介绍页已经撤掉：导航「包装工作台」直接进工作台，中间不再有一页自夸的说明。 */
   const isPublic = path === '/' || path === '/about' || path === '/studio';
   /* 账户类页面（积分 / 账户）现在是独立页：套同一条顶部导航，
      不再有左侧栏。它们也吃页脚，读到底有个收尾。 */
@@ -199,7 +199,7 @@ export default function App() {
     page = <OldRouteRedirect />;
   }   else if (path === '/') page = <SiteHome />;
   /* 产品介绍页整页撤掉（2026-11-17）：老书签不 404，直接送进工作室。
-     「产品 → 包装设计」现在点开就是工作台，中间不再夹一层自夸的说明页。 */
+     「包装工作台」现在点开就是工作台，中间不再夹一层自夸的说明页。 */
   else if (path === '/product') page = <OldRouteRedirect to="/studio" />;
   else if (path === '/about') page = <SiteAbout />;
   /* 独立登录页（V5 那版做的，保留）：整屏左右分栏，登录后回 ?next= */

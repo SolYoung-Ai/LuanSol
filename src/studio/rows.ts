@@ -15,12 +15,19 @@ export interface StudioRow {
   status?: 'draft' | 'confirmed';
   blank?: boolean;
   cloudOnly?: boolean;
+  /** 有设计稿才带缩略色：工作台卡片用这一版版面自己的底色，不用示意图 */
+  bg?: string;
+  ink?: string;
+  accent?: string;
+  hasSticker?: boolean;
 }
 
 export function rowsFromCache(uid: string): StudioRow[] {
   return readCacheFor(uid).map((p: StudioProject) => ({
     id: p.id, name: p.name, updatedAt: p.updatedAt, step: p.step,
     status: p.status, blank: isBlankStudio(p),
+    bg: p.design?.bg, ink: p.design?.ink, accent: p.design?.accent,
+    hasSticker: !!p.design?.els.some((e) => e.kind === 'sticker' && e.src),
   }));
 }
 

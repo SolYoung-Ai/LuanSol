@@ -383,8 +383,8 @@ function buildSections(t: Dict): Sec[] {
         {
           id: 'faq-start',
           q: t('第一次来，从哪一步开始？', 'First time here — where do I start?'),
-          text: t('从首页那颗「开始吧！设计师」进，先选一个入口（从零开始 / 有参考图），然后按九步填写需求。也可以直接在导航「产品 → 包装设计」进。',
-            'Start from the button on the home page, pick an entry (from scratch or with a reference), then fill in the nine steps. You can also go via Product → Packaging design in the nav.'),
+          text: t('从首页那颗「开始吧！设计师」进，或者直接在导航点「包装工作台」。新建项目后按九页填写需求，确认后自动进入编辑器。',
+            'Start from the button on the home page, or click Workbench in the nav. Create a project, fill the nine pages, and confirming takes you straight into the editor.'),
           kw: '新手 入口 开始 第一步 beginner start',
         },
         {
@@ -432,7 +432,7 @@ function buildSections(t: Dict): Sec[] {
         {
           id: 'log-1117',
           q: t('2026-11-17 · 站点改版与帮助中心', '2026-11-17 · Site refresh & help centre'),
-          text: t('全站统一纯白底 + 液态玻璃按钮；导航按「首页 / 产品 / Luna AI / 关于」重排；Luna AI 左栏可收起；本页新增搜索、更新日志与三份法务摘要。',
+          text: t('全站统一纯白底 + 液态玻璃按钮；导航按「首页 / 包装工作台 / Luna AI / 关于」重排；Luna AI 左栏可收起；本页新增搜索、更新日志与三份法务摘要。',
             'White surfaces and liquid-glass buttons across the site; nav reordered; collapsible Luna sidebar; this page gains search, a changelog and legal summaries.'),
           kw: '改版 更新 搜索 changelog update',
         },

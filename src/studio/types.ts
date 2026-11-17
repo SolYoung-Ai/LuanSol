@@ -101,6 +101,44 @@ export interface StudioChatMsg {
   error?: boolean;
 }
 
+/* ============================ 设计稿（编辑器里的画布内容） ============================ */
+
+/** 画布上的一个元素。坐标一律用百分比：0-100，
+ *  这样缩放、换设备、换画布尺寸都不用重算一遍像素。 */
+export type ElKind = 'text' | 'sticker' | 'rect';
+
+export interface DesignEl {
+  id: string;
+  kind: ElKind;
+  /** text 的文案 */
+  text?: string;
+  /** sticker 的图片（data URL）；没有 = 还没生成，画布上显示可点的占位框 */
+  src?: string;
+  /** 左上角坐标，百分比 */
+  x: number;
+  y: number;
+  /** 宽度占画布宽度的百分比 */
+  w: number;
+  /** 矩形高度占画布高度的百分比（text / sticker 按内容自适应，不填） */
+  h?: number;
+  /** 文字字号：占画布宽度的百分比（跟着缩放一起变） */
+  size?: number;
+  color?: string;
+  weight?: number;
+  align?: 'left' | 'center' | 'right';
+  opacity?: number;
+}
+
+/** 编辑器里的画布状态。跟着项目一起存（本机 + 云端），换设备能接着改。 */
+export interface StudioDesign {
+  ratio: [number, number];
+  bg: string;
+  ink: string;
+  accent: string;
+  els: DesignEl[];
+  updatedAt: number;
+}
+
 export interface StudioProject {
   schema: typeof STUDIO_SCHEMA;
   id: string;
@@ -117,6 +155,8 @@ export interface StudioProject {
   confirmedAt: number | null;
   /** 右侧顾问对话（项目私有的那一段） */
   chat: StudioChatMsg[];
+  /** 编辑器画布：确认需求后才建，草稿阶段为 null */
+  design: StudioDesign | null;
 }
 
 /* ============================ 选项表 ============================ */
@@ -278,6 +318,7 @@ export function createStudioProject(ownerId: string, now = Date.now()): StudioPr
     suggestion: { form: '', dims: null, at: 0 },
     confirmedAt: null,
     chat: [],
+    design: null,
   };
 }
 
@@ -417,6 +458,56 @@ export function exportStructured(p: StudioProject): StructuredBrief {
   };
 }
 
+const HEX = /^#[0-9a-f]{6}$/i;
+const num = (v: unknown, min: number, max: number, fallback: number): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
+
+/** 设计稿的读书笔记：云端/localStorage 里的东西不可信，
+ *  坐标越界、字号为 0、贴一张 40MB 的图都可能把画布弄崩，一律夹到安全范围。 */
+export function normalizeDesign(raw: unknown): StudioDesign | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Partial<StudioDesign>;
+  const els = Array.isArray(o.els) ? o.els : [];
+  const clean: DesignEl[] = [];
+  for (const e of els.slice(0, 24)) {
+    if (!e || typeof e !== 'object') continue;
+    const kind: ElKind = e.kind === 'sticker' ? 'sticker' : e.kind === 'rect' ? 'rect' : 'text';
+    const src = typeof e.src === 'string' && e.src.startsWith('data:image/') ? e.src : undefined;
+    if (kind === 'sticker' && src && src.length > 6_000_000) continue;
+    const id = typeof e.id === 'string' && e.id ? e.id : `el_${clean.length}`;
+    clean.push({
+      id,
+      kind,
+      text: typeof e.text === 'string' ? e.text.slice(0, 200) : undefined,
+      src,
+      x: num(e.x, 0, 100, 10),
+      y: num(e.y, 0, 100, 10),
+      w: num(e.w, 2, 100, 40),
+      h: e.h === undefined ? undefined : num(e.h, 0.1, 100, 2),
+      size: e.size === undefined ? undefined : num(e.size, 0.8, 40, 4),
+      color: typeof e.color === 'string' && HEX.test(e.color) ? e.color : undefined,
+      weight: e.weight === undefined ? undefined : num(e.weight, 300, 800, 400),
+      align: e.align === 'center' || e.align === 'right' ? e.align : 'left',
+      opacity: e.opacity === undefined ? undefined : num(e.opacity, 0.05, 1, 1),
+    });
+  }
+  if (!clean.length) return null;
+  const ratio: [number, number] = Array.isArray(o.ratio) && o.ratio.length === 2
+    && o.ratio.every((n) => Number(n) > 0)
+    ? [Number(o.ratio[0]), Number(o.ratio[1])]
+    : [3, 4];
+  return {
+    ratio,
+    bg: typeof o.bg === 'string' && HEX.test(o.bg) ? o.bg : '#FFFFFF',
+    ink: typeof o.ink === 'string' && HEX.test(o.ink) ? o.ink : '#191919',
+    accent: typeof o.accent === 'string' && HEX.test(o.accent) ? o.accent : '#F47735',
+    els: clean,
+    updatedAt: Number(o.updatedAt) || Date.now(),
+  };
+}
+
 /** 从云端 / 本地读回的旧数据补字段：刷新恢复、跨设备都走这里 */
 export function normalizeStudioProject(raw: unknown): StudioProject | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -444,5 +535,6 @@ export function normalizeStudioProject(raw: unknown): StudioProject | null {
         .filter((m): m is StudioChatMsg => !!m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
         .slice(-60)
       : [],
+    design: normalizeDesign(o.design),
   };
 }
