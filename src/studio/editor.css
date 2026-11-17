@@ -975,8 +975,6 @@
   .st-ed-name { max-width: 30vw; }
   /* 没打开项目时中间那句是「选择或新建一个项目」：手机上挤在字标后面只会更乱 */
   .st-ed-name-soft { display: none; }
-  /* 没打开项目时中间那句是「选择或新建一个项目」：手机上挤在字标后面只会更乱 */
-  .st-ed-name-soft { display: none; }
   /* 手机顶栏只留一个保存状态点：写「已保存 22:31」会把项目名挤成两个字 */
   .st-ed .st-save { font-size: 0; gap: 0; padding: 0; }
   .st-ed .st-save i { margin: 0; }
