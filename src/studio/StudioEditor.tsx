@@ -120,26 +120,18 @@ function Workbench() {
     </header>
 
     <main className="st-wb-main">
-      <section className="st-wb-hero">
-        <span className="st-eyebrow">{t('包装工作台', 'Workbench')}</span>
-        <h1>{t('先说清产品，再谈好不好看。', 'Get the brief right, then the design.')}</h1>
-        <p>{t('九页问清品类、形式、尺寸、风格与配色，确认后进编辑器：画布能缩放，元素能拖，贴纸能重新生成。',
-          'Nine pages cover category, format, size, style and palette. Then the canvas opens — zoom, drag, and regenerate graphics.')}</p>
-        <div className="st-wb-hero-actions">
-          <button className="st-btn st-btn-dark" onClick={startNew} disabled={busy}>
-            {t('新建包装项目', 'New packaging project')}<span aria-hidden>→</span>
-          </button>
-          {!uid && <button className="st-btn st-btn-ghost" onClick={toLogin}>{t('登录后按账号保存', 'Sign in to save')}</button>}
-        </div>
-      </section>
-
       <section className="st-wb-list">
         <div className="st-wb-bar">
           <h2>{t('我的设计', 'My designs')}</h2>
           {!!visible.length && <em>{visible.length}</em>}
-          {!!uid && cloudErr && <button className="st-wb-retry" onClick={() => void loadCloud()}>
-            {t('云端读取失败，重试', 'Cloud failed — retry')}
-          </button>}
+          <div className="st-wb-bar-right">
+            {!!uid && cloudErr && <button className="st-wb-retry" onClick={() => void loadCloud()}>
+              {t('云端读取失败，重试', 'Cloud failed — retry')}
+            </button>}
+            <button className="st-btn st-btn-dark st-wb-new" onClick={startNew} disabled={busy}>
+              {t('新建包装项目', 'New packaging project')}<span aria-hidden>→</span>
+            </button>
+          </div>
         </div>
 
         {uid && loading && !visible.length && <div className="st-wb-grid">

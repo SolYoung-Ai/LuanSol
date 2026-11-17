@@ -3,10 +3,10 @@
    ------------------------------------------------------------
    版式参考 B.AI：字标贴最左，导航项紧跟字标右侧（左对齐，不再居中），
    右侧只放账户动作。这样宽屏上眼睛从左往右读，不会被中间一块空白劈开。
-   顺序：首页 / 包装工作台 / Luna AI / 关于。
-   包装工作台就是 /studio：点开直接进编辑器，中间没有介绍页。
-   复刻设计整条产品线已下线（2026-11-17），导航里不再留入口，
-   老链接由 App 里的路由兜到底，不做 404。
+   顺序：首页 / 产品⌄ / Luna AI / 关于。
+   「产品」本身不跳页，只是悬停/点击展开一张卡，里面现在只有「包装工作台」
+   （就是 /studio）。留这一层是为了以后加别的产品线时不用再动导航结构。
+   复刻设计整条产品线已下线（2026-11-17），老链接由 App 的路由兜到底，不做 404。
    账户菜单只做「余额 / 账户 / 帮助 / 退出」。
    ============================================================ */
 import React, { useEffect, useRef, useState } from 'react';
@@ -44,8 +44,23 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const [stuck, setStuck] = useState(false);
   const [menu, setMenu] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [prod, setProd] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const prodRef = useRef<HTMLDivElement>(null);
+  const prodTimer = useRef<number | null>(null);
   const path = hash.split('?')[0];
+
+  /* 「产品」是悬停展开的：鼠标从按钮挪到卡片上会经过中间的 6px 空隙，
+     直接 mouseleave 就关会闪一下，所以给 160ms 的宽限。 */
+  const openProd = () => {
+    if (prodTimer.current) { window.clearTimeout(prodTimer.current); prodTimer.current = null; }
+    setProd(true);
+  };
+  const closeProd = () => {
+    if (prodTimer.current) window.clearTimeout(prodTimer.current);
+    prodTimer.current = window.setTimeout(() => setProd(false), 160);
+  };
+  useEffect(() => () => { if (prodTimer.current) window.clearTimeout(prodTimer.current); }, []);
 
   useEffect(() => {
     const onScroll = () => setStuck(window.scrollY > 6);
@@ -66,7 +81,19 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   }, [menu]);
 
   // 换路由关掉浮层，否则从菜单里跳页后菜单还挂在那儿
-  useEffect(() => { setMenu(false); setSheet(false); }, [path]);
+  useEffect(() => { setMenu(false); setSheet(false); setProd(false); }, [path]);
+
+  // 产品卡：点外面 / Esc 收起（悬停已经在 mouseleave 处理）
+  useEffect(() => {
+    if (!prod) return;
+    const away = (e: MouseEvent) => {
+      if (prodRef.current && !prodRef.current.contains(e.target as Node)) setProd(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setProd(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [prod]);
 
   const user = auth.user;
   const credits = sub.usedLeft;
@@ -86,13 +113,37 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
             aria-current={path === '/' ? 'page' : undefined}
           >{t('首页', 'Home')}</button>
 
-          <button
-            className={`site-link ${path === '/studio' ? 'is-on' : ''}`}
-            onClick={() => go('/studio')}
-            onMouseEnter={warmStudio}
-            onFocus={warmStudio}
-            aria-current={path === '/studio' ? 'page' : undefined}
-          >{t('包装工作台', 'Workbench')}</button>
+          <div
+            className="site-drop-wrap"
+            ref={prodRef}
+            onMouseEnter={openProd}
+            onMouseLeave={closeProd}
+          >
+            <button
+              className={`site-link site-drop-btn ${path === '/studio' ? 'is-on' : ''} ${prod ? 'is-open' : ''}`}
+              onClick={() => setProd((v) => !v)}
+              onFocus={openProd}
+              aria-haspopup="true"
+              aria-expanded={prod}
+            >{t('产品', 'Product')}
+              <svg className="site-link-caret" viewBox="0 0 12 12" aria-hidden>
+                <path d="M3 4.6 6 7.6 9 4.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            {prod && <div className="site-drop" role="menu" aria-label={t('产品', 'Product')}>
+              <button
+                className="site-drop-item"
+                role="menuitem"
+                onClick={() => { setProd(false); go('/studio'); }}
+                onMouseEnter={warmStudio}
+                onFocus={warmStudio}
+              >
+                <b>{t('包装工作台', 'Packaging workbench')}</b>
+                <span>{t('从需求到包装设计稿', 'Brief to packaging design')}</span>
+              </button>
+            </div>}
+          </div>
 
           <button
             className={`site-link ${path.startsWith('/luna') ? 'is-on' : ''}`}

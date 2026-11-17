@@ -1110,32 +1110,16 @@
 
 .st-wb-main { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 60px; }
 
-.st-wb-hero { max-width: 1080px; margin: 0 auto; padding: 58px 24px 44px; }
-.st-wb-hero h1 {
-  margin: 14px 0 0;
-  font-size: clamp(30px, 3.6vw, 44px);
-  line-height: 1.26;
-  letter-spacing: -.042em;
-  font-weight: 600;
-  max-width: 22em;
-}
-.st-wb-hero p {
-  margin: 16px 0 0;
-  max-width: 40em;
-  font-size: 13px;
-  line-height: 1.85;
-  color: var(--muted);
-}
-.st-wb-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
-
+/* 首页不再有 hero 文案：进工作台的人已经知道自己要做什么，
+   一行标题 + 一个新建按钮就够了，剩下的位置全留给作品。 */
 .st-wb-list { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 .st-wb-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 26px 0 14px;
-  border-top: 1px solid var(--line-soft);
+  padding: 30px 0 16px;
 }
+.st-wb-bar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .st-wb-bar h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -.01em; }
 .st-wb-bar em {
   font-style: normal;
@@ -1146,7 +1130,6 @@
   background: var(--wash);
 }
 .st-wb-retry {
-  margin-left: auto;
   border: 0;
   background: transparent;
   color: #8c2f2f;
@@ -1155,6 +1138,13 @@
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.st-wb-new {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 15px;
+  font-size: 12.5px;
 }
 
 .st-wb-grid {
@@ -1270,7 +1260,7 @@
 .st-wb-skel em { width: 42%; }
 
 .st-wb-empty {
-  padding: 34px 0 8px;
+  padding: 52px 0 14px;
   border: 1px dashed var(--line);
   border-radius: 14px;
   text-align: center;
@@ -1706,8 +1696,8 @@
 @media (max-width: 900px) {
   .st-wb-top { height: 52px; flex: 0 0 52px; padding: 0 12px; gap: 8px; }
   .st-wb-brand em { display: none; }
-  .st-wb-hero { padding: 30px 18px 26px; }
-  .st-wb-hero h1 { font-size: 27px; }
+  .st-wb-bar { padding: 22px 0 14px; }
+  .st-wb-new { height: 32px; padding: 0 12px; font-size: 12px; }
   .st-wb-list { padding: 0 18px; }
   .st-wb-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
   .st-wb-thumb { aspect-ratio: 1 / 1; padding: 12px; }
