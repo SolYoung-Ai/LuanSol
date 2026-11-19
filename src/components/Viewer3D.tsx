@@ -226,6 +226,11 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>((props, ref) => {
     const key = new THREE.DirectionalLight(0xffffff, 1.15);
     key.position.set(120, 190, 170); key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
+    /* 默认平行光的阴影相机只有 ±5 个单位，模型高 120 → 地面只收到一小块投影（屏幕上那块莫名其妙的四边形）。 */
+    key.shadow.camera.left = -180; key.shadow.camera.right = 180;
+    key.shadow.camera.top = 180; key.shadow.camera.bottom = -180;
+    key.shadow.camera.near = 1; key.shadow.camera.far = 900;
+    key.shadow.camera.updateProjectionMatrix();
     const fill = new THREE.DirectionalLight(0xffffff, 0.4);
     fill.position.set(-140, 70, -110);
     scene.add(ambient, key, fill);
