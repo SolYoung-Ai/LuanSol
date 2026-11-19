@@ -22,6 +22,8 @@ import { lazyPage } from './lazyPage';
 // 公开页不该为工作台的依赖付首屏成本。
 const SiteHome = lazyPage(() => import('./site/HomePage'));
 const SiteAbout = lazyPage(() => import('./site/AboutPage'));
+/* 首页重设计预览：/preview。整屏独立版式，自带顶栏，不套全站导航 */
+const HomePreview = lazyPage(() => import('./site/HomePreview'));
 /* Studio 2.0：欢迎界面 + 九步需求收集（阶段 3） */
 const StudioPage = lazyPage(() => import('./studio/StudioPage'));
 const Account = lazyPage(() => import('./pages/account'));
@@ -120,6 +122,8 @@ export default function App() {
      进到这里全站导航自动收起：屏幕上只留一条栏，填写时不被两排导航分神，
      回站内点左上角那个返回箭头。 */
   const isStudioWizard = path === '/studio';
+  /* 首页预览是整屏独立版式（自带顶栏），同样收起全站导航与页脚 */
+  const isPreview = path === '/preview';
 
   /* 预取主入口页面的 chunk。懒加载 fallback 是一整屏高的字标，
      首次点进 Luna 时「loader → 真实页面」的高度变化也会被看成整页跳一下。
@@ -175,7 +179,8 @@ export default function App() {
   let page: React.ReactNode;
 
   // 旧设计链路路由：全部重定向到新的统一工作台 /studio
-  const OLD_FLOW_ROUTES = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/preview', '/prepress', '/export'];
+  /* 注意：/preview 已改作首页重设计预览，不再属于旧链路，不能留在这个重定向名单里 */
+  const OLD_FLOW_ROUTES = ['/wizard', '/review', '/create', '/brief', '/schemes', '/editor', '/prepress', '/export'];
   const isOldFlow = OLD_FLOW_ROUTES.some((p) => path.startsWith(p));
 
   /* 2.0 公开站点：首页 / 关于 / 工作室。工作室沿用同一条顶部导航，
@@ -198,6 +203,7 @@ export default function App() {
     // 旧路由直接重定向到新的 Studio
     page = <OldRouteRedirect />;
   }   else if (path === '/') page = <SiteHome />;
+  else if (path === '/preview') page = <HomePreview />;
   /* 产品介绍页整页撤掉（2026-11-17）：老书签不 404，直接送进工作室。
      「包装工作台」现在点开就是工作台，中间不再夹一层自夸的说明页。 */
   else if (path === '/product') page = <OldRouteRedirect to="/studio" />;
@@ -251,7 +257,7 @@ export default function App() {
                 <RouteReady key={`ready:${hash}`} onReady={markShown} />
               </Suspense>
             </> : <>
-              {!isStudioWizard && <SiteNav onLogin={requestLogin} />}
+              {!isStudioWizard && !isPreview && <SiteNav onLogin={requestLogin} />}
               <main className="main" ref={mainRef}>
                 {/* 公开页的 chunk 都是几十 KB，但首屏遇到发版瞬间仍可能等一两秒。
                     这里不给「空白 + 页脚顶上来」的画面，先占住一屏高度。 */}
