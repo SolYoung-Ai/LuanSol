@@ -32,8 +32,12 @@ interface Engine {
   rot: { x: number; y: number };
   auto: boolean;
   raf: number;
+  ground: THREE.Mesh;
+  fit: number;
 }
 
+/* 贴图按长边 1024 重画一次：直接把 SVG 交给 TextureLoader，浏览器按毫米尺寸光栅化（140mm 只有 140px），
+ * 放到 3D 里就是糊的。这里先画到 canvas 再当贴图，文字和细线才看得清。 */
 function faceTexture(design: DesignDoc | null, id: FaceId, fallback: string): THREE.Texture {
   const face = design?.faces[id];
   if (!face) {
@@ -41,9 +45,17 @@ function faceTexture(design: DesignDoc | null, id: FaceId, fallback: string): TH
     const ctx = c.getContext('2d')!; ctx.fillStyle = fallback; ctx.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
   }
-  const t = new THREE.TextureLoader().load(svgToDataUrl(faceSvg(face)));
+  const long = 1024;
+  const ratio = face.h / Math.max(1, face.w);
+  const cw = ratio >= 1 ? long : Math.max(256, Math.round(long / ratio));
+  const ch = ratio >= 1 ? Math.max(256, Math.round(long * ratio)) : long;
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = 8;
+  const img = new Image();
+  img.onload = () => { c.getContext('2d')!.drawImage(img, 0, 0, cw, ch); t.needsUpdate = true; };
+  img.src = svgToDataUrl(faceSvg(face));
   return t;
 }
 
@@ -86,16 +98,17 @@ function buildModel(p: Props): THREE.Group {
   };
 
   if (p.structure === 'labelRect' || p.structure === 'labelRound') {
-    const r = Math.max(20, L * 0.42), bodyH = Math.max(90, H * 1.15);
+    const r = Math.max(14, L * 0.42), bodyH = Math.max(70, H * 0.92);
     const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, bodyH, 64),
       new THREE.MeshStandardMaterial({ color: new THREE.Color(plain), roughness: 0.35, metalness: 0.05 }));
     body.castShadow = true; g.add(body);
-    const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.45, r, 16, 64),
+    const shoulderH = bodyH * 0.13, capH = bodyH * 0.19;
+    const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.52, r, shoulderH, 64),
       new THREE.MeshStandardMaterial({ color: new THREE.Color(plain), roughness: 0.35 }));
-    shoulder.position.y = bodyH / 2 + 8; g.add(shoulder);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.47, r * 0.47, 24, 64),
+    shoulder.position.y = bodyH / 2 + shoulderH / 2; g.add(shoulder);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.54, r * 0.54, capH, 64),
       new THREE.MeshStandardMaterial({ color: new THREE.Color(primary), roughness: 0.5 }));
-    cap.position.y = bodyH / 2 + 28; cap.castShadow = true; g.add(cap);
+    cap.position.y = bodyH / 2 + shoulderH + capH / 2; cap.castShadow = true; g.add(cap);
     const theta = p.structure === 'labelRound' ? Math.PI * 2 : Math.PI * 1.35;
     const label = new THREE.Mesh(
       new THREE.CylinderGeometry(r + 0.8, r + 0.8, Math.min(bodyH * 0.62, W * 1.6), 64, 1, true, -theta / 2, theta),
@@ -143,6 +156,23 @@ function buildModel(p: Props): THREE.Group {
   const bb = new THREE.Box3().setFromObject(g);
   g.position.y -= (bb.min.y + bb.max.y) / 2;
   return g;
+}
+
+
+/* 取景：按包围盒算相机距离，保证上下左右都留余量；地面贴到模型最底部，避免穿模。 */
+function fitView(camera: THREE.PerspectiveCamera, group: THREE.Group, ground: THREE.Mesh): number {
+  const bb = new THREE.Box3().setFromObject(group);
+  const dim = bb.getSize(new THREE.Vector3());
+  const fov = (camera.fov * Math.PI) / 180;
+  const aspect = Math.max(0.3, camera.aspect || 1);
+  const needV = (dim.y / 2) / Math.tan(fov / 2);
+  const needH = (dim.x / 2) / Math.tan(fov / 2) / aspect;
+  const radius = Math.max(dim.x, dim.z) * 0.5;
+  const fit = Math.max(80, Math.round(Math.max(needV, needH, radius / Math.tan(fov / 2)) * 1.55));
+  camera.position.set(0, dim.y * 0.16, fit);
+  camera.lookAt(0, 0, 0);
+  ground.position.y = bb.min.y - 1.5;
+  return fit;
 }
 
 /** 先探测 WebGL，避免在无 GPU / 禁用 WebGL 的环境里让 three.js 抛出控制台错误。 */
@@ -199,12 +229,13 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>((props, ref) => {
     ground.rotation.x = -Math.PI / 2; ground.position.y = -70; ground.receiveShadow = true;
     scene.add(ground);
     const group = new THREE.Group(); scene.add(group);
-    const eng: Engine = { renderer, scene, camera, group, key, ambient, rot: { x: -0.08, y: -0.42 }, auto: false, raf: 0 };
+    const eng: Engine = { renderer, scene, camera, group, key, ambient, rot: { x: -0.08, y: -0.42 }, auto: false, raf: 0, ground, fit: 270 };
     engine.current = eng;
 
     const resize = () => {
       const w = host.clientWidth || 600, h = host.clientHeight || 480;
       renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+      if (eng) eng.fit = fitView(camera, eng.group, ground);
     };
     resize();
     const ro = new ResizeObserver(resize); ro.observe(host);
@@ -219,7 +250,11 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>((props, ref) => {
       px = e.clientX; py = e.clientY;
     };
     const up = () => { dragging = false; };
-    const wheel = (e: WheelEvent) => { e.preventDefault(); camera.position.z = Math.max(130, Math.min(560, camera.position.z + e.deltaY * 0.25)); };
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const lo = Math.max(60, eng.fit * 0.55), hi = Math.min(900, eng.fit * 2.4);
+      camera.position.z = Math.max(lo, Math.min(hi, camera.position.z + e.deltaY * 0.25 * (eng.fit / 270)));
+    };
     el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', wheel, { passive: false });
@@ -246,6 +281,9 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>((props, ref) => {
     const next = buildModel(props);
     e.scene.remove(old); disposeGroup(old);
     e.scene.add(next); e.group = next;
+
+    /* 模型归一化到长边 120，但高瘦瓶在固定相机距离下会顶出画面，这里每次重建都重新取景。 */
+    e.fit = fitView(e.camera, next, e.ground);
   }, [props.design, props.structure, props.size.l, props.size.w, props.size.h, props.open, props.material]);
 
   // 背景 / 光照 / 自动旋转（无需重建模型）
