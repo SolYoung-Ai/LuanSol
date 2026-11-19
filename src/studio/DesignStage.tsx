@@ -11,7 +11,7 @@
    没有尺寸 / 形式没有刀模结构时，导出按钮禁用并在界面上说明为什么。
    ============================================================ */
 import React, {
-  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState,
+  Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { go } from '../ui';
 import { useLang } from '../i18n';
@@ -122,15 +122,31 @@ export default function DesignStage({ id, onBrief }: { id: string; onBrief: () =
   );
   const sheet = dieline?.sheets[Math.min(sheetIdx, dieline.sheets.length - 1)] || null;
 
-  /* 画布尺寸：容器多大，画布就按面的真实比例装进去 */
-  useEffect(() => {
+  /* 画布尺寸：容器多大，画布就按面的真实比例装进去。
+     布局完成前 clientHeight 会是 0，所以首次读取放在 layout 阶段，
+     再补两帧（字体/工具栏进来后高度会变）——否则画布会按 0 高算出 0.2 倍。 */
+  useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const read = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    const read = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0 && h > 0) setBox((b) => (b.w === w && b.h === h ? b : { w, h }));
+    };
     read();
     const ro = new ResizeObserver(read);
     ro.observe(el);
-    return () => ro.disconnect();
+    const raf = window.requestAnimationFrame(read);
+    const t1 = window.setTimeout(read, 160);
+    const t2 = window.setTimeout(read, 600);
+    window.addEventListener('resize', read);
+    return () => {
+      ro.disconnect();
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener('resize', read);
+    };
   }, [loadState, view, faceKey]);
 
   /* 云端/外部更新时同步；正在拖的时候不抢 */
@@ -229,7 +245,10 @@ ${JSON.stringify(project.answers.productName.v ? { 产品: project.answers.produ
 
   /* ---------------- 几何：当前面的画布像素 ---------------- */
   const [rw, rh] = faceRatio(project, faceKey);
-  const fit = box.w > 0 ? Math.min((box.w - 48) / rw, (box.h - 128) / rh) : 0;
+  /* 还没测到容器时按视口给一个合理值，测到后立刻贴合——不能让用户看到一块 28px 的画布 */
+  const availW = box.w > 0 ? box.w : Math.min(560, Math.max(280, window.innerWidth - 48));
+  const availH = box.h > 0 ? box.h : Math.min(640, Math.max(320, window.innerHeight * 0.46));
+  const fit = Math.min((availW - 48) / rw, (availH - 128) / rh);
   const scale = Math.max(0.2, fit * (zoom / 100));
   const boardW = Math.max(1, rw * scale);
   const boardH = Math.max(1, rh * scale);
