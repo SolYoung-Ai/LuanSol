@@ -110,6 +110,15 @@ export default function DesignStage({ id, onBrief }: { id: string; onBrief: () =
   const structure = useMemo(() => (project ? structureFor(project.answers.form.v) : null), [project]);
   const summary = useMemo(() => dielineSummary(dieline), [dieline]);
 
+  /* 3D 的取景：Viewer3D 的相机距离是固定的，210mm 的袋子会顶出画面。
+     这里只等比缩小「显示尺寸」，比例与贴图不变——真实毫米仍走导出。 */
+  const viewSize = useMemo(() => {
+    if (!dims) return null;
+    const max = Math.max(dims.l, dims.w, dims.h);
+    const k = max > 140 ? 140 / max : 1;
+    return k === 1 ? dims : { l: dims.l * k, w: dims.w * k, h: dims.h * k };
+  }, [dims]);
+
   /* 各面元素 → 印刷引擎的 DesignDoc：3D、刀板、导出共用一份 */
   const facesMap = useMemo(() => {
     const m: Partial<Record<string, DesignEl[]>> = { ...(design?.faces || {}) };
@@ -759,12 +768,12 @@ ${JSON.stringify(project.answers.productName.v ? { 产品: project.answers.produ
   };
 
   const threeD = <div className={`st-dz-3d ${unfolding ? 'is-unfolding' : ''}`}>
-    {doc && structure && dims && !unfolding
+    {doc && structure && viewSize && !unfolding
       ? <Suspense fallback={<Booting text={t('正在加载 3D…', 'Loading 3D…')} />}>
         <Viewer3D
           design={doc}
           structure={structure}
-          size={dims}
+          size={viewSize || dims}
           open={show3dOpen}
           material="matte"
           background="light"
