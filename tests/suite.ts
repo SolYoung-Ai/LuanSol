@@ -32,10 +32,14 @@ import { migrateProductInfo, migrateProject, migrateWorkflow } from '../src/migr
 import { humanizeAuthError, isSessionNoise } from '../src/cloud/authErrors';
 import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
 import {
-  CATEGORIES, FORMS_BY_CATEGORY, STUDIO_ID_PREFIX, createStudioProject, emptyAnswers,
-  exportStructured, isBlankStudio, missingRequired, normalizeStudioProject, projectName,
-  recommendSize, sizeOk, ans, normalizeDesign, type StudioProject,
+  CATEGORIES, FORMS_BY_CATEGORY, PAGES, PAGE_TOTAL, STUDIO_ID_PREFIX, createStudioProject, emptyAnswers,
+  exportStructured, isBlankStudio, missingRequired, normalizeStudioProject, pageOfStep, projectName,
+  recommendSize, sizeOk, stepOfPage, ans, normalizeDesign, faceEls, withFaceEls, type StudioProject,
 } from '../src/studio/types';
+import {
+  STUDIO_BLEED, STUDIO_SAFE, designDocFor, dielineOf, dielineSummary, dimsOf, elToLayer, faceRatio,
+  facesOf, hasDieline, structureFor, PT_PER_MM,
+} from '../src/studio/frames';
 import {
   addText, buildDesign, moveEl, patchEl, ratioFor, removeEl, reorderEl, resizeEl, setSticker,
   stickerPrompt,
@@ -961,14 +965,14 @@ export async function runTests(): Promise<Result[]> {
     p.answers.size = { mode: 'recommended', dims, src: 'ai', confirmed: false };
 
     A(sizeOk(dims), '推荐尺寸本身应合法');
-    A(missingRequired(p).some((m) => m.step === 4), '未确认的 AI 尺寸必须出现在缺失项里');
+    A(missingRequired(p).some((m) => m.step === 2), '未确认的 AI 尺寸必须出现在缺失项里（页码 2）');
     p.answers.size.confirmed = true;
-    A(!missingRequired(p).some((m) => m.step === 4), '确认后不应再算缺失');
+    A(!missingRequired(p).some((m) => m.step === 2), '确认后不应再算缺失');
 
     // 自定义尺寸由用户填写，直接算已确认
     p.answers.size = { mode: 'custom', dims: { l: 200, w: 100, h: 60 }, src: 'user', confirmed: true };
     A(sizeOk(p.answers.size.dims), '自定义尺寸应合法');
-    A(!missingRequired(p).some((m) => m.step === 4), '自定义尺寸不应再要求确认');
+    A(!missingRequired(p).some((m) => m.step === 2), '自定义尺寸不应再要求确认');
 
     // 越界尺寸必须挡住（0 / 负数 / 过小）
     A(!sizeOk({ l: 0, w: 100, h: 60 }), '0mm 不应通过');
@@ -1069,8 +1073,8 @@ export async function runTests(): Promise<Result[]> {
     A(d.els.find((e) => e.id === 'name')?.text === '云杉面霜', '标题取产品名称');
     A(d.els.some((e) => e.kind === 'sticker'), '选了图案要留贴纸位');
     A(d.bg === '#F7F3EC' && d.ink === '#2F5D4A', `底色取浅色、字色取深色，实际 ${d.bg}/${d.ink}`);
-    A(d.ratio[0] === ratioFor('box')[0], '画布比例跟着包装形式走');
-    return '空字段不排元素 · 有值才出现 · 色板与比例正确';
+    A(d.ratio[0] === 120 && d.ratio[1] === 180, `画布比例取真实正面（120×180），实际 ${d.ratio.join('×')}`);
+    return '空字段不排元素 · 有值才出现 · 色板与真实正面比例正确';
   });
 
   await t('Studio · 画布元素可移可拉可换图，且不会跑出画布', () => {
@@ -1154,6 +1158,93 @@ export async function runTests(): Promise<Result[]> {
     A(s.includes('护肤') && s.includes('极简现代') && s.includes('植物元素'), '类别/风格/图案都要进提示词');
     A(s.includes('象牙白'), '色值要翻成人能读的色名');
     return '默认中性 · 无编造 · 负向约束 · 需求入词';
+  });
+
+  await t('Studio · 包装形式必须映射到真实刀模结构（手提袋明确没有）', () => {
+    A(structureFor('box') === 'tuck', '纸盒应走 tuck 刀模');
+    A(structureFor('gift') === 'topBottom', '礼盒应走天地盖');
+    A(structureFor('pouch') === 'pouch' && structureFor('bag3d') === 'pouch', '袋类走 pouch');
+    A(structureFor('can') === 'labelRect', '罐/瓶/管/袋装走标签刀模');
+    A(structureFor('tote') === null && !hasDieline('tote'), '手提袋没有刀模，必须返回 null 而不是借用纸盒');
+    return '11 个形式 → 结构映射，缺失项显式 null';
+  });
+
+  await t('Studio · 面清单与比例直接读刀模，不另写一份尺寸表', () => {
+    const p = createStudioProject('u1', 10);
+    p.answers.form = ans('box', 'option');
+    p.answers.size = { mode: 'custom', dims: { l: 120, w: 60, h: 180 }, src: 'user', confirmed: true };
+    const panels = facesOf(p);
+    A(panels.map((f) => f.id).join(',') === 'front,back,left,right,top', `tuck 应有五个可印刷面，实际 ${panels.map((f) => f.id).join(',')}`);
+    const front = panels.find((f) => f.id === 'front')!;
+    A(front.w === 120 && front.h === 180, `正面应为 120×180，实际 ${front.w}×${front.h}`);
+    const side = panels.find((f) => f.id === 'left')!;
+    A(side.w === 60 && side.h === 180, `侧面应为 60×180，实际 ${side.w}×${side.h}`);
+    A(faceRatio(p, 'top')[0] === 120 && faceRatio(p, 'top')[1] === 60, '顶面比例应为 120×60');
+    A(faceRatio(p, 'nope')[0] === 3, '不存在的面回落 3:4，不崩');
+
+    const d = dielineOf(p)!;
+    A(d.sheets.length >= 1, '刀模至少一张展开图');
+    A(d.bleed === STUDIO_BLEED && d.safe === STUDIO_SAFE, `出血 ${STUDIO_BLEED}mm / 安全边 ${STUDIO_SAFE}mm 应写进刀模`);
+    const sum = dielineSummary(d)!;
+    A(sum.cut > 0 && sum.crease > 0, '刀模必须同时有裁切线与压线');
+    A(sum.width >= 120 && sum.height >= 180, `展开应不小于正面尺寸，实际 ${sum.width}×${sum.height}`);
+    A(dimsOf(p)!.w === 60, '尺寸从项目里读，不是另存一份');
+    return `五面 + ${sum.sheets} 张展开 · ${sum.cut} 裁切 / ${sum.crease} 压线`;
+  });
+
+  await t('Studio · 面的百分比元素换算成毫米图层（3D/刀板/导出共用）', () => {
+    const face = { w: 100, h: 180 };
+    const palette = { bg: '#fff', primary: '#000', accent: '#F47735', ink: '#191919', muted: '#888' };
+    const text = elToLayer(
+      { id: 'name', kind: 'text', text: '山隐', x: 10, y: 20, w: 80, size: 5, weight: 600, color: '#111' },
+      face, palette, 'front',
+    )!;
+    A(text.type === 'text' && near(text.x, 10) && near(text.w, 80), `文字应落在 10mm 起、宽 80mm，实际 ${text.x}/${text.w}`);
+    A(near(text.fontSize, 5 * PT_PER_MM, 0.2) || text.fontSize >= 3, `字号应折算成 pt，实际 ${text.fontSize}pt`);
+    A(text.h! > 0, '文字必须有估算行高，否则图层没有高度');
+
+    const rule = elToLayer({ id: 'rule', kind: 'rect', x: 10, y: 25, w: 13, h: 0.5 }, face, palette, 'front')!;
+    A(rule.type === 'shape' && near(rule.h!, 0.9, 0.2), `色块高度跟着面高换算，实际 ${rule.h}mm`);
+
+    A(elToLayer({ id: 'sticker', kind: 'sticker', x: 50, y: 50, w: 30 }, face, palette, 'front') === null,
+      '没生成图的贴纸位不能进印刷稿，否则导出里会出现空框');
+    const photo = elToLayer({ id: 'photo', kind: 'sticker', x: 50, y: 50, w: 30, src: 'data:image/png;base64,xx' }, face, palette, 'front')!;
+    A(photo.type === 'image' && photo.src === 'data:image/png;base64,xx', '有图的贴纸要变成 image 图层');
+
+    const d = designDocFor(
+      { ...createStudioProject('u1', 10), answers: { ...emptyAnswers(), form: ans('box', 'option'), size: { mode: 'custom', dims: { l: 100, w: 60, h: 180 }, src: 'user', confirmed: true } }, design: null } as StudioProject,
+      { front: [{ id: 'name', kind: 'text', text: '山隐', x: 10, y: 20, w: 80, size: 5 }], top: [] },
+    )!;
+    A(!!d.faces.front && d.faces.front.layers.length === 1, '正面图层要进来');
+    A(!!d.faces.top && d.faces.top.layers.length === 0, '空面也要建出来，3D 与刀板才不会是空白');
+    A(Object.keys(d.faces).length === 5, `五个面都要有，实际 ${Object.keys(d.faces).join(',')}`);
+    return '文字 px→pt · 色块 mm · 占位贴纸剔除 · 空面保留';
+  });
+
+  await t('Studio · 九件事压成四页，旧 step 读进来不丢位置', () => {
+    A(PAGE_TOTAL === 4 && PAGES.length === 4, `应该是 4 页，实际 ${PAGE_TOTAL}`);
+    A(PAGES[0].steps.join(',') === '1,2' && PAGES[1].steps.join(',') === '3,4', '第 1 页含类别+产品信息，第 2 页含形式+尺寸');
+    A(PAGES[2].steps.length === 4 && PAGES[3].steps.join(',') === '9', '第 3 页合并风格/颜色/图案/Logo，第 4 页补充');
+    A(pageOfStep(2) === 1 && pageOfStep(4) === 2 && pageOfStep(8) === 3 && pageOfStep(9) === 4, '旧单步要能落到对应页');
+    A(pageOfStep(10) === 5, '总结页仍是第 5 屏');
+    A(stepOfPage(1) === 1 && stepOfPage(2) === 3 && stepOfPage(3) === 5 && stepOfPage(4) === 9 && stepOfPage(5) === 10,
+      '每页存回第一项的单步编号，总结存 10');
+    const p = createStudioProject('u1', 10);
+    p.step = 8;
+    A(pageOfStep(p.step) === 3, '老项目停在 Logo 那步，应打开「风格与外观」页而不是越界');
+    return '4 页 · 页/步双向映射稳定';
+  });
+
+  await t('Studio · 多面数据：老稿只有 els 时自动迁到 faces.front', () => {
+    const old = { ratio: [3, 4] as [number, number], bg: '#fff', ink: '#111', accent: '#f47735',
+      els: [{ id: 'name', kind: 'text' as const, text: '旧稿', x: 10, y: 10, w: 80 }], updatedAt: 1 };
+    const d = normalizeDesign(old)!;
+    A(d.faces?.front?.length === 1, '老稿的 els 必须变成 faces.front');
+    A(faceEls(d, 'front')[0].text === '旧稿', 'faceEls 读正面');
+    A(faceEls(d, 'back').length === 0, '没有的背面是空的，不是复制正面');
+    const d2 = withFaceEls(d, 'back', [{ id: 'b', kind: 'text', text: '背', x: 5, y: 5, w: 50 }]);
+    A(faceEls(d2, 'back').length === 1 && faceEls(d2, 'front').length === 1, '改背面不该动正面');
+    return 'els→faces.front 迁移 · 按面读写互不串';
   });
 
   return R;

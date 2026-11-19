@@ -8,7 +8,7 @@
    ============================================================ */
 import React, { useRef, useState } from 'react';
 import {
-  CATEGORIES, COLORS, PATTERNS, STYLES, ans, formsFor, recommendSize, sizeOk, sizeText,
+  CATEGORIES, COLORS, PAGES, PATTERNS, STYLES, ans, formsFor, recommendSize, sizeOk, sizeText,
   type FormId, type PatternId, type SizeMM, type StyleId, type StudioProject,
 } from './types';
 import { compressImageForUpload } from '../workflow/imageUtils';
@@ -195,9 +195,11 @@ function StepProduct({ p, set, next, t }: StepProps) {
       />
     </label>
 
-    <Hint>{t('除产品名称外都可以先跳过。没写的部分不会被 AI 编出来。',
-      'Everything except the name can wait. AI will not invent what you leave blank.')}</Hint>
-    <button className="st-skip" onClick={next} type="button">{t('先跳过这一步', 'Skip this step')} →</button>
+    <Hint>{t('名称必填；内容与卖点可以先空着，没写的部分不会被 AI 编出来。',
+      'The name is required; contents and selling points can wait. AI will not invent what you leave blank.')}</Hint>
+    {!!a.productName.v.trim() && <button className="st-skip" onClick={next} type="button">
+      {t('产品写完了，去选包装形式', 'Done — pick a format')} →
+    </button>}
   </div>;
 }
 
@@ -551,8 +553,8 @@ function StepExtra({ p, set, t }: StepProps) {
 
 /* ------------------------------------------------------------ */
 
-export function StepBody(props: StepProps) {
-  switch (props.p.step) {
+function BodyOf(n: number, props: StepProps) {
+  switch (n) {
     case 1: return <StepCategory {...props} />;
     case 2: return <StepProduct {...props} />;
     case 3: return <StepForm {...props} />;
@@ -563,4 +565,21 @@ export function StepBody(props: StepProps) {
     case 8: return <StepLogo {...props} />;
     default: return <StepExtra {...props} />;
   }
+}
+
+/** 一页里可能合并了多个单项：按 PAGES 里的 steps 依次渲染，第二项起加小标题 */
+export function StepBody(props: StepProps & { page: number }) {
+  const def = PAGES.find((x) => x.n === props.page) || PAGES[PAGES.length - 1];
+  return <div className="st-page-group">
+    {def.steps.map((n, i) => {
+      const meta = STEPS.find((x) => x.n === n);
+      return <div key={n} className={`st-page-block ${i > 0 ? 'is-sub' : ''}`}>
+        {i > 0 && meta && <div className="st-page-h">
+          <span>{String(n).padStart(2, '0')}</span>
+          <b>{props.t(meta.zh, meta.en)}</b>
+        </div>}
+        {BodyOf(n, props)}
+      </div>;
+    })}
+  </div>;
 }

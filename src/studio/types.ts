@@ -129,14 +129,37 @@ export interface DesignEl {
   opacity?: number;
 }
 
-/** 编辑器里的画布状态。跟着项目一起存（本机 + 云端），换设备能接着改。 */
+/** 编辑器里的画布状态。跟着项目一起存（本机 + 云端），换设备能接着改。
+ *  从 3.0 起画布按「面」存：`faces` 每个面一份元素清单，`els` 是正面的旧字段，
+ *  老数据读进来时迁移到 `faces.front`，导出/3D 都按面取值。 */
 export interface StudioDesign {
   ratio: [number, number];
   bg: string;
   ink: string;
   accent: string;
   els: DesignEl[];
+  /** 按面存的元素；key 为 FaceId（front / back / left / right / top） */
+  faces?: Partial<Record<string, DesignEl[]>>;
   updatedAt: number;
+}
+
+/** 取某个面的元素：老设计稿没有 faces 时，正面回落到 els，其余面为空 */
+export function faceEls(d: StudioDesign | null | undefined, face = 'front'): DesignEl[] {
+  if (!d) return [];
+  const fromMap = d.faces?.[face];
+  if (Array.isArray(fromMap)) return fromMap;
+  return face === 'front' ? d.els : [];
+}
+
+/** 写某个面：同时维护 els 与 faces，老代码读 els 不会读到旧内容 */
+export function withFaceEls(d: StudioDesign, face: string, els: DesignEl[]): StudioDesign {
+  const faces = { ...(d.faces || {}), [face]: els };
+  return {
+    ...d,
+    faces,
+    els: face === 'front' ? els : faceEls({ ...d, faces }, 'front'),
+    updatedAt: Date.now(),
+  };
 }
 
 export interface StudioProject {
@@ -147,7 +170,8 @@ export interface StudioProject {
   status: StudioStatus;
   createdAt: number;
   updatedAt: number;
-  /** 当前步骤 1..9，10 = 需求总结 */
+  /** 当前落在哪一段：1..9 = 单项答案（每页首项），10 = 需求总结。
+   *  页面是 4 页，页与单步的映射见 PAGES / pageOfStep / stepOfPage。 */
   step: number;
   answers: StudioAnswers;
   /** AI 推荐记录：按当前包装形式算出的尺寸建议，供「AI 建议 · 待确认」展示 */
@@ -345,19 +369,92 @@ export function projectName(a: StudioAnswers): string {
   return n || '未命名设计';
 }
 
-export interface MissingItem { step: number; zh: string; en: string }
+export interface MissingItem { /** 页码 1..4 */ step: number; zh: string; en: string }
 
-/** 确认需求前必须齐全的项：只卡「没有它就没法设计」的，其余随时可空 */
+/** 确认需求前必须齐全的项：只卡「没有它就没法设计」的，其余随时可空。
+ *  返回的是**页码**，点一下就跳到该页。 */
 export function missingRequired(p: StudioProject): MissingItem[] {
   const a = p.answers;
   const out: MissingItem[] = [];
   if (!a.category.v) out.push({ step: 1, zh: '产品类别', en: 'product category' });
-  if (!a.productName.v.trim()) out.push({ step: 2, zh: '产品名称', en: 'product name' });
-  if (!a.form.v) out.push({ step: 3, zh: '包装形式', en: 'packaging format' });
-  if (!a.size || !sizeOk(a.size.dims)) out.push({ step: 4, zh: '包装尺寸', en: 'packaging size' });
-  else if (!a.size.confirmed) out.push({ step: 4, zh: '确认包装尺寸', en: 'confirmed size' });
-  if (!a.stylePrimary.v) out.push({ step: 5, zh: '主风格', en: 'primary style' });
+  if (!a.productName.v.trim()) out.push({ step: 1, zh: '产品名称', en: 'product name' });
+  if (!a.form.v) out.push({ step: 2, zh: '包装形式', en: 'packaging format' });
+  if (!a.size || !sizeOk(a.size.dims)) out.push({ step: 2, zh: '包装尺寸', en: 'packaging size' });
+  else if (!a.size.confirmed) out.push({ step: 2, zh: '确认包装尺寸', en: 'confirmed size' });
+  if (!a.stylePrimary.v) out.push({ step: 3, zh: '主风格', en: 'primary style' });
   return out;
+}
+
+/* ============================ 页面分组 ============================ */
+/* 九件事压成四页：一次只面对一件事的旧流程太长，
+   但把「类别」和「名称」拆成两页纯属多余。合并后每页 1–4 个字段，
+   都是在同一个决定里能一起想清楚的东西。 */
+
+export interface PageDef {
+  n: number;
+  zh: string;
+  en: string;
+  subZh: string;
+  subEn: string;
+  /** 这一页包含的单项答案编号（对应 steps.tsx 的 STEPS） */
+  steps: number[];
+  required?: boolean;
+}
+
+export const PAGES: PageDef[] = [
+  {
+    n: 1,
+    zh: '产品',
+    en: 'The product',
+    subZh: '是什么、叫什么、凭什么让人买——一页写完。',
+    subEn: 'What it is, what it is called, why people buy it.',
+    steps: [1, 2],
+    required: true,
+  },
+  {
+    n: 2,
+    zh: '包装形式与尺寸',
+    en: 'Format and size',
+    subZh: '选一个最接近的结构，确认成品毫米尺寸——3D 与刀板都按它算。',
+    subEn: 'Pick the closest structure and confirm the finished size — 3D and dieline use it.',
+    steps: [3, 4],
+    required: true,
+  },
+  {
+    n: 3,
+    zh: '风格与外观',
+    en: 'Look and feel',
+    subZh: '定调、配色、正面视觉、Logo，四件事一起定。',
+    subEn: 'Style, palette, front-panel visuals and logo.',
+    steps: [5, 6, 7, 8],
+    required: true,
+  },
+  {
+    n: 4,
+    zh: '补充',
+    en: 'Notes',
+    subZh: '还有别的限制，写在这里；没有就直接确认。',
+    subEn: 'Anything else — or confirm straight away.',
+    steps: [9],
+  },
+];
+
+export const PAGE_TOTAL = PAGES.length;
+export const SUMMARY_STEP = 10;
+
+/** 单步 → 页码 */
+export function pageOfStep(step: number): number {
+  const n = Math.max(1, Math.min(SUMMARY_STEP, Number(step) || 1));
+  if (n >= SUMMARY_STEP) return PAGE_TOTAL + 1;
+  const page = PAGES.find((p) => p.steps.includes(n));
+  return page ? page.n : 1;
+}
+
+/** 页码 → 收进去存的单步（每页第一项）；总结页仍存 10 */
+export function stepOfPage(page: number): number {
+  const n = Math.max(1, Math.min(PAGE_TOTAL + 1, Number(page) || 1));
+  if (n >= PAGE_TOTAL + 1) return SUMMARY_STEP;
+  return PAGES[n - 1].steps[0];
 }
 
 /** 一条答案都没填的空项目：不进「我的设计」列表，避免满屏「未命名设计」。
@@ -464,36 +561,54 @@ const num = (v: unknown, min: number, max: number, fallback: number): number => 
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 
-/** 设计稿的读书笔记：云端/localStorage 里的东西不可信，
- *  坐标越界、字号为 0、贴一张 40MB 的图都可能把画布弄崩，一律夹到安全范围。 */
-export function normalizeDesign(raw: unknown): StudioDesign | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Partial<StudioDesign>;
-  const els = Array.isArray(o.els) ? o.els : [];
+/** 单个元素的白名单清洗：云端 / localStorage 里来的东西一律当作不可信 */
+function cleanEls(raw: unknown, limit = 24): DesignEl[] {
+  if (!Array.isArray(raw)) return [];
   const clean: DesignEl[] = [];
-  for (const e of els.slice(0, 24)) {
+  for (const e of raw.slice(0, limit)) {
     if (!e || typeof e !== 'object') continue;
-    const kind: ElKind = e.kind === 'sticker' ? 'sticker' : e.kind === 'rect' ? 'rect' : 'text';
-    const src = typeof e.src === 'string' && e.src.startsWith('data:image/') ? e.src : undefined;
+    const o = e as Partial<DesignEl>;
+    const kind: ElKind = o.kind === 'sticker' ? 'sticker' : o.kind === 'rect' ? 'rect' : 'text';
+    const src = typeof o.src === 'string' && o.src.startsWith('data:image/') ? o.src : undefined;
     if (kind === 'sticker' && src && src.length > 6_000_000) continue;
-    const id = typeof e.id === 'string' && e.id ? e.id : `el_${clean.length}`;
+    const id = typeof o.id === 'string' && o.id ? o.id : `el_${clean.length}`;
     clean.push({
       id,
       kind,
-      text: typeof e.text === 'string' ? e.text.slice(0, 200) : undefined,
+      text: typeof o.text === 'string' ? o.text.slice(0, 200) : undefined,
       src,
-      x: num(e.x, 0, 100, 10),
-      y: num(e.y, 0, 100, 10),
-      w: num(e.w, 2, 100, 40),
-      h: e.h === undefined ? undefined : num(e.h, 0.1, 100, 2),
-      size: e.size === undefined ? undefined : num(e.size, 0.8, 40, 4),
-      color: typeof e.color === 'string' && HEX.test(e.color) ? e.color : undefined,
-      weight: e.weight === undefined ? undefined : num(e.weight, 300, 800, 400),
-      align: e.align === 'center' || e.align === 'right' ? e.align : 'left',
-      opacity: e.opacity === undefined ? undefined : num(e.opacity, 0.05, 1, 1),
+      x: num(o.x, 0, 100, 10),
+      y: num(o.y, 0, 100, 10),
+      w: num(o.w, 2, 100, 40),
+      h: o.h === undefined ? undefined : num(o.h, 0.1, 100, 2),
+      size: o.size === undefined ? undefined : num(o.size, 0.8, 40, 4),
+      color: typeof o.color === 'string' && HEX.test(o.color) ? o.color : undefined,
+      weight: o.weight === undefined ? undefined : num(o.weight, 300, 800, 400),
+      align: o.align === 'center' || o.align === 'right' ? o.align : 'left',
+      opacity: o.opacity === undefined ? undefined : num(o.opacity, 0.05, 1, 1),
     });
   }
-  if (!clean.length) return null;
+  return clean;
+}
+
+/** 设计稿的读书笔记：云端/localStorage 里的东西不可信，
+ *  坐标越界、字号为 0、贴一张 40MB 的图都可能把画布弄崩，一律夹到安全范围。
+ *  3.0 起按面清洗；老稿只有 els，等同于 faces.front。 */
+export function normalizeDesign(raw: unknown): StudioDesign | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Partial<StudioDesign>;
+  const front = cleanEls(o.els);
+  const faces: Partial<Record<string, DesignEl[]>> = {};
+  if (o.faces && typeof o.faces === 'object') {
+    for (const [face, list] of Object.entries(o.faces)) {
+      if (!/^[a-zA-Z]{2,8}$/.test(face)) continue;
+      faces[face] = cleanEls(list);
+      if (face === 'front') faces.front = cleanEls(list);
+    }
+  }
+  if (!faces.front && front.length) faces.front = front;
+  const els = faces.front || front;
+  if (!els.length && !Object.values(faces).some((x) => (x as DesignEl[])?.length)) return null;
   const ratio: [number, number] = Array.isArray(o.ratio) && o.ratio.length === 2
     && o.ratio.every((n) => Number(n) > 0)
     ? [Number(o.ratio[0]), Number(o.ratio[1])]
@@ -503,7 +618,8 @@ export function normalizeDesign(raw: unknown): StudioDesign | null {
     bg: typeof o.bg === 'string' && HEX.test(o.bg) ? o.bg : '#FFFFFF',
     ink: typeof o.ink === 'string' && HEX.test(o.ink) ? o.ink : '#191919',
     accent: typeof o.accent === 'string' && HEX.test(o.accent) ? o.accent : '#F47735',
-    els: clean,
+    els,
+    faces,
     updatedAt: Number(o.updatedAt) || Date.now(),
   };
 }

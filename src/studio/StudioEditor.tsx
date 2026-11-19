@@ -15,7 +15,7 @@ import { useSubscription } from '../cloud/subscription';
 import { useApp } from '../store';
 import { Icon } from '../components/icons';
 import { cacheOne, dropCached, listStudio, pushStudio, removeStudio } from './api';
-import { createStudioProject } from './types';
+import { createStudioProject, pageOfStep } from './types';
 import { mergeRows, rowsFromCache, timeLabel, type StudioRow } from './rows';
 import { Booting } from './Frame';
 import BriefFlow, { SUMMARY_PAGE } from './BriefFlow';
@@ -104,7 +104,11 @@ function Workbench() {
 
   const statusText = (r: StudioRow) => (r.status === 'confirmed'
     ? t('已进编辑器', 'On canvas')
-    : r.step ? t(`需求第 ${Math.min(r.step, SUMMARY_PAGE)} 页`, `Brief page ${Math.min(r.step, SUMMARY_PAGE)}`) : t('云端项目', 'In cloud'));
+    : r.step
+      ? (pageOfStep(r.step) >= SUMMARY_PAGE
+        ? t('需求已填完 · 待确认', 'Brief filled · to confirm')
+        : t(`需求第 ${pageOfStep(r.step)} / ${SUMMARY_PAGE - 1} 页`, `Brief page ${pageOfStep(r.step)} of ${SUMMARY_PAGE - 1}`))
+      : t('云端项目', 'In cloud'));
 
   return <div className="st-wb">
     <header className="st-wb-top">

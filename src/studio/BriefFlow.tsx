@@ -11,9 +11,10 @@ import { go } from '../ui';
 import { useLang } from '../i18n';
 import { useApp } from '../store';
 import { Icon } from '../components/icons';
-import { STEPS, StepBody } from './steps';
+import { StepBody } from './steps';
 import {
-  CATEGORIES, PATTERNS, STYLES, exportStructured, formDef, missingRequired, sizeText,
+  CATEGORIES, PAGES, PAGE_TOTAL, PATTERNS, STYLES, exportStructured, formDef, missingRequired,
+  pageOfStep, sizeText, stepOfPage,
   type Ans, type StudioProject,
 } from './types';
 import { Booting, Frame, type MobileView } from './Frame';
@@ -21,17 +22,18 @@ import { useStudioProject } from './useStudio';
 import { buildDesign } from './design';
 import StudioChat from './StudioChat';
 
-const TOTAL = STEPS.length;
+const TOTAL = PAGE_TOTAL;
 export const SUMMARY_PAGE = TOTAL + 1;
 const MAX_CHAT = 60;
 
-const stepOf = (p: StudioProject) => Math.min(SUMMARY_PAGE, Math.max(1, p.step || 1));
+/** 存的是单步编号（1..9 / 10），界面按页算 */
+const stepOf = (p: StudioProject) => pageOfStep(p.step || 1);
 
 const recommendSizeOf = (p: StudioProject) => formDef(p.answers.form.v)?.size || null;
 
-/** 进入第四步时先把 AI 建议塞进去（未经确认），避免用户看到空尺寸 */
+/** 进到「形式与尺寸」页时先把 AI 建议塞进去（未经确认），避免用户看到空尺寸 */
 function withSuggestion(p: StudioProject): StudioProject {
-  if (p.step !== 4 || p.answers.size || !p.answers.form.v) return p;
+  if (pageOfStep(p.step) !== 2 || p.answers.size || !p.answers.form.v) return p;
   const dims = recommendSizeOf(p);
   if (!dims) return p;
   return {
@@ -41,8 +43,8 @@ function withSuggestion(p: StudioProject): StudioProject {
   };
 }
 
-/** 这一步有没有内容：用于左侧列表的状态点，不做强制校验 */
-function filled(p: StudioProject, n: number): boolean {
+/** 单项答案有没有内容：用于左侧列表的状态点，不做强制校验 */
+function filledStep(p: StudioProject, n: number): boolean {
   const a = p.answers;
   switch (n) {
     case 1: return !!a.category.v;
@@ -56,6 +58,13 @@ function filled(p: StudioProject, n: number): boolean {
     case 9: return !!a.extra.v.trim();
     default: return p.status === 'confirmed';
   }
+}
+
+/** 这一页有没有内容 = 页内任一项有内容 */
+function filled(p: StudioProject, page: number): boolean {
+  if (page >= SUMMARY_PAGE) return p.status === 'confirmed';
+  const def = PAGES[page - 1];
+  return !!def && def.steps.some((n) => filledStep(p, n));
 }
 
 function crumbsOf(p: StudioProject): string[] {
@@ -81,9 +90,10 @@ export default function BriefFlow({ id, onDesign }: { id: string; onDesign: () =
 
   const page = project ? stepOf(project) : 1;
 
-  const goPage = useCallback((n: number) => {
+  const goPage = useCallback((page: number) => {
     setWarn('');
-    update((cur) => withSuggestion({ ...cur, step: Math.min(SUMMARY_PAGE, Math.max(1, n)) }));
+    const p = Math.min(SUMMARY_PAGE, Math.max(1, page));
+    update((cur) => withSuggestion({ ...cur, step: stepOfPage(p) }));
   }, [update]);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }); }, [page]);
@@ -95,8 +105,8 @@ export default function BriefFlow({ id, onDesign }: { id: string; onDesign: () =
   const context = useMemo(() => {
     if (!project) return '';
     const br = exportStructured(project);
-    const meta = page <= TOTAL ? STEPS[page - 1] : null;
-    const cur = meta ? `第 ${page} / ${TOTAL} 页 · ${meta.zh}` : '需求总结页';
+    const meta = page <= TOTAL ? PAGES[page - 1] : null;
+    const cur = meta ? `第 ${page} / ${TOTAL} 页 · ${meta.zh}（合并 ${meta.steps.length} 个问题）` : '需求总结页';
     return `【用户正在填的页面】${cur}
 【结构化需求】
 ${JSON.stringify({ written: br.written, selected: br.selected, ai: br.ai, pending: br.pending })}`;
@@ -168,8 +178,8 @@ ${JSON.stringify({ written: br.written, selected: br.selected, ai: br.ai, pendin
 
   /* ---------------- 左侧：页面 ---------------- */
   const pagesPane = <div className="st-ed-pages">
-    <div className="st-ed-sec-label">{t('页面', 'Pages')}<em>{STEPS.filter((s) => filled(project, s.n)).length} / {TOTAL}</em></div>
-    {STEPS.map((s) => <button
+    <div className="st-ed-sec-label">{t('页面', 'Pages')}<em>{PAGES.filter((s) => filled(project, s.n)).length} / {TOTAL}</em></div>
+    {PAGES.map((s) => <button
       key={s.n}
       className={`st-ed-page ${page === s.n ? 'on' : ''} ${filled(project, s.n) ? 'is-filled' : ''}`}
       onClick={() => goPage(s.n)}
@@ -192,35 +202,35 @@ ${JSON.stringify({ written: br.written, selected: br.selected, ai: br.ai, pendin
   /* ---------------- 左侧：图层（按答案列） ---------------- */
   const layerRows: { label: string; value: string; step: number }[] = [
     { label: t('产品类别', 'Category'), value: CATEGORIES.find((c) => c.id === project.answers.category.v)?.zh || '—', step: 1 },
-    { label: t('产品名称', 'Product'), value: project.answers.productName.v || '—', step: 2 },
-    { label: t('产品内容', 'Contents'), value: project.answers.productContent.v || '—', step: 2 },
-    { label: t('卖点', 'Selling points'), value: project.answers.sellingPoints.v || '—', step: 2 },
-    { label: t('包装形式', 'Format'), value: formDef(project.answers.form.v)?.zh || '—', step: 3 },
-    { label: t('尺寸', 'Size'), value: project.answers.size ? sizeText(project.answers.size.dims) : '—', step: 4 },
-    { label: t('主风格', 'Lead style'), value: STYLES.find((s) => s.id === project.answers.stylePrimary.v)?.zh || '—', step: 5 },
+    { label: t('产品名称', 'Product'), value: project.answers.productName.v || '—', step: 1 },
+    { label: t('产品内容', 'Contents'), value: project.answers.productContent.v || '—', step: 1 },
+    { label: t('卖点', 'Selling points'), value: project.answers.sellingPoints.v || '—', step: 1 },
+    { label: t('包装形式', 'Format'), value: formDef(project.answers.form.v)?.zh || '—', step: 2 },
+    { label: t('尺寸', 'Size'), value: project.answers.size ? sizeText(project.answers.size.dims) : '—', step: 2 },
+    { label: t('主风格', 'Lead style'), value: STYLES.find((s) => s.id === project.answers.stylePrimary.v)?.zh || '—', step: 3 },
     {
       label: t('辅助风格', 'Supporting'),
       value: project.answers.styleSecondary.v.map((x) => STYLES.find((s) => s.id === x)?.zh || x).join(' · ') || '—',
-      step: 5,
+      step: 3,
     },
     {
       label: t('配色', 'Palette'),
       value: [...project.answers.colors.v, ...project.answers.customColors.v].join(' ') || '—',
-      step: 6,
+      step: 3,
     },
     {
       label: t('图案', 'Graphics'),
       value: project.answers.patterns.v.map((x) => PATTERNS.find((y) => y.id === x)?.zh || x).join(' · ') || '—',
-      step: 7,
+      step: 3,
     },
     {
       label: t('Logo', 'Logo'),
       value: project.answers.logo.mode === 'upload' ? t('已上传', 'Uploaded')
         : project.answers.logo.mode === 'reference' ? t('已上传参考图', 'Reference')
           : project.answers.logo.mode === 'none' ? t('暂时没有', 'None') : '—',
-      step: 8,
+      step: 3,
     },
-    { label: t('补充要求', 'Notes'), value: project.answers.extra.v || '—', step: 9 },
+    { label: t('补充要求', 'Notes'), value: project.answers.extra.v || '—', step: 4 },
   ];
 
   const layersPane = <div className="st-ed-layers">
@@ -238,9 +248,9 @@ ${JSON.stringify({ written: br.written, selected: br.selected, ai: br.ai, pendin
 
   /* ---------------- 左侧：素材 ---------------- */
   const assets: { label: string; src: string; step: number }[] = [];
-  if (project.answers.colorRef.v) assets.push({ label: t('色彩参考', 'Colour reference'), src: project.answers.colorRef.v, step: 6 });
-  if (project.answers.logo.image) assets.push({ label: 'Logo', src: project.answers.logo.image, step: 8 });
-  if (project.answers.logo.refImage) assets.push({ label: t('Logo 参考图', 'Logo reference'), src: project.answers.logo.refImage, step: 8 });
+  if (project.answers.colorRef.v) assets.push({ label: t('色彩参考', 'Colour reference'), src: project.answers.colorRef.v, step: 3 });
+  if (project.answers.logo.image) assets.push({ label: 'Logo', src: project.answers.logo.image, step: 3 });
+  if (project.answers.logo.refImage) assets.push({ label: t('Logo 参考图', 'Logo reference'), src: project.answers.logo.refImage, step: 3 });
 
   const assetsPane = <div className="st-ed-assets">
     <div className="st-ed-sec-label">{t('素材', 'Assets')}<em>{assets.length}</em></div>
@@ -255,13 +265,13 @@ ${JSON.stringify({ written: br.written, selected: br.selected, ai: br.ai, pendin
       </button>)}
     </div>}
     <div className="st-ed-asset-actions">
-      <button onClick={() => goPage(6)}><Icon name="image" size={14} />{t('色彩参考图', 'Colour reference')}</button>
-      <button onClick={() => goPage(8)}><Icon name="upload" size={14} />{t('品牌 Logo', 'Brand logo')}</button>
+      <button onClick={() => goPage(3)}><Icon name="image" size={14} />{t('色彩参考图', 'Colour reference')}</button>
+      <button onClick={() => goPage(3)}><Icon name="upload" size={14} />{t('品牌 Logo', 'Brand logo')}</button>
     </div>
   </div>;
 
   /* ---------------- 中间：无缝页面 ---------------- */
-  const meta = page <= TOTAL ? STEPS[page - 1] : null;
+  const meta = page <= TOTAL ? PAGES[page - 1] : null;
   const crumbs = crumbsOf(project);
   const pct = Math.round(((page - 1) / TOTAL) * 100);
 
@@ -277,7 +287,7 @@ ${JSON.stringify({ written: br.written, selected: br.selected, ai: br.ai, pendin
       {meta && <div className="st-flow-body" key={page}>
         <h1>{t(meta.zh, meta.en)}</h1>
         <p className="st-flow-sub">{t(meta.subZh, meta.subEn)}</p>
-        <StepBody p={project} set={update} next={() => goPage(page + 1)} t={t} />
+        <StepBody p={project} page={page} set={update} next={() => goPage(page + 1)} t={t} />
         {warn && <p className="st-warn" role="status">{warn}</p>}
       </div>}
 
@@ -414,15 +424,15 @@ function SummaryBody({ p, missing, warn, onEdit, onConfirm, onDesign, t }: {
     <div className="st-sum-card">
       <SummaryRow label={t('产品类别', 'Category')} onEdit={() => onEdit(1)} badge={badgeOf(a.category, t)}
         value={cat ? t(cat.zh, cat.en) : <i className="st-emptyv">{t('未选择', 'Not chosen')}</i>} />
-      <SummaryRow label={t('产品名称', 'Product')} onEdit={() => onEdit(2)} badge={badgeOf(a.productName, t)}
+      <SummaryRow label={t('产品名称', 'Product')} onEdit={() => onEdit(1)} badge={badgeOf(a.productName, t)}
         value={a.productName.v || <i className="st-emptyv">{t('未填写', 'Empty')}</i>} />
-      <SummaryRow label={t('产品内容', 'Contents')} onEdit={() => onEdit(2)} badge={badgeOf(a.productContent, t)}
+      <SummaryRow label={t('产品内容', 'Contents')} onEdit={() => onEdit(1)} badge={badgeOf(a.productContent, t)}
         value={a.productContent.v || <i className="st-emptyv">{t('未填写', 'Empty')}</i>} />
-      <SummaryRow label={t('产品卖点', 'Selling points')} onEdit={() => onEdit(2)} badge={badgeOf(a.sellingPoints, t)}
+      <SummaryRow label={t('产品卖点', 'Selling points')} onEdit={() => onEdit(1)} badge={badgeOf(a.sellingPoints, t)}
         value={a.sellingPoints.v || <i className="st-emptyv">{t('未填写', 'Empty')}</i>} />
-      <SummaryRow label={t('包装形式', 'Format')} onEdit={() => onEdit(3)} badge={badgeOf(a.form, t)}
+      <SummaryRow label={t('包装形式', 'Format')} onEdit={() => onEdit(2)} badge={badgeOf(a.form, t)}
         value={form ? t(form.zh, form.en) : <i className="st-emptyv">{t('未选择', 'Not chosen')}</i>} />
-      <SummaryRow label={t('包装尺寸', 'Size')} onEdit={() => onEdit(4)}
+      <SummaryRow label={t('包装尺寸', 'Size')} onEdit={() => onEdit(2)}
         badge={a.size
           ? (a.size.mode === 'custom'
             ? { text: t('你填写', 'You set'), tone: 'user' }
@@ -431,17 +441,17 @@ function SummaryBody({ p, missing, warn, onEdit, onConfirm, onDesign, t }: {
               : { text: t('AI 建议 · 待确认', 'AI · unconfirmed'), tone: 'warn' })
           : { text: t('未填写', 'Empty'), tone: 'none' }}
         value={a.size ? sizeText(a.size.dims) : <i className="st-emptyv">{t('未选择', 'Not chosen')}</i>} />
-      <SummaryRow label={t('主风格', 'Lead style')} onEdit={() => onEdit(5)} badge={badgeOf(a.stylePrimary, t)}
+      <SummaryRow label={t('主风格', 'Lead style')} onEdit={() => onEdit(3)} badge={badgeOf(a.stylePrimary, t)}
         value={primary ? t(primary.zh, primary.en) : <i className="st-emptyv">{t('未选择', 'Not chosen')}</i>} />
-      <SummaryRow label={t('辅助风格', 'Supporting')} onEdit={() => onEdit(5)} badge={badgeOf(a.styleSecondary, t)}
+      <SummaryRow label={t('辅助风格', 'Supporting')} onEdit={() => onEdit(3)} badge={badgeOf(a.styleSecondary, t)}
         value={secondary.length ? secondary.join(' · ') : <i className="st-emptyv">{t('未选择', 'None')}</i>} />
-      <SummaryRow label={t('配色', 'Palette')} onEdit={() => onEdit(6)} badge={badgeOf(a.colors, t)}
+      <SummaryRow label={t('配色', 'Palette')} onEdit={() => onEdit(3)} badge={badgeOf(a.colors, t)}
         value={palette.length
           ? <span className="st-sum-colors">{palette.map((hex) => <i key={hex} style={{ background: hex }} title={hex} />)}{a.colorRef.v ? <em>{t('含参考图', '+ reference')}</em> : null}</span>
           : <i className="st-emptyv">{t('未选择', 'None')}</i>} />
-      <SummaryRow label={t('图案', 'Graphics')} onEdit={() => onEdit(7)} badge={badgeOf(a.patterns, t)}
+      <SummaryRow label={t('图案', 'Graphics')} onEdit={() => onEdit(3)} badge={badgeOf(a.patterns, t)}
         value={patterns.length ? patterns.map((x) => t(x.zh, x.en)).join(' · ') : <i className="st-emptyv">{t('未选择', 'None')}</i>} />
-      <SummaryRow label={t('品牌 Logo', 'Logo')} onEdit={() => onEdit(8)}
+      <SummaryRow label={t('品牌 Logo', 'Logo')} onEdit={() => onEdit(3)}
         badge={{ text: a.logo.mode ? t('你选择', 'You picked') : t('未填写', 'Empty'), tone: a.logo.mode ? 'pick' : 'none' }}
         value={a.logo.mode === 'upload'
           ? (a.logo.image ? t('已上传 Logo', 'Logo uploaded') : t('还没选文件', 'No file yet'))
@@ -449,7 +459,7 @@ function SummaryBody({ p, missing, warn, onEdit, onConfirm, onDesign, t }: {
             ? (a.logo.refImage ? t('已上传参考图', 'Reference uploaded') : t('还没选文件', 'No file yet'))
             : a.logo.mode === 'none' ? t('暂时没有', 'Not yet')
               : <i className="st-emptyv">{t('未选择', 'Not chosen')}</i>} />
-      <SummaryRow label={t('补充要求', 'Notes')} onEdit={() => onEdit(9)} badge={badgeOf(a.extra, t)}
+      <SummaryRow label={t('补充要求', 'Notes')} onEdit={() => onEdit(4)} badge={badgeOf(a.extra, t)}
         value={a.extra.v || <i className="st-emptyv">{t('未填写', 'Empty')}</i>} />
     </div>
 
@@ -472,7 +482,7 @@ function SummaryBody({ p, missing, warn, onEdit, onConfirm, onDesign, t }: {
           </button>
         </>
         : <>
-          <button className="st-btn st-btn-ghost" onClick={() => onEdit(p.step <= 10 ? p.step : 1)}>{t('继续填写', 'Keep editing')}</button>
+          <button className="st-btn st-btn-ghost" onClick={() => onEdit(pageOfStep(p.step))}>{t('继续填写', 'Keep editing')}</button>
           <button className="st-btn st-btn-dark" onClick={onConfirm}>
             {t('确认需求，打开编辑器', 'Confirm and open the canvas')}<span aria-hidden>→</span>
           </button>
