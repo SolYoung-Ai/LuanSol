@@ -109,12 +109,16 @@ function buildModel(p: Props): THREE.Group {
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.54, r * 0.54, capH, 64),
       new THREE.MeshStandardMaterial({ color: new THREE.Color(primary), roughness: 0.5 }));
     cap.position.y = bodyH / 2 + shoulderH + capH / 2; cap.castShadow = true; g.add(cap);
-    const theta = p.structure === 'labelRound' ? Math.PI * 2 : Math.PI * 1.35;
+    /* 标签按真实尺寸包上去：弧长 = 面宽，高度 = 面高，别再用固定比例把方形稿拉成长条。 */
+    const fw = (p.design?.faces.front?.w || p.size.l) * scale;
+    const fh = (p.design?.faces.front?.h || p.size.w * 0.9) * scale;
+    const theta = p.structure === 'labelRound' ? Math.PI * 2 : Math.min(Math.PI * 2, Math.max(0.6, fw / r));
+    const labelH = Math.min(bodyH * 0.94, Math.max(12, fh));
     const label = new THREE.Mesh(
-      new THREE.CylinderGeometry(r + 0.8, r + 0.8, Math.min(bodyH * 0.62, W * 1.6), 64, 1, true, -theta / 2, theta),
+      new THREE.CylinderGeometry(r + 0.8, r + 0.8, labelH, 96, 1, true, -theta / 2, theta),
       new THREE.MeshStandardMaterial({ map: tex('front'), roughness: p.material === 'gloss' ? 0.3 : 0.8, side: THREE.DoubleSide }),
     );
-    label.position.y = -bodyH * 0.06; g.add(label);
+    label.position.y = -bodyH * 0.02; g.add(label);
     g.position.y = 0;
   } else if (p.structure === 'topBottom') {
     const baseH = H * 0.72, lidH = H * 0.3;
@@ -284,6 +288,7 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>((props, ref) => {
 
     /* 模型归一化到长边 120，但高瘦瓶在固定相机距离下会顶出画面，这里每次重建都重新取景。 */
     e.fit = fitView(e.camera, next, e.ground);
+    e.renderer.render(e.scene, e.camera);
   }, [props.design, props.structure, props.size.l, props.size.w, props.size.h, props.open, props.material]);
 
   // 背景 / 光照 / 自动旋转（无需重建模型）
