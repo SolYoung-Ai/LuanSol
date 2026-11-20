@@ -93,6 +93,18 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
             onFocus={warmStudio}
             aria-current={path === '/studio' ? 'page' : undefined}
           >{t('包装工作台', 'Packaging workbench')}</button>
+
+          <button
+            className={`site-link ${path.startsWith('/luna') ? 'is-on' : ''}`}
+            onClick={() => go('/luna')}
+            aria-current={path.startsWith('/luna') ? 'page' : undefined}
+          >Luna AI</button>
+
+          <button
+            className={`site-link ${path === '/about' ? 'is-on' : ''}`}
+            onClick={() => go('/about')}
+            aria-current={path === '/about' ? 'page' : undefined}
+          >{t('关于', 'About')}</button>
         </div>
 
         <div className="site-actions" ref={menuRef}>
@@ -164,6 +176,12 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
       </button>
       <button className="site-sheet-link" onClick={() => go('/studio')}>
         {t('包装工作台', 'Workbench')}<span>→</span>
+      </button>
+      <button className="site-sheet-link" onClick={() => go('/luna')}>
+        Luna AI<span>→</span>
+      </button>
+      <button className="site-sheet-link" onClick={() => go('/about')}>
+        {t('关于', 'About')}<span>→</span>
       </button>
       {user
         ? <>
