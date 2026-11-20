@@ -24,6 +24,8 @@ const SiteHome = lazyPage(() => import('./site/HomePage'));
 const SiteAbout = lazyPage(() => import('./site/AboutPage'));
 /* 首页重设计预览：/preview。整屏独立版式，自带顶栏，不套全站导航 */
 const HomePreview = lazyPage(() => import('./site/HomePreview'));
+/* 首页重设计 · 3D 纸样旋转木马：/carousel（同样整屏独立版式） */
+const HomeCarousel = lazyPage(() => import('./site/HomeCarousel'));
 /* Studio 2.0：欢迎界面 + 九步需求收集（阶段 3） */
 const StudioPage = lazyPage(() => import('./studio/StudioPage'));
 const Account = lazyPage(() => import('./pages/account'));
@@ -123,7 +125,7 @@ export default function App() {
      回站内点左上角那个返回箭头。 */
   const isStudioWizard = path === '/studio';
   /* 首页预览是整屏独立版式（自带顶栏），同样收起全站导航与页脚 */
-  const isPreview = path === '/preview';
+  const isPreview = path === '/preview' || path === '/carousel';
 
   /* 预取主入口页面的 chunk。懒加载 fallback 是一整屏高的字标，
      首次点进 Luna 时「loader → 真实页面」的高度变化也会被看成整页跳一下。
@@ -204,6 +206,7 @@ export default function App() {
     page = <OldRouteRedirect />;
   }   else if (path === '/') page = <SiteHome />;
   else if (path === '/preview') page = <HomePreview />;
+  else if (path === '/carousel') page = <HomeCarousel />;
   /* 产品介绍页整页撤掉（2026-11-17）：老书签不 404，直接送进工作室。
      「包装工作台」现在点开就是工作台，中间不再夹一层自夸的说明页。 */
   else if (path === '/product') page = <OldRouteRedirect to="/studio" />;
