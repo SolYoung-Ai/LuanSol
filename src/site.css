@@ -941,7 +941,7 @@ body:has(.app.is-site) { background: #ffffff; }
   min-height: calc(100svh - var(--nav-h) - 196px);
   padding: 84px 0;
   text-align: center;
-  overflow: hidden;
+  /* 不再 overflow:hidden：暖光被裁在距形边界时会切出一条生硬的横线 */
 }
 /* 鼠标跟随的一团极淡暖光：只在指针移动时更新 --mx/--my，
    不铺整屏渐变，所以白底依然是白底 */
@@ -1500,7 +1500,7 @@ body:has(.app.is-site) { background: #ffffff; }
    页脚（公开页专用，极简）
    ------------------------------------------------------------ */
 .site-foot {
-  border-top: 1px solid var(--line);
+  /* 不要分隔线：页脚直接落在白底上，不再用一条横线把页面切成两段 */
   padding: 44px 0 52px;
 }
 /* 页脚只有两段：字标在左，版权 + 法务在右。
@@ -1508,7 +1508,7 @@ body:has(.app.is-site) { background: #ffffff; }
 .site-foot-in {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 32px;
   flex-wrap: wrap;
 }

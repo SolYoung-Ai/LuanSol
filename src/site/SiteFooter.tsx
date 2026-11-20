@@ -10,18 +10,12 @@
    ============================================================ */
 import React from 'react';
 import { useLang } from '../i18n';
-import { SiteLogo } from './SiteNav';
 
 export default function SiteFooter() {
   const { t } = useLang();
   return <footer className="site-foot">
     <div className="site-wrap">
       <div className="site-foot-in">
-        <div className="site-foot-brand">
-          {/* 页脚只留字标：副标与「从一个想法……」这类小字已经去掉，
-              品牌层不再自证口号，留白本身就是语气 */}
-          <SiteLogo />
-        </div>
         <div className="site-foot-legal">
           <span>© 2026 LunaSol</span>
           <span>
