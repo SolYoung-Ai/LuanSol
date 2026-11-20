@@ -49,8 +49,60 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const [stuck, setStuck] = useState(false);
   const [menu, setMenu] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const path = hash.split('?')[0];
+  /* Luna AI 页：导航默认收进顶部，指针靠近上边缘才滑下来，离开再收回去。
+     只有在「宽屏 + 精确指针」下生效；触屏没有 hover，保持常驻。 */
+  const lunaAuto = path.startsWith('/luna');
+  const [navAway, setNavAway] = useState(false);
+
+  /* 进入 Luna AI：导航默认收起来。指针贴到屏幕顶上（y<=12）才滑下来；
+     已经滑下来时，指针停在导航高度内继续算「还在用导航」；
+     离开这块区域 420ms 后才收回去 —— 太急会把「想点导航」误判成路过。 */
+  useEffect(() => {
+    const root = navRef.current?.closest('.app');
+    let away = false;
+    const mark = (next: boolean) => {
+      if (next === away) return;
+      away = next;
+      setNavAway(next);
+      root?.classList.toggle('is-navaway', next);
+    };
+    const wide = () => window.matchMedia('(min-width: 861px)').matches;
+    if (!lunaAuto || !wide()) { away = false; root?.classList.remove('is-navaway'); setNavAway(false); return; }
+
+    mark(true);
+    let timer = 0;
+    const clear = () => { if (timer) { window.clearTimeout(timer); timer = 0; } };
+    const show = () => { clear(); mark(false); };
+    const hide = () => { clear(); timer = window.setTimeout(() => { timer = 0; mark(true); }, 420); };
+
+    const onMove = (e: PointerEvent) => {
+      if (!wide()) return;
+      const navH = navRef.current?.getBoundingClientRect().height || 0;
+      if (e.clientY <= 12) show();
+      else if (e.clientY > 12 + (away ? 0 : navH + 8)) hide();
+      else clear();
+    };
+    const onBlur = () => { clear(); mark(true); };
+    const onFocus = (e: FocusEvent) => {
+      if (navRef.current?.contains(e.target as Node)) show();
+    };
+
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('pointerleave', hide);
+    document.addEventListener('focusin', onFocus);
+    return () => {
+      clear();
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('pointerleave', hide);
+      document.removeEventListener('focusin', onFocus);
+      root?.classList.remove('is-navaway');
+    };
+  }, [lunaAuto]);
 
   useEffect(() => {
     if (!menu) return;
@@ -73,7 +125,7 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const avatar = profile?.avatar_url || user?.avatarUrl || '';
 
   return <>
-    <nav className={`site-nav ${stuck ? 'is-stuck' : ''}`} aria-label={t('主导航', 'Main')}>
+    <nav ref={navRef} className={`site-nav ${stuck ? 'is-stuck' : ''} ${navAway ? 'is-away' : ''}`} aria-label={t('主导航', 'Main')}>
       <div className="site-wrap site-nav-in">
         <SiteLogo />
 
