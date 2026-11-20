@@ -30,6 +30,11 @@ function warmStudio() {
 export function SiteLogo({ onClick, sub = false }: { onClick?: () => void; sub?: boolean }) {
   const { t } = useLang();
   return <button className="site-logo" onClick={onClick || (() => go('/'))} aria-label={t('LunaSol 首页', 'LunaSol home')}>
+    {/* 新标志：橙圆压黑圆。纯几何，跟标签页图标同一套坐标，放大缩小都不糊 */}
+    <svg className="site-logo-mark" viewBox="0 0 64 64" aria-hidden>
+      <circle cx="37" cy="35" r="21.5" fill="#161616" />
+      <circle cx="27" cy="29" r="21.5" fill="#F47735" />
+    </svg>
     <b>Luna<i>Sol</i></b>
     {sub && <span>{t('人人都能成为设计师', 'Everyone can be a designer')}</span>}
   </button>;

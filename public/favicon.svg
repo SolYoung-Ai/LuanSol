@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LunaSol">
-  <!-- 标签页图标：圆角方框 + 橙黑双圆（Luna 橙日 / Sol 黑月）。
-       只在浏览器标签页使用；站内字标仍是「Luna 黑 + Sol 橙」的文字标。 -->
-  <rect x="2.6" y="2.6" width="58.8" height="58.8" rx="15" fill="#ffffff" stroke="#161616" stroke-width="4"/>
-  <circle cx="35" cy="37.5" r="14" fill="#161616"/>
-  <circle cx="27" cy="28" r="13.4" fill="#f47735"/>
+  <!-- 标签页图标：橙圆压黑圆（Luna 橙日 / Sol 黑），无外框。
+       坐标与 scripts/favicon.py 一致；站内字标用的是同一个标志。 -->
+  <circle cx="36.4" cy="35.6" r="23" fill="#161616"/>
+  <circle cx="25.5" cy="28.6" r="23" fill="#FD7102"/>
 </svg>

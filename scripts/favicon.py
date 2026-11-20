@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """生成标签页图标（favicon）。
 
-新 logo 是纯几何：圆角方框 + 橙圆压在黑圆上，所以不依赖任何位图素材，
-这里按 public/favicon.svg 的同一套坐标（viewBox 64）放大绘制。
+新 logo 是纯几何：一个橙圆压在一个黑圆上（Luna = 橙日，Sol = 黑），没有外框。
+坐标取自设计稿「橙黑交叠圆形标志.png」的实际比例：
+    两圆等大 r 259.5，黑圆相对橙圆偏右下 (123, 79.5)
+换算到 viewBox 64 即 r 23、偏移 (10.9, 7.05)；去掉外框后图形约占画面 89%。
+同一套数字也写在 public/favicon.svg 里，改一处要一起改。
 
     python3 scripts/favicon.py
 
@@ -13,8 +16,9 @@
     public/favicon-48.png
     public/favicon.png     256
     public/apple-touch-icon.png  180（白底，iOS 不给透明）
+    public/icon-512.png    512
 
-站内字标不动：导航与页脚仍然是「Luna 黑 + Sol 橙」的文字标。
+站内字标用的是同一个标志（见 src/site/SiteNav.tsx，坐标与本文件一致）。
 """
 
 from pathlib import Path
@@ -25,16 +29,14 @@ ROOT = Path(__file__).resolve().parent.parent
 PUB = ROOT / "public"
 
 INK = (22, 22, 22, 255)
-BRAND = (244, 119, 53, 255)
+BRAND = (253, 113, 2, 255)   # 取色自设计稿（#FD7102）
 WHITE = (255, 255, 255, 255)
 
 # 与 public/favicon.svg 同一套坐标（viewBox 0 0 64 64）
 VB = 64
-RECT = (2.6, 2.6, 61.4, 61.4)   # 外框
-RECT_R = 15
-RECT_W = 4
-BLACK_C = (35.0, 37.5, 14.0)
-ORANGE_C = (27.0, 28.0, 13.4)
+R = 23.0
+BLACK_C = (36.4, 35.6)
+ORANGE_C = (25.5, 28.6)
 
 SS = 8  # 超采样倍数：小尺寸下圆才不糊
 
@@ -48,17 +50,8 @@ def draw(size: int, transparent: bool) -> Image.Image:
     def circle(cx, cy, r, color):
         d.ellipse([(cx - r) * k, (cy - r) * k, (cx + r) * k, (cy + r) * k], fill=color)
 
-    # 方框：outline 画在 bbox 内侧，所以把 bbox 向外推半个描边宽，视觉上才是 2.6→61.4
-    half = RECT_W / 2
-    x0, y0, x1, y1 = RECT
-    d.rounded_rectangle(
-        [(x0 - half) * k, (y0 - half) * k, (x1 + half) * k, (y1 + half) * k],
-        radius=(RECT_R + half) * k,
-        outline=INK,
-        width=round(RECT_W * k),
-    )
-    circle(*BLACK_C, INK)      # 黑圆在下
-    circle(*ORANGE_C, BRAND)   # 橙圆压上去
+    circle(*BLACK_C, R, INK)     # 黑圆在下
+    circle(*ORANGE_C, R, BRAND)  # 橙圆压上去
 
     return img.resize((size, size), Image.LANCZOS)
 
@@ -69,6 +62,7 @@ def main() -> None:
     draw(256, True).save(PUB / "favicon.png")
     # iOS 主屏图标会自己加圆角，且不支持透明——白底整块
     draw(180, False).save(PUB / "apple-touch-icon.png")
+    draw(512, True).save(PUB / "icon-512.png")
 
     # .ico：一张图里塞多尺寸，系统/浏览器自己挑
     frames = [draw(s, True) for s in (16, 32, 48)]

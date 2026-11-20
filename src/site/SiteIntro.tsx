@@ -60,10 +60,10 @@ export default function SiteIntro({ enabled }: { enabled: boolean }) {
 
   return <div className={`site-intro ${out ? 'is-out' : ''}`} role="presentation">
     <div className="site-intro-in">
+      {/* 新标志（橙圆压黑圆）与标签页图标同一套比例：viewBox 92 = 64 等比放大 */}
       <svg className="site-intro-mark" viewBox="0 0 92 92" aria-hidden>
-        <rect className="si-sq" x="14" y="14" width="64" height="64" rx="7" />
-        <circle className="si-circle" cx="46" cy="46" r="17" />
-        <circle className="si-moon" cx="40" cy="41" r="17" />
+        <circle className="si-black" cx="52.3" cy="51.2" r="33.1" />
+        <circle className="si-orange" cx="36.7" cy="41.1" r="33.1" />
       </svg>
       <div className="site-intro-word" aria-label="LunaSol">
         {LETTERS.map((ch, i) => <span key={i}>{ch}</span>)}

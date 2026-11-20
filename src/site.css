@@ -426,8 +426,8 @@ body:has(.app.is-site) { background: #ffffff; }
 
 .site-logo {
   display: inline-flex;
-  align-items: baseline;
-  gap: 9px;
+  align-items: center;
+  gap: 8px;
   flex: none;
   background: none;
   border: 0;
@@ -440,6 +440,7 @@ body:has(.app.is-site) { background: #ffffff; }
   letter-spacing: -.03em;
   font-family: inherit;
 }
+.site-logo-mark { width: 21px; height: 21px; flex: none; margin-top: -1px; }
 .site-logo b { font-weight: 600; }
 .site-logo i { font-style: normal; color: var(--brand); font-weight: 600; }
 .site-logo span {
@@ -1598,21 +1599,19 @@ body:has(.app.is-site) { background: #ffffff; }
 .site-intro.is-out { opacity: 0; transform: scale(1.012); pointer-events: none; }
 .site-intro-in { display: flex; flex-direction: column; align-items: center; gap: 26px; }
 .site-intro-mark { width: 92px; height: 92px; overflow: visible; }
-.site-intro-mark .si-sq {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 2.4;
-  stroke-dasharray: 300;
-  stroke-dashoffset: 300;
-  transform-origin: 46px 46px;
-  animation: siSquare 1.05s var(--ease) .06s forwards, siRotate 1.5s var(--ease) .06s forwards;
+.site-intro-mark .si-black {
+  fill: var(--ink);
+  transform-origin: 52px 51px;
+  transform: scale(.86);
+  opacity: 0;
+  animation: siIn .5s var(--ease) .08s forwards;
 }
-.site-intro-mark .si-circle {
+.site-intro-mark .si-orange {
   fill: var(--brand);
-  transform-origin: 46px 46px;
+  transform-origin: 37px 41px;
   transform: scale(.2);
   opacity: 0;
-  animation: siCircle .9s cubic-bezier(.2, 1.35, .4, 1) .42s forwards;
+  animation: siCircle .9s cubic-bezier(.2, 1.35, .4, 1) .34s forwards;
 }
 .site-intro-mark .si-line {
   stroke: var(--ink);
@@ -1622,10 +1621,8 @@ body:has(.app.is-site) { background: #ffffff; }
   stroke-dashoffset: 130;
   animation: siLine .8s var(--ease) .74s forwards;
 }
-.site-intro-mark .si-moon {
-  fill: var(--paper);
-  opacity: 0;
-  animation: siMoon .5s var(--ease) 1s forwards;
+@keyframes siIn {
+  to { opacity: 1; transform: scale(1); }
 }
 @keyframes siSquare {
   to { stroke-dashoffset: 0; }
@@ -1641,9 +1638,6 @@ body:has(.app.is-site) { background: #ffffff; }
 }
 @keyframes siLine {
   to { stroke-dashoffset: 0; }
-}
-@keyframes siMoon {
-  to { opacity: 1; }
 }
 .site-intro-word {
   display: flex;
