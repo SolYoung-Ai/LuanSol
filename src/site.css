@@ -956,12 +956,16 @@ body:has(.app.is-site) { background: #ffffff; }
   /* 不再 overflow:hidden：暖光被裁在距形边界时会切出一条生硬的横线 */
 }
 /* 鼠标跟随的一团极淡暖光：只在指针移动时更新 --mx/--my，
-   不铺整屏渐变，所以白底依然是白底 */
+   不铺整屏渐变，所以白底依然是白底。
+   收口：用遮罩把下沿提前化掉。之前光晕贴着 hero 底边被直接裁断，
+   指针靠近下方时会露出一条横的硬边（像一块淡橙色矩形压在白底上）。 */
 .site-home-glow {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background: radial-gradient(460px 460px at var(--mx, 50%) var(--my, 46%), rgba(244, 119, 53, .12), rgba(244, 119, 53, 0) 68%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, #000 18%, #000 58%, rgba(0, 0, 0, 0) 96%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, #000 18%, #000 58%, rgba(0, 0, 0, 0) 96%);
   opacity: 0;
   transition: opacity .5s var(--ease);
 }
