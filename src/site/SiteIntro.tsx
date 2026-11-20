@@ -1,9 +1,9 @@
 /* ============================================================
    品牌开场动画
    ------------------------------------------------------------
-   构成：方形（纸盒边界）描边生长 → 橙色圆（太阳）弹出 →
-   一枚纸色圆偏移压上去，切出月牙（Luna）→ 字标逐字落位 →
-   副标出现 → 整层淡出。
+   构成：黑圆从右上压下来落位 → 橙圆从左侧背面滑出、轻微过冲后压上 →
+   字标 LunaSol 逐字落位（Sol 用品牌橙）→ 副标出现 → 整层淡出。
+   字标不写全大写：站内写法一直是 LunaSol，开场对齐。
    约束：纯 SVG + CSS 动画（不加载视频、不拉字体、不用位图）；
    2.4 秒结束，右下角随时可跳过；同一会话只播一次（sessionStorage）；
    系统开了「减少动态效果」时直接跳过。
@@ -11,7 +11,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLang } from '../i18n';
 
-const KEY = 'lunasol.intro.seen.v2';
+const KEY = 'lunasol.intro.seen.v3';
 const LETTERS = ['L', 'u', 'n', 'a', 'S', 'o', 'l'];
 
 export default function SiteIntro({ enabled }: { enabled: boolean }) {

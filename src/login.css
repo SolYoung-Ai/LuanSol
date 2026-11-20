@@ -66,58 +66,39 @@
   gap: 26px;
 }
 .bl-mark { width: 92px; height: 92px; overflow: visible; }
-.bl-sq {
-  fill: none;
-  stroke: var(--mk-ink);
-  stroke-width: 2.4;
-  stroke-dasharray: 300;
-  stroke-dashoffset: 300;
-  transform-origin: 46px 46px;
-  animation: blSquare 7s var(--mk-ease) infinite, blRotate 7s var(--mk-ease) infinite;
+/* 新标志同款构成：黑圆压下来落位，橙圆从左侧滑出压上去 */
+.bl-black {
+  fill: var(--mk-ink);
+  transform-origin: 37px 35px;
+  opacity: 0;
+  animation: blBlack 7s var(--mk-ease) infinite;
 }
-.bl-sun {
+.bl-orange {
   fill: var(--mk-brand);
-  transform-origin: 46px 46px;
-  animation: blSun 7s cubic-bezier(.2, 1.35, .4, 1) infinite;
+  transform-origin: 27px 29px;
+  opacity: 0;
+  animation: blOrange 7s cubic-bezier(.2, 1.1, .3, 1) infinite;
 }
-.bl-moon {
-  fill: #ffffff;
-  animation: blMoon 7s var(--mk-ease) infinite;
+@keyframes blBlack {
+  0%        { opacity: 0; transform: translate(12px, -10px) scale(1.22); }
+  10%       { opacity: 1; }
+  16%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: none; }
 }
-@keyframes blSquare {
-  0%        { stroke-dashoffset: 300; opacity: 1; }
-  16%       { stroke-dashoffset: 0; opacity: 1; }
-  78%       { stroke-dashoffset: 0; opacity: 1; }
-  86%, 100% { stroke-dashoffset: 0; opacity: 0; }
-}
-@keyframes blRotate {
-  0%   { transform: rotate(-24deg); }
-  16%  { transform: rotate(0deg); }
-  100% { transform: rotate(0deg); }
-}
-@keyframes blSun {
-  0%, 8%    { opacity: 0; transform: scale(.2); }
-  20%       { opacity: 1; transform: scale(1.09); }
-  26%       { opacity: 1; transform: scale(1); }
-  78%       { opacity: 1; transform: scale(1); }
-  86%, 100% { opacity: 0; transform: scale(1); }
-}
-@keyframes blMoon {
-  0%, 16%   { opacity: 0; transform: translate(-3px, -3px) scale(.94); }
-  26%       { opacity: 1; transform: translate(0, 0) scale(1); }
-  78%       { opacity: 1; transform: translate(0, 0) scale(1); }
-  86%, 100% { opacity: 0; transform: translate(0, 0) scale(1); }
+@keyframes blOrange {
+  0%, 4%    { opacity: 0; transform: translate(-30px, 22px) scale(.58); }
+  12%       { opacity: 1; transform: translate(4px, -2px) scale(1.06); }
+  16%, 78%  { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; transform: none; }
 }
 
 .bl-word {
   display: flex;
   align-items: baseline;
   font-size: 26px;
-  letter-spacing: .16em;
+  letter-spacing: -.025em;
   font-weight: 600;
-  text-transform: uppercase;
   color: var(--mk-ink);
-  margin-left: .16em; /* 抵消末字 letter-spacing，视觉上仍居中 */
 }
 .bl-word span { display: inline-block; opacity: 0; transform: translateY(8px); }
 /* 逐字落位：每字错开 2%（≈140ms），落位后一路停到收尾 */
@@ -335,6 +316,16 @@
 .lg-hint button:hover:not(:disabled) { text-decoration-color: var(--mk-ink); }
 .lg-hint button:disabled { color: #b6b1a9; cursor: default; text-decoration: none; }
 
+/* 验证码登录是备选路径：压成小字，别和主按钮抢注意力 */
+.lg-alt { margin-top: 12px; }
+.lg-alt button {
+  border: 0; background: none; padding: 0;
+  color: var(--mk-sub); font: inherit; font-size: 11.5px;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #e0dbd3;
+  cursor: pointer;
+}
+.lg-alt button:hover { color: var(--mk-ink); text-decoration-color: var(--mk-ink); }
+
 .lg-msg {
   margin: 18px 0 0; padding: 11px 14px;
   border-radius: 10px; font-size: 13px; line-height: 1.65;
@@ -389,10 +380,8 @@
   .lg-top, .lg-form, .lg-foot { animation: none; }
   .lg-primary, .lg-primary span, .lg-input { transition: none; }
   /* 动画停住就停在「组装完成」的一帧：字标与图形都在，不留一块空画布 */
-  .bl-sq, .bl-sun, .bl-moon, .bl-word span, .bl-sub { animation: none; }
-  .bl-sq { stroke-dashoffset: 0; }
-  .bl-sun { opacity: 1; transform: none; }
-  .bl-moon { opacity: 1; transform: none; }
+  .bl-black, .bl-orange, .bl-word span, .bl-sub { animation: none; }
+  .bl-black, .bl-orange { opacity: 1; transform: none; }
   .bl-word span { opacity: 1; transform: none; }
   .bl-sub { opacity: 1; }
 }

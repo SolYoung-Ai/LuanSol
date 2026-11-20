@@ -1,8 +1,9 @@
 /* ============================================================
    品牌开场动画 · 循环版
    ------------------------------------------------------------
-   和首页那支 2.4 秒的开场是同一套构成：方形描边生长 → 橙色太阳
-   弹出 → 一枚纸色圆压上去切出月牙（Luna）→ 字标逐字落位 → 副标浮出。
+   和首页那支 2.5 秒的开场是同一套构成：黑圆从右上压下来落位 →
+   橙圆从左侧滑出压上去（就是「橙圆压黑圆」的新标志）→ 字标逐字
+   落位 → 副标浮出。
    区别只有两点：
      · 无限循环（每 7 秒一轮，末尾留 1 秒空白再重来）；
      · 不占满屏、不做淡出蒙层，只作为登录页左栏的一块「活画面」。
@@ -18,10 +19,9 @@ const LETTERS = ['L', 'u', 'n', 'a', 'S', 'o', 'l'];
 export default function BrandLoop() {
   const { t } = useLang();
   return <div className="bl" role="img" aria-label="LunaSol">
-    <svg className="bl-mark" viewBox="0 0 92 92" aria-hidden>
-      <rect className="bl-sq" x="14" y="14" width="64" height="64" rx="7" />
-      <circle className="bl-sun" cx="46" cy="46" r="17" />
-      <circle className="bl-moon" cx="40" cy="41" r="17" />
+    <svg className="bl-mark" viewBox="0 0 64 64" aria-hidden>
+      <circle className="bl-black" cx="37" cy="35" r="21.5" />
+      <circle className="bl-orange" cx="27" cy="29" r="21.5" />
     </svg>
     <div className="bl-word" aria-hidden>
       {LETTERS.map((ch, i) => <span key={i} className={`bl-l${i + 1}`}>{ch}</span>)}

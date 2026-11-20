@@ -1615,42 +1615,30 @@ body:has(.app.is-site) { background: #ffffff; }
 .site-intro.is-out { opacity: 0; transform: scale(1.012); pointer-events: none; }
 .site-intro-in { display: flex; flex-direction: column; align-items: center; gap: 26px; }
 .site-intro-mark { width: 92px; height: 92px; overflow: visible; }
+/* 标志动起来：黑圆先落位（从右上方带一点缩放压下来），
+   橙圆再从左上方的背面滑出来压上去，轻微过冲后停住 ——
+   就是这套标志「橙圆压黑圆」的成因，而不是随便弹一下。 */
 .site-intro-mark .si-black {
   fill: var(--ink);
   transform-origin: 52px 51px;
-  transform: scale(.86);
   opacity: 0;
-  animation: siIn .5s var(--ease) .08s forwards;
+  animation: siBlack 1.05s cubic-bezier(.16, .84, .28, 1) 0s forwards;
 }
 .site-intro-mark .si-orange {
   fill: var(--brand);
   transform-origin: 37px 41px;
-  transform: scale(.2);
   opacity: 0;
-  animation: siCircle .9s cubic-bezier(.2, 1.35, .4, 1) .34s forwards;
+  animation: siOrange 1.15s cubic-bezier(.2, 1.1, .3, 1) .32s forwards;
 }
-.site-intro-mark .si-line {
-  stroke: var(--ink);
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-dasharray: 130;
-  stroke-dashoffset: 130;
-  animation: siLine .8s var(--ease) .74s forwards;
+@keyframes siBlack {
+  0% { opacity: 0; transform: translate(16px, -13px) scale(1.22); }
+  50% { opacity: 1; }
+  100% { opacity: 1; transform: translate(0, 0) scale(1); }
 }
-@keyframes siIn {
-  to { opacity: 1; transform: scale(1); }
-}
-@keyframes siSquare {
-  to { stroke-dashoffset: 0; }
-}
-@keyframes siRotate {
-  from { transform: rotate(-24deg); }
-  to { transform: rotate(0deg); }
-}
-@keyframes siCircle {
-  0% { opacity: 0; transform: scale(.2); }
-  60% { opacity: 1; }
-  100% { opacity: 1; transform: scale(1); }
+@keyframes siOrange {
+  0% { opacity: 0; transform: translate(-42px, 30px) scale(.58); }
+  55% { opacity: 1; transform: translate(5px, -3px) scale(1.07); }
+  100% { opacity: 1; transform: translate(0, 0) scale(1); }
 }
 @keyframes siLine {
   to { stroke-dashoffset: 0; }
@@ -1659,12 +1647,10 @@ body:has(.app.is-site) { background: #ffffff; }
   display: flex;
   align-items: baseline;
   gap: 0;
-  font-size: 26px;
-  letter-spacing: .16em;
+  font-size: 30px;
+  letter-spacing: -.025em;
   font-weight: 600;
-  text-transform: uppercase;
   color: var(--ink);
-  margin-left: .16em; /* 抵消末字 letter-spacing，视觉上仍居中 */
 }
 .site-intro-word span {
   display: inline-block;
@@ -1672,13 +1658,13 @@ body:has(.app.is-site) { background: #ffffff; }
   transform: translateY(8px);
   animation: siWord .5s var(--ease) forwards;
 }
-.site-intro-word span:nth-child(1) { animation-delay: 1.05s; }
-.site-intro-word span:nth-child(2) { animation-delay: 1.10s; }
-.site-intro-word span:nth-child(3) { animation-delay: 1.15s; }
-.site-intro-word span:nth-child(4) { animation-delay: 1.20s; }
-.site-intro-word span:nth-child(5) { animation-delay: 1.25s; color: var(--brand); }
-.site-intro-word span:nth-child(6) { animation-delay: 1.30s; color: var(--brand); }
-.site-intro-word span:nth-child(7) { animation-delay: 1.35s; color: var(--brand); }
+.site-intro-word span:nth-child(1) { animation-delay: .86s; }
+.site-intro-word span:nth-child(2) { animation-delay: .91s; }
+.site-intro-word span:nth-child(3) { animation-delay: .96s; }
+.site-intro-word span:nth-child(4) { animation-delay: 1.01s; }
+.site-intro-word span:nth-child(5) { animation-delay: 1.06s; color: var(--brand); }
+.site-intro-word span:nth-child(6) { animation-delay: 1.11s; color: var(--brand); }
+.site-intro-word span:nth-child(7) { animation-delay: 1.16s; color: var(--brand); }
 @keyframes siWord {
   to { opacity: 1; transform: none; }
 }

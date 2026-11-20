@@ -58,9 +58,11 @@ export default function Login() {
   const a = useAuth();
   const { t, lang } = useLang();
   const next = useMemo(nextTarget, []);
-  const [mode, setMode] = useState<Mode>(() =>
-    /(^|&)mode=signup/.test(window.location.hash.split('?')[1] || '') ? 'up' : 'in');
-  const [step, setStep] = useState<Step>('email');
+  /* 登录默认落在「邮箱 + 密码」；验证码登录退到表单下方的小字入口。
+     注册仍从邮箱开始，填完邮箱再设密码。 */
+  const fromSignup = /(^|&)mode=signup/.test(window.location.hash.split('?')[1] || '');
+  const [mode, setMode] = useState<Mode>(fromSignup ? 'up' : 'in');
+  const [step, setStep] = useState<Step>(fromSignup ? 'email' : (LOGIN_CONFIG.methods.password ? 'password' : 'email'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -98,7 +100,9 @@ export default function Login() {
   };
 
   const reset = (m: Mode) => {
-    setMode(m); setStep('email'); setMsg(null); setCode('');
+    setMode(m);
+    setStep(m === 'up' || !LOGIN_CONFIG.methods.password ? 'email' : 'password');
+    setMsg(null); setCode('');
     setPassword(''); setConfirm(''); a.cancelCode();
   };
 
@@ -186,6 +190,8 @@ export default function Login() {
         </p>}
 
         {step === 'email' && <>
+          {mode === 'in' && <p className="lg-sub">{t('输入邮箱，我们发一封带验证码的邮件，不用记密码。',
+            'Drop your email — we send a one-time code, no password needed.')}</p>}
           {LOGIN_CONFIG.methods.google && <>
             <button type="button" className="lg-oauth" disabled={busy} onClick={onGoogle}>
               <GoogleMark />
@@ -201,7 +207,7 @@ export default function Login() {
             onKeyDown={(e) => { if (e.key === 'Enter') void onContinue(); }} />
 
           <button className="lg-primary" disabled={busy || !email.trim()} onClick={onContinue}>
-            {busy ? t('处理中…', 'Working…') : t('继续', 'Continue')}<span aria-hidden>→</span>
+            {busy ? t('处理中…', 'Working…') : (mode === 'up' ? t('继续', 'Continue') : t('发送验证码', 'Send code'))}<span aria-hidden>→</span>
           </button>
 
           <p className="lg-hint">
@@ -231,7 +237,13 @@ export default function Login() {
               {busy ? t('处理中…', 'Working…') : t('创建账户', 'Create account')}<span aria-hidden>→</span>
             </button>
           </> : <>
-            <p className="lg-sub">{t('用注册时的邮箱和密码登录。', 'Sign in with the email and password you registered with.')}</p>
+            {LOGIN_CONFIG.methods.google && <>
+              <button type="button" className="lg-oauth" disabled={busy} onClick={onGoogle}>
+                <GoogleMark />
+                <span>{t('使用 Google 账号继续', 'Continue with Google')}</span>
+              </button>
+              <div className="lg-or"><i /><span>{t('或', 'or')}</span><i /></div>
+            </>}
             <label className="lg-label" htmlFor="lg-email2">{t('邮箱地址', 'Email address')}</label>
             <input id="lg-email2" className="lg-input" type="email" inputMode="email" autoComplete="email"
               spellCheck={false} value={email} placeholder={t('请输入您的电子邮件地址', 'Enter your email address')}
@@ -248,8 +260,13 @@ export default function Login() {
           <p className="lg-hint">
             {mode === 'up'
               ? <button onClick={() => reset('in')}>{t('已有账号？去登录', 'Already have an account? Sign in')}</button>
-              : <button onClick={() => { setStep('email'); setMsg(null); setPassword(''); }}>{t('改用邮箱验证码登录', 'Use an email code instead')}</button>}
+              : <>{t('还没有账号？', 'New here?')} <button onClick={() => reset('up')}>{t('创建账户', 'Create account')}</button></>}
           </p>
+          {mode === 'in' && <p className="lg-hint lg-alt">
+            <button onClick={() => { setStep('email'); setMsg(null); setPassword(''); }}>
+              {t('改用邮箱验证码登录', 'Use a one-time email code instead')}
+            </button>
+          </p>}
         </>}
 
         {step === 'code' && <>
@@ -267,7 +284,7 @@ export default function Login() {
               {left > 0 ? t(`${left} 秒后可重新发送`, `Resend in ${left}s`) : t('重新发送验证码', 'Resend code')}
             </button>
             {' · '}
-            <button onClick={() => { setStep('email'); setMsg(null); a.cancelCode(); }}>{t('返回', 'Back')}</button>
+            <button onClick={() => { setStep(LOGIN_CONFIG.methods.password ? 'password' : 'email'); setMsg(null); a.cancelCode(); }}>{t('返回密码登录', 'Back to password')}</button>
           </p>
         </>}
 
