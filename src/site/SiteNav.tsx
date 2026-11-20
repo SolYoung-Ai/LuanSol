@@ -49,8 +49,21 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const [stuck, setStuck] = useState(false);
   const [menu, setMenu] = useState(false);
   const [sheet, setSheet] = useState(false);
+  /* 产品下拉：悬停展开，离开 160ms 收回，触屏点一下就切换 */
+  const [prod, setProd] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const prodRef = useRef<HTMLDivElement>(null);
+  const prodTimer = useRef(0);
+  const openProd = () => {
+    if (prodTimer.current) { window.clearTimeout(prodTimer.current); prodTimer.current = 0; }
+    setProd(true);
+    warmStudio();
+  };
+  const closeProd = () => {
+    if (prodTimer.current) window.clearTimeout(prodTimer.current);
+    prodTimer.current = window.setTimeout(() => { prodTimer.current = 0; setProd(false); }, 160);
+  };
   const path = hash.split('?')[0];
   /* Luna AI 页：导航默认收进顶部，指针靠近上边缘才滑下来，离开再收回去。
      只有在「宽屏 + 精确指针」下生效；触屏没有 hover，保持常驻。 */
@@ -115,8 +128,24 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
   }, [menu]);
 
+  /* 产品下拉：Esc 收起、点别处收起。宽屏靠 hover，触屏靠点击，
+     两条路都走这里，不会出现「点了别处还挂着」的残留。 */
+  useEffect(() => {
+    if (!prod) return;
+    const away = (e: MouseEvent) => {
+      if (prodRef.current && !prodRef.current.contains(e.target as Node)) setProd(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setProd(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [prod]);
+
   // 换路由关掉浮层，否则从菜单里跳页后菜单还挂在那儿
-  useEffect(() => { setMenu(false); setSheet(false); }, [path]);
+  useEffect(() => {
+    setMenu(false); setSheet(false); setProd(false);
+    if (prodTimer.current) { window.clearTimeout(prodTimer.current); prodTimer.current = 0; }
+  }, [path]);
 
   const user = auth.user;
   const credits = sub.usedLeft;
@@ -136,15 +165,41 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
             aria-current={path === '/' ? 'page' : undefined}
           >{t('首页', 'Home')}</button>
 
-          {/* 全站只有一个产品：包装工作台（/studio）。不摆下拉、不摆还没做的产品位，
-              免得看着像有别的功能。 */}
-          <button
-            className={`site-link ${path === '/studio' ? 'is-on' : ''}`}
-            onClick={() => go('/studio')}
-            onMouseEnter={warmStudio}
-            onFocus={warmStudio}
-            aria-current={path === '/studio' ? 'page' : undefined}
-          >{t('包装工作台', 'Packaging workbench')}</button>
+          {/* 导航上只写「产品」，展开后才是包装工作台（/studio）。
+              现在只有这一条产品线，但先把这一层做出来，以后加第二条不用动结构。
+              悬停展开、离开收回；触屏没有 hover，点一下切换。 */}
+          <div
+            className="site-drop-wrap"
+            ref={prodRef}
+            onPointerEnter={openProd}
+            onPointerLeave={closeProd}
+          >
+            <button
+              className={`site-link site-drop-btn ${path === '/studio' ? 'is-on' : ''} ${prod ? 'is-open' : ''}`}
+              /* 点击只负责展开：触屏上没有 hover，点一下要能开；
+                 关闭交给「点别处 / Esc / 指针离开」，不然焦点先开后点击又立刻翻回去 */
+              onClick={() => { openProd(); setProd(true); }}
+              onFocus={openProd}
+              aria-haspopup="true"
+              aria-expanded={prod}
+            >
+              {t('产品', 'Products')}
+              <svg className="site-link-caret" viewBox="0 0 12 12" aria-hidden>
+                <path d="M3 4.6 6 7.6 9 4.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            {prod && <div className="site-drop" role="menu">
+              <button
+                className="site-drop-item"
+                role="menuitem"
+                onClick={() => { setProd(false); go('/studio'); }}
+              >
+                <b>{t('包装工作台', 'Packaging workbench')}</b>
+                <span>{t('需求、刀模、3D 预览与印前检查', 'Brief, dieline, 3D preview and pre-press')}</span>
+              </button>
+            </div>}
+          </div>
 
           <button
             className={`site-link ${path.startsWith('/luna') ? 'is-on' : ''}`}
