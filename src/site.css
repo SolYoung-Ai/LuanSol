@@ -253,8 +253,9 @@ body:has(.app.is-site) { background: #ffffff; }
      收起时 --nav-h 归零，下面这段对话栏的高度公式就自动涨满一屏。 */
   .app.is-site.is-luna .site-nav {
     overflow: hidden;
-    transition: transform .4s var(--ease), height .4s var(--ease),
-                border-color .35s var(--ease), background .35s var(--ease);
+    will-change: transform;
+    transition: transform .34s var(--ease), height .34s var(--ease),
+                border-color .3s var(--ease), background .3s var(--ease);
   }
   .app.is-site.is-luna .site-nav-in { min-height: 56px; }
   .app.is-site.is-luna.is-navaway { --nav-h: 0px; }
@@ -264,7 +265,7 @@ body:has(.app.is-site) { background: #ffffff; }
      在 2.0 里会让输入框整体掉到折叠线以下。 */
   .app.is-site.is-luna .lc-shell {
     height: calc(100dvh - var(--nav-h));
-    transition: height .4s var(--ease);
+    transition: height .34s var(--ease);
     min-height: 0;
     padding: 0;
     gap: 0;

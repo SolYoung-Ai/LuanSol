@@ -70,49 +70,93 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const lunaAuto = path.startsWith('/luna');
   const [navAway, setNavAway] = useState(false);
 
-  /* 进入 Luna AI：导航默认收起来。指针贴到屏幕顶上（y<=12）才滑下来；
-     已经滑下来时，指针停在导航高度内继续算「还在用导航」；
-     离开这块区域 420ms 后才收回去 —— 太急会把「想点导航」误判成路过。 */
+  /* Luna AI 页的导航收放：进页先收起；指针进到最上面那条热区（或在导航条内）
+     就滑下来；离开导航和热区 260ms 后收回。热区在收起时只有 16px 高，
+     展开后按导航实际高度算 —— 这样不会出现「鼠标已经离开导航、但还停在
+     12~92px 这段判定区里，导航就赖着不收」的情况。
+     另外滚轮、窗口失焦、指针离开文档都会直接收，避免从浏览器工具栏回来时卡住。 */
   useEffect(() => {
     const root = navRef.current?.closest('.app');
-    let away = false;
-    const mark = (next: boolean) => {
-      if (next === away) return;
-      away = next;
-      setNavAway(next);
-      root?.classList.toggle('is-navaway', next);
-    };
+    const navEl = navRef.current;
     const wide = () => window.matchMedia('(min-width: 861px)').matches;
-    if (!lunaAuto || !wide()) { away = false; root?.classList.remove('is-navaway'); setNavAway(false); return; }
+    if (!lunaAuto || !wide()) {
+      setNavAway(false);
+      root?.classList.remove('is-navaway');
+      return;
+    }
 
-    mark(true);
+    let shown = false;
     let timer = 0;
-    const clear = () => { if (timer) { window.clearTimeout(timer); timer = 0; } };
-    const show = () => { clear(); mark(false); };
-    const hide = () => { clear(); timer = window.setTimeout(() => { timer = 0; mark(true); }, 420); };
+    const apply = (next: boolean) => {
+      if (next === shown) return;
+      shown = next;
+      setNavAway(!next);
+      root?.classList.toggle('is-navaway', !next);
+    };
+    const clearTimer = () => { if (timer) { window.clearTimeout(timer); timer = 0; } };
+    const show = () => { clearTimer(); apply(true); };
+    const hide = (delay = 260) => {
+      clearTimer();
+      if (!shown) return;
+      timer = window.setTimeout(() => { timer = 0; apply(false); }, delay);
+    };
+    /* 收起时留 16px 的热区（屏幕最上面一行），展开时以导航条实际底边 +8 为准 */
+    const inZone = (y: number) => {
+      if (!shown) return y <= 24;
+      const r = navEl?.getBoundingClientRect();
+      const bottom = r && r.height > 0 ? r.bottom + 6 : 72;
+      return y <= bottom;
+    };
+
+    apply(false);
 
     const onMove = (e: PointerEvent) => {
       if (!wide()) return;
-      const navH = navRef.current?.getBoundingClientRect().height || 0;
-      if (e.clientY <= 12) show();
-      else if (e.clientY > 12 + (away ? 0 : navH + 8)) hide();
-      else clear();
+      if (inZone(e.clientY)) show();
+      else hide();
     };
-    const onBlur = () => { clear(); mark(true); };
-    const onFocus = (e: FocusEvent) => {
-      if (navRef.current?.contains(e.target as Node)) show();
+    const onNavEnter = () => show();
+    const onNavLeave = () => hide(260);
+    const onWheel = (e: WheelEvent) => {
+      if (navEl?.contains(e.target as Node)) return;
+      hide(300);
+    };
+    const onBlur = () => hide(0);
+    const onLeaveDoc = () => hide(0);
+    const onFocusIn = (e: FocusEvent) => { if (navEl?.contains(e.target as Node)) show(); };
+    const onFocusOut = (e: FocusEvent) => {
+      const to = e.relatedTarget as Node | null;
+      if (!to || !navEl?.contains(to)) hide(260);
+    };
+    /* 拖窗口跨过断点时要把状态归位：宽屏才收放，窄屏必须常驻 */
+    const onResize = () => {
+      if (!wide()) show();
+      else hide(0);
     };
 
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('blur', onBlur);
-    document.addEventListener('pointerleave', hide);
-    document.addEventListener('focusin', onFocus);
+    window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('resize', onResize);
+    document.addEventListener('pointerleave', onLeaveDoc);
+    document.documentElement.addEventListener('mouseleave', onLeaveDoc);
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    navEl?.addEventListener('pointerenter', onNavEnter);
+    navEl?.addEventListener('pointerleave', onNavLeave);
+
     return () => {
-      clear();
+      clearTimer();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('blur', onBlur);
-      document.removeEventListener('pointerleave', hide);
-      document.removeEventListener('focusin', onFocus);
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('pointerleave', onLeaveDoc);
+      document.documentElement.removeEventListener('mouseleave', onLeaveDoc);
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+      navEl?.removeEventListener('pointerenter', onNavEnter);
+      navEl?.removeEventListener('pointerleave', onNavLeave);
       root?.classList.remove('is-navaway');
     };
   }, [lunaAuto]);
