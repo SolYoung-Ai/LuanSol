@@ -15,10 +15,33 @@ import { STUDIO_ID_PREFIX } from '../studio/types';
 /** Studio 2.0 的需求项目与旧包装项目共用同一张表（RLS 已经就位，不必动生产库 DDL），
  *  靠本地 id 前缀区分。旧同步链路必须跳过这些行，否则会把「需求单」当成
  *  Project 塞进工作台、还会被 migrateProject 二次改写。 */
-const isStudioRow = (cloudId: string) => {
+export const isStudioRow = (cloudId: string) => {
   const i = cloudId.indexOf(':');
   return (i > 0 ? cloudId.slice(i + 1) : cloudId).startsWith(STUDIO_ID_PREFIX);
 };
+
+/** 轻量内容哈希：用于跳过「时间戳已刷新但内容没变化」的重复 upsert。 */
+export function payloadHash(value: unknown): string {
+  const stripVolatile = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(stripVolatile);
+    if (item && typeof item === 'object') {
+      return Object.fromEntries(
+        Object.entries(item as Record<string, unknown>)
+          .filter(([k]) => k !== 'createdAt' && k !== 'updatedAt')
+          .map(([k, v]) => [k, stripVolatile(v)]),
+      );
+    }
+    return item;
+  };
+  let str = '';
+  try { str = JSON.stringify(stripVolatile(value)) || ''; } catch { str = String(value); }
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `fnv32:${(h >>> 0).toString(36)}`;
+}
 
 export interface CloudMeta {
   id: string;

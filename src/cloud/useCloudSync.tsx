@@ -4,7 +4,7 @@
  * 原则：
  *   1. 未登录时完全不碰云端，界面显示本地保存，不假装已同步；
  *   2. 登录后先拉取云端列表做双向合并（同 id 取 updatedAt 更新的一方）；
- *   3. 之后本地每次修改在 4 秒防抖后按项目逐个上传，写入后回读确认；
+ *   3. 之后本地每次修改在 6 秒防抖后按项目逐个上传，内容未变则跳过重复 upsert；
  *   4. 任何失败都保留本地数据并把真实错误暴露到界面。
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -14,7 +14,7 @@ import { useAuth } from './auth';
 import { useSubscription } from './subscription';
 import {
   listProjects, pushMany, pushProject, pullAll, removeProject, removeManyProjects,
-  projectIdOf, timeLabel, listDeleted, markDeleted,
+  projectIdOf, timeLabel, listDeleted, markDeleted, isStudioRow, payloadHash,
 } from './projects';
 
 export type SyncState = 'off' | 'idle' | 'syncing' | 'ok' | 'error';
@@ -66,6 +66,7 @@ function useCloudSyncState(): CloudSync {
   const [cloudCount, setCloudCount] = useState<number | null>(null);
   const mergedFor = useRef<string | null>(null);
   const pushedAt = useRef<Record<string, number>>({});
+  const pushedHash = useRef<Record<string, string>>({});
   const owners = useRef<Record<string, string>>(readOwners());
   const cloudIdsRef = useRef<Set<string>>(new Set());
   /** 已删除的 project_id（本地缓存 ∪ 云端墓碑）：同步时用它压制复活 */
@@ -141,6 +142,10 @@ function useCloudSyncState(): CloudSync {
 
       mergeCloudProjects(alive);
       claim(alive.map((p) => p.id), user.id);
+      alive.forEach((p) => {
+        pushedAt.current[p.id] = p.updatedAt;
+        pushedHash.current[p.id] = payloadHash(p);
+      });
       cloudIdsRef.current = new Set(alive.map((p) => p.id));
       setCloudCount(cloudIdsRef.current.size);
       /* 其他设备删过的项目，本机若还留着副本也一并丢弃：这就是「一处删除，处处消失」 */
@@ -152,8 +157,9 @@ function useCloudSyncState(): CloudSync {
       const ups = projectsRef.current.filter((p) => {
         if (cloudIds.has(p.id)) return false;
         if (tombs.has(p.id)) return false;      // 删过的永不回传
+        if (isStudioRow(p.id)) return false;    // Studio 走独立单项目同步链路
         const o = owners.current[p.id];
-        return !o || o === user.id;   // 属于其他账号的本机项目不上传
+        return (!o || o === user.id) && pushedHash.current[p.id] !== payloadHash(p);
       });
       const skipped = projectsRef.current.filter((p) => !cloudIds.has(p.id) && !tombs.has(p.id)
         && owners.current[p.id] && owners.current[p.id] !== user.id).length;
@@ -164,7 +170,11 @@ function useCloudSyncState(): CloudSync {
           setMessage(tl(`已上传 ${r.ok} 个，${r.failed.length} 个失败：${r.failed[0].message}`, `Uploaded ${r.ok}, ${r.failed.length} failed: ${r.failed[0].message}`));
           return;
         }
-        ups.forEach((p) => { pushedAt.current[p.id] = p.updatedAt; cloudIdsRef.current.add(p.id); });
+        ups.forEach((p) => {
+          pushedAt.current[p.id] = p.updatedAt;
+          pushedHash.current[p.id] = payloadHash(p);
+          cloudIdsRef.current.add(p.id);
+        });
         claim(ups.map((p) => p.id), user.id);
       }
       const total = cloudIdsRef.current.size;
@@ -187,6 +197,7 @@ function useCloudSyncState(): CloudSync {
       mergedFor.current = null;
       syncedFor.current = null;
       pushedAt.current = {};
+      pushedHash.current = {};
       cloudIdsRef.current = new Set();
       tombstones.current = new Set();
       setCloudCount(null);
@@ -201,21 +212,26 @@ function useCloudSyncState(): CloudSync {
     void syncNow();
   }, [user, subLoading, syncNow]);
 
-  /** 变更自动上传（4 秒防抖，只传有新修改且属于当前账号的项目） */
+  /** 变更自动上传（6 秒防抖，只传有新修改、内容哈希变化且属于当前账号的项目） */
   useEffect(() => {
     if (!user) return;
     if (syncedFor.current !== user.id) return;   // 首次同步（含墓碑）完成后再允许自动上传
     const dirty = s.projects.filter((p) => {
       if (tombstones.current.has(p.id)) return false;   // 删过的不再上传
+      if (isStudioRow(p.id)) return false;              // Studio 走独立单项目同步链路
       const o = owners.current[p.id];
       if (o && o !== user.id) return false;
-      return (pushedAt.current[p.id] ?? 0) < p.updatedAt;
+      return (pushedAt.current[p.id] ?? 0) < p.updatedAt
+        && pushedHash.current[p.id] !== payloadHash(p);
     });
     if (!dirty.length) return;
     const t = window.setTimeout(async () => {
       setState('syncing');
       const r = await pushMany(user.id, dirty);
-      dirty.forEach((p) => { pushedAt.current[p.id] = p.updatedAt; });
+      dirty.forEach((p) => {
+        pushedAt.current[p.id] = p.updatedAt;
+        pushedHash.current[p.id] = payloadHash(p);
+      });
       if (r.failed.length) {
         setState('error');
         setMessage(tl(`自动同步失败：${r.failed[0].message}`, `Auto-sync failed: ${r.failed[0].message}`));
@@ -227,7 +243,7 @@ function useCloudSyncState(): CloudSync {
         setLastSync(Date.now());
         setMessage(tl(`已自动同步 ${r.ok} 个项目 · ${timeLabel(new Date().toISOString())}`, `${r.ok} projects auto-synced · ${timeLabel(new Date().toISOString())}`));
       }
-    }, 4000);
+    }, 6000);
     return () => window.clearTimeout(t);
   }, [s.projects, user, claim]);
 
@@ -242,6 +258,10 @@ function useCloudSyncState(): CloudSync {
     if (ghosts.length) void removeManyProjects(user.id, ghosts.map((p) => p.id));
     mergeCloudProjects(alive);
     claim(alive.map((p) => p.id), user.id);
+    alive.forEach((p) => {
+      pushedAt.current[p.id] = p.updatedAt;
+      pushedHash.current[p.id] = payloadHash(p);
+    });
     if (tombs.size) dropProjects(Array.from(tombs));
     const list = await listProjects();
     if (list.ok) { cloudIdsRef.current = new Set(list.data.map((x) => projectIdOf(x.id))); setCloudCount(alive.length); }
@@ -266,6 +286,7 @@ function useCloudSyncState(): CloudSync {
     const r = await pushProject(user.id, p);
     if (!r.ok) { setState('error'); setMessage(r.message); setToast(r.message); return false; }
     pushedAt.current[id] = p.updatedAt;
+    pushedHash.current[id] = payloadHash(p);
     claim([id], user.id);
     cloudIdsRef.current.add(id);
     setCloudCount(cloudIdsRef.current.size);
@@ -283,6 +304,7 @@ function useCloudSyncState(): CloudSync {
     rememberDeleted(user.id, [id]);
     const r = await removeProject(user.id, id);
     delete pushedAt.current[id];
+    delete pushedHash.current[id];
     cloudIdsRef.current.delete(projectIdOf(id));
     setCloudCount(cloudIdsRef.current.size);
     setToast(r.ok
@@ -297,6 +319,7 @@ function useCloudSyncState(): CloudSync {
     const r = await removeManyProjects(user.id, ids);
     ids.forEach((id) => {
       delete pushedAt.current[id];
+      delete pushedHash.current[id];
       cloudIdsRef.current.delete(projectIdOf(id));
     });
     setCloudCount(cloudIdsRef.current.size);

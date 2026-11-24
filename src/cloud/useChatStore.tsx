@@ -21,7 +21,7 @@ import { imageCost, imageShort, resolveTier } from './models';
 import { CHAT_MODELS, FREE_CHAT_MODEL } from './chatModels';
 import { LUNA_PERSONA_PROMPT } from '../engine/persona';
 import { recordUsage, useSubscription } from './subscription';
-import { canSyncChats, pullAllConversations, pushConversation, removeConversation } from './chats';
+import { canSyncChats, pullAllConversations, pushConversation, removeConversation, payloadHash } from './chats';
 
 const LS_KEY = 'lunasol.chats.v1';
 
@@ -167,6 +167,7 @@ function useChatStoreState(): ChatStore {
   }, []);
   const mergedFor = useRef<string | null>(null);
   const lastPushed = useRef<Record<string, number>>({});
+  const pushedHash = useRef<Record<string, string>>({});
 
   /* --------------------------- 初始化：读本地 --------------------------- */
   useEffect(() => {
@@ -197,7 +198,12 @@ function useChatStoreState(): ChatStore {
 
   /* --------------------------- 登录后云端合并 --------------------------- */
   useEffect(() => {
-    if (!user) { mergedFor.current = null; return; }
+    if (!user) {
+      mergedFor.current = null;
+      lastPushed.current = {};
+      pushedHash.current = {};
+      return;
+    }
     // 对话在登录后自动云端同步；未登录时只保存在本机 localStorage
     if (!user) {
       mergedFor.current = null;
@@ -216,7 +222,10 @@ function useChatStoreState(): ChatStore {
         const real = r.data.filter(isRealConversation);
         const junk = r.data.filter((c) => !isRealConversation(c));
         setConversations((prev) => mergeConversations(prev, real));
-        real.forEach((c) => { lastPushed.current[c.id] = c.updatedAt; });
+        real.forEach((c) => {
+          lastPushed.current[c.id] = c.updatedAt;
+          pushedHash.current[c.id] = payloadHash(c);
+        });
         junk.forEach((c) => { void removeConversation(user.id, c.id); });
         setSyncState('ok');
         setSyncMessage(`已从云端取回 ${real.length} 个对话`);
@@ -227,22 +236,27 @@ function useChatStoreState(): ChatStore {
     })();
   }, [user]);
 
-  /* --------------------------- 变更防抖上传 --------------------------- */
+  /* --------------------------- 变更防抖上传（3 秒，跳过内容未变项） --------------------------- */
   useEffect(() => {
     if (!user || !canSyncChats(user.id)) return;
-    const dirty = conversations.filter((c) => isRealConversation(c) && c.updatedAt > (lastPushed.current[c.id] ?? 0));
+    const dirty = conversations.filter((c) => isRealConversation(c)
+      && c.updatedAt > (lastPushed.current[c.id] ?? 0)
+      && pushedHash.current[c.id] !== payloadHash(c));
     if (!dirty.length) return;
     const t = window.setTimeout(async () => {
       setSyncState('syncing');
       let failed = false;
       for (const c of dirty) {
         const r = await pushConversation(user.id, c);
-        if (r.ok) lastPushed.current[c.id] = c.updatedAt;
+        if (r.ok) {
+          lastPushed.current[c.id] = c.updatedAt;
+          pushedHash.current[c.id] = payloadHash(c);
+        }
         else { failed = true; setSyncMessage(r.message); }
       }
       if (failed) setSyncState('error');
       else { setSyncState('ok'); setSyncMessage('对话已同步到云端'); }
-    }, 1500);
+    }, 3000);
     return () => window.clearTimeout(t);
   }, [conversations, user]);
 
@@ -265,6 +279,7 @@ function useChatStoreState(): ChatStore {
       if (!r.ok) setToast(r.message);
     }
     delete lastPushed.current[id];
+    delete pushedHash.current[id];
     // 不要在 setConversations 的 updater 里再调 setState：updater 会在渲染阶段执行，
     // 期间更新另一个 state 会触发 React 的 "Cannot update a component while rendering" 警告。
     const rest = conversationsRef.current.filter((c) => c.id !== id);

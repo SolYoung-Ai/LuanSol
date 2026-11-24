@@ -28,6 +28,29 @@ export type ChatCloudResult<T = undefined> =
 const TABLE = 'lunasol_chat_conversations';
 const fail = (message: string): ChatCloudResult<never> => ({ ok: false, message });
 
+/** 轻量内容哈希：跳过时间戳刷新但内容未变的重复 upsert。 */
+export function payloadHash(value: unknown): string {
+  const stripVolatile = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(stripVolatile);
+    if (item && typeof item === 'object') {
+      return Object.fromEntries(
+        Object.entries(item as Record<string, unknown>)
+          .filter(([k]) => k !== 'createdAt' && k !== 'updatedAt')
+          .map(([k, v]) => [k, stripVolatile(v)]),
+      );
+    }
+    return item;
+  };
+  let str = '';
+  try { str = JSON.stringify(stripVolatile(value)) || ''; } catch { str = String(value); }
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `fnv32:${(h >>> 0).toString(36)}`;
+}
+
 function errText(e: unknown): string {
   if (!e) return '';
   if (typeof e === 'string') return e;
