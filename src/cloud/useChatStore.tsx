@@ -34,6 +34,12 @@ export function chatCacheKey(owner: string): string {
   return `${LS_PREFIX}:${owner || ANON_OWNER}`;
 }
 
+/* 旧共享槽已经不再读取，但里面仍躺着上一个账号的对话和图片。
+   用户在开发者工具里还能翻出来，所以在每次加载时清一次（幂等）。 */
+try {
+  if (typeof localStorage !== 'undefined') localStorage.removeItem('lunasol.chats.v1');
+} catch { /* 隐私模式下 localStorage 会抛错，忽略即可 */ }
+
 export type ChatSyncState = 'off' | 'idle' | 'syncing' | 'ok' | 'error';
 
 interface ChatStore {
