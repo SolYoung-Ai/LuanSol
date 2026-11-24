@@ -94,6 +94,8 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
       shown = next;
       setNavAway(!next);
       root?.classList.toggle('is-navaway', !next);
+      /* 导航收回时顺手关掉浮层：卡片比导航条高，导航一收就会挂在半空 */
+      if (!next) { setProd(false); setMenu(false); }
     };
     const clearTimer = () => { if (timer) { window.clearTimeout(timer); timer = 0; } };
     const show = () => { clearTimer(); apply(true); };
@@ -114,6 +116,9 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
 
     const onMove = (e: PointerEvent) => {
       if (!wide()) return;
+      /* 指针停在导航自己的子树里（含往下伸出来的下拉卡片）就别收：
+         卡片顶边在导航条底边之下，只按 y 判断会一移过去就把导航收走 */
+      if (navEl?.contains(e.target as Node)) { show(); return; }
       if (inZone(e.clientY)) show();
       else hide();
     };
@@ -202,7 +207,7 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const isAdmin = !!user && user.email === PRICING.adminEmail;
 
   return <>
-    <nav ref={navRef} className={`site-nav ${stuck ? 'is-stuck' : ''} ${navAway ? 'is-away' : ''}`} aria-label={t('主导航', 'Main')}>
+    <nav ref={navRef} className={`site-nav ${stuck ? 'is-stuck' : ''} ${navAway ? 'is-away' : ''} ${prod || menu ? 'has-pop' : ''}`} aria-label={t('主导航', 'Main')}>
       <div className="site-wrap site-nav-in">
         <SiteLogo />
 
