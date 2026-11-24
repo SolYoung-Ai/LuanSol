@@ -725,6 +725,17 @@ body:has(.app.is-site) { background: #ffffff; }
 }
 .site-menu-item:hover { background: rgba(25, 25, 25, .045); color: var(--ink); }
 .site-menu-item em { font-style: normal; font-size: 12px; color: var(--muted); }
+/* 管理员那项单独隔开：只有 PRICING.adminEmail 登录时才出现 */
+.site-menu-item.is-admin { color: var(--ink); font-weight: 500; }
+.site-menu-item.is-admin em {
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(244, 119, 53, .12);
+  color: var(--brand-deep);
+}
+.site-menu-split { height: 1px; margin: 7px 4px; background: rgba(25, 25, 25, .08); }
 .site-menu-item.is-danger:hover { background: rgba(244, 119, 53, .1); color: var(--brand-deep); }
 
 /* 移动端汉堡 */

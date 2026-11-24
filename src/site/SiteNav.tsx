@@ -7,12 +7,14 @@
    「产品」本身不跳页，只是悬停/点击展开一张卡，里面现在只有「包装工作台」
    （就是 /studio）。留这一层是为了以后加别的产品线时不用再动导航结构。
    复刻设计整条产品线已下线（2026-11-17），老链接由 App 的路由兜到底，不做 404。
-   账户菜单只做「余额 / 账户 / 帮助 / 退出」。
+   账户菜单只做「余额 / 账户 / 帮助 / 退出」；
+   管理员（PRICING.adminEmail）多一项「生成兑换码」，直通 /admin。
    ============================================================ */
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../cloud/auth';
 import { useSubscription } from '../cloud/subscription';
 import { useProfile } from '../cloud/profile';
+import { PRICING } from '../cloud/plans';
 import { go, useHash } from '../ui';
 import { useLang } from '../i18n';
 
@@ -196,6 +198,8 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   // 昵称在 auth.user.label（CloudBase user_metadata），头像先看资料表再看 metadata
   const name = user?.label || '';
   const avatar = profile?.avatar_url || user?.avatarUrl || '';
+  // 管理员入口按 plans.ts 的权威邮箱判断，不在界面里另写一份
+  const isAdmin = !!user && user.email === PRICING.adminEmail;
 
   return <>
     <nav ref={navRef} className={`site-nav ${stuck ? 'is-stuck' : ''} ${navAway ? 'is-away' : ''}`} aria-label={t('主导航', 'Main')}>
@@ -290,6 +294,12 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
                   <span>{t('积分可用', 'credits')}</span>
                 </div>
               </div>
+              {isAdmin && <>
+                <button className="site-menu-item is-admin" role="menuitem" onClick={() => { setMenu(false); go('/admin'); }}>
+                  {t('生成兑换码', 'Redeem codes')} <em>{t('管理员', 'Admin')}</em>
+                </button>
+                <div className="site-menu-split" />
+              </>}
               <button className="site-menu-item" role="menuitem" onClick={() => go('/credits')}>
                 {t('积分与充值', 'Credits')} <em>→</em>
               </button>
@@ -336,6 +346,9 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
       </button>
       {user
         ? <>
+          {isAdmin && <button className="site-sheet-link" onClick={() => { setSheet(false); go('/admin'); }}>
+            {t('生成兑换码', 'Redeem codes')}<span>{t('管理员', 'Admin')}</span>
+          </button>}
           <button className="site-sheet-link" onClick={() => go('/credits')}>
             {t('积分与充值', 'Credits')}<span>{credits === null ? '—' : credits}</span>
           </button>
