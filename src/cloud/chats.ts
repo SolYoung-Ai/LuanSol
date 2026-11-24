@@ -92,16 +92,22 @@ export async function pushConversation(uid: string, conv: Conversation): Promise
 }
 
 /* ------------------------------- 读取 ------------------------------- */
-export async function pullAllConversations(): Promise<ChatCloudResult<Conversation[]>> {
+/** 拉取对话。传了 uid 就显式带上 owner_id 过滤——
+ *  RLS 已经在库里兜底，前端再收一道，避免策略被改动后串到别人的对话。 */
+export async function pullAllConversations(uid?: string | null): Promise<ChatCloudResult<Conversation[]>> {
   const d = await db();
   if (!d) return fail('云服务未配置');
   try {
-    const r = await d.from(TABLE).select('*').order('updated_at', { ascending: false }).limit(200);
+    const base = d.from(TABLE).select('*');
+    const scoped = uid ? base.eq('owner_id', uid) : base;
+    const r = await scoped.order('updated_at', { ascending: false }).limit(200);
     if (!r) return { ok: true, data: [] };
     if (r.error) return fail(`读取失败：${errText(r.error)}`);
     const rows = (r.data || []) as ChatCloudRow[];
     const out: Conversation[] = [];
     for (const row of rows) {
+      // 再核一遍归属：只有自己名下的行才认
+      if (uid && row.owner_id && row.owner_id !== uid) continue;
       if (row.payload && typeof row.payload === 'object' && row.payload.id && Array.isArray(row.payload.messages)) {
         out.push(row.payload);
       }

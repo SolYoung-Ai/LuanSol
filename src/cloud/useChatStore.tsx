@@ -23,7 +23,16 @@ import { LUNA_PERSONA_PROMPT } from '../engine/persona';
 import { recordUsage, useSubscription } from './subscription';
 import { canSyncChats, pullAllConversations, pushConversation, removeConversation, payloadHash } from './chats';
 
-const LS_KEY = 'lunasol.chats.v1';
+const LS_PREFIX = 'lunasol.chats.v2';
+/** 未登录时的槽位名。登录账户用 uid，互不相通。 */
+const ANON_OWNER = 'anon';
+
+/** 本机对话按账户分槽：同一浏览器换号登录，列表不会串。
+ *  旧版只有一个共享槽（lunasol.chats.v1），A 聊完 B 登录会看到 A 的对话，
+ *  还会被当成 B 的对话传上云端——现在改成每个 uid 一个 key，旧槽不再读。 */
+export function chatCacheKey(owner: string): string {
+  return `${LS_PREFIX}:${owner || ANON_OWNER}`;
+}
 
 export type ChatSyncState = 'off' | 'idle' | 'syncing' | 'ok' | 'error';
 
@@ -71,6 +80,20 @@ function mergeConversations(local: Conversation[], cloud: Conversation[]): Conve
 /** 「聊过才算对话」：一条消息都没有的空壳不进入列表、不落盘、不上传云端。
  *  历史版本（点一下新建就插入一条空记录）留下的空壳靠这里一次性清掉。 */
 const isRealConversation = (c: Conversation) => Array.isArray(c.messages) && c.messages.length > 0;
+
+/** 读某个账户槽位的本机缓存；损坏或格式不对就当没有，不抛。 */
+function readChatCache(key: string): { conversations: Conversation[]; activeId: string | null } {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return { conversations: [], activeId: null };
+    const p = JSON.parse(raw) as { conversations?: Conversation[]; activeId?: string };
+    const conversations = Array.isArray(p.conversations) ? p.conversations.filter(isRealConversation) : [];
+    const activeId = p.activeId && conversations.some((c) => c.id === p.activeId) ? p.activeId : null;
+    return { conversations, activeId };
+  } catch {
+    return { conversations: [], activeId: null };
+  }
+}
 
 // 价格与名称统一从 cloud/models.ts 取，避免这里另写一套导致「显示 6 扣 10」
 const tierCost = (tier: ImageTier) => imageCost(tier);
@@ -137,11 +160,14 @@ function buildImagePrompt(c: Conversation): string {
 }
 
 function useChatStoreState(): ChatStore {
-  const { user } = useAuth();
+  const auth = useAuth();
+  const { user } = auth;
   const sub = useSubscription();
   const { setToast } = useApp();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  /** 当前 conversations 属于谁（uid，未登录为 anon）；undefined 表示还没判定登录态 */
+  const [owner, setOwner] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [syncState, setSyncState] = useState<ChatSyncState>('off');
   const [syncMessage, setSyncMessage] = useState('');
@@ -169,28 +195,49 @@ function useChatStoreState(): ChatStore {
   const lastPushed = useRef<Record<string, number>>({});
   const pushedHash = useRef<Record<string, string>>({});
 
-  /* --------------------------- 初始化：读本地 --------------------------- */
+  /* ----------------- 初始化 / 账户切换：本机按账户分槽 ----------------- */
+  /* 换号登录时不能把上一个账户的对话留在内存里，否则：
+     列表里看到别人的对话 → 3 秒后还会被当成自己的传上云端（造出两份副本）。 */
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) {
-        const p = JSON.parse(raw) as { conversations?: Conversation[]; activeId?: string };
-        // 旧数据里可能有「点过新建但一句话没说」的空壳，读入时直接丢掉
-        const list = Array.isArray(p.conversations) ? p.conversations.filter(isRealConversation) : [];
-        if (list.length) setConversations(list);
-        if (p.activeId && list.some((c) => c.id === p.activeId)) setActiveId(p.activeId);
-      }
-    } catch { /* 本地数据损坏时忽略，从空开始 */ }
+    if (!auth.ready) return;
+    const next = user?.id || ANON_OWNER;
+    if (owner === next) return;
+
+    // 只有「未登录草稿 → 登录」这一次允许带走本机内容；
+    // 账户之间的切换一律不合并，直接换成新账户自己的槽。
+    const carry = owner === ANON_OWNER && next !== ANON_OWNER
+      ? conversationsRef.current.filter(isRealConversation)
+      : [];
+
+    const cached = readChatCache(chatCacheKey(next));
+    const base = mergeConversations(carry, cached.conversations);
+
+    // 换了账户，云端合并要重新跑一遍；上传水位也要归零
+    mergedFor.current = null;
+    lastPushed.current = {};
+    pushedHash.current = {};
+
+    setConversations(base);
+    setActiveId(cached.activeId && base.some((c) => c.id === cached.activeId) ? cached.activeId : null);
+    setOwner(next);
     setBooted(true);
-  }, []);
+
+    // 草稿已经交给这个账户，清掉匿名槽，免得下次未登录又冒出来
+    if (carry.length) {
+      try { localStorage.removeItem(chatCacheKey(ANON_OWNER)); } catch { /* 隐私模式忽略 */ }
+    }
+  }, [auth.ready, user, owner]);
 
   /* --------------------------- 本地持久化 --------------------------- */
   useEffect(() => {
-    if (!booted) return;
+    if (!booted || !owner) return;
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify({ conversations: conversations.filter(isRealConversation), activeId }));
+      localStorage.setItem(chatCacheKey(owner), JSON.stringify({
+        conversations: conversations.filter(isRealConversation),
+        activeId,
+      }));
     } catch { /* 配额不足（大图 base64）时忽略，云端仍有完整数据 */ }
-  }, [conversations, activeId, booted]);
+  }, [conversations, activeId, booted, owner]);
 
   const updateConv = useCallback((id: string, fn: (c: Conversation) => Conversation) => {
     setConversations((prev) => prev.map((c) => (c.id === id ? fn(c) : c)));
@@ -199,24 +246,22 @@ function useChatStoreState(): ChatStore {
   /* --------------------------- 登录后云端合并 --------------------------- */
   useEffect(() => {
     if (!user) {
-      mergedFor.current = null;
-      lastPushed.current = {};
-      pushedHash.current = {};
-      return;
-    }
-    // 对话在登录后自动云端同步；未登录时只保存在本机 localStorage
-    if (!user) {
-      mergedFor.current = null;
       setSyncState('off');
       setSyncMessage('对话保存在本机；登录后自动跨设备同步');
       return;
     }
+    // owner 还没切到这个人时先不动：否则会把上一个账户的列表并入新账户
+    if (owner !== user.id) return;
     if (mergedFor.current === user.id) return;
     mergedFor.current = user.id;
+    /* 取回途中可能又换了账户：那时这次结果必须丢掉，
+       否则会把上一个人的云端对话写进新账户的列表。 */
+    let alive = true;
     void (async () => {
       setSyncState('syncing');
       setSyncMessage('正在从云端取回对话…');
-      const r = await pullAllConversations();
+      const r = await pullAllConversations(user.id);
+      if (!alive) return;
       if (r.ok) {
         // 云端可能还留着旧版本产生的空壳：只合并真正聊过的，其余顺手删掉
         const real = r.data.filter(isRealConversation);
@@ -234,11 +279,13 @@ function useChatStoreState(): ChatStore {
         setSyncMessage(r.message);
       }
     })();
-  }, [user]);
+    return () => { alive = false; };
+  }, [user, owner]);
 
   /* --------------------------- 变更防抖上传（3 秒，跳过内容未变项） --------------------------- */
   useEffect(() => {
-    if (!user || !canSyncChats(user.id)) return;
+    // 只上传「属于当前账户」的列表：换号瞬间内存里可能还是上一个人的数据
+    if (!user || owner !== user.id || !canSyncChats(user.id)) return;
     const dirty = conversations.filter((c) => isRealConversation(c)
       && c.updatedAt > (lastPushed.current[c.id] ?? 0)
       && pushedHash.current[c.id] !== payloadHash(c));
@@ -258,7 +305,7 @@ function useChatStoreState(): ChatStore {
       else { setSyncState('ok'); setSyncMessage('对话已同步到云端'); }
     }, 3000);
     return () => window.clearTimeout(t);
-  }, [conversations, user]);
+  }, [conversations, user, owner]);
 
   /* ------------------------------- 新建 ------------------------------- */
   /** 「新建对话」只是回到一张空白草稿：不立刻建记录。
