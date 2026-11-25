@@ -67,106 +67,6 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
     prodTimer.current = window.setTimeout(() => { prodTimer.current = 0; setProd(false); }, 160);
   };
   const path = hash.split('?')[0];
-  /* Luna AI 页：导航默认收进顶部，指针靠近上边缘才滑下来，离开再收回去。
-     只有在「宽屏 + 精确指针」下生效；触屏没有 hover，保持常驻。 */
-  const lunaAuto = path.startsWith('/luna');
-  const [navAway, setNavAway] = useState(false);
-
-  /* Luna AI 页的导航收放：进页先收起；指针进到最上面那条热区（或在导航条内）
-     就滑下来；离开导航和热区 260ms 后收回。热区在收起时只有 16px 高，
-     展开后按导航实际高度算 —— 这样不会出现「鼠标已经离开导航、但还停在
-     12~92px 这段判定区里，导航就赖着不收」的情况。
-     另外滚轮、窗口失焦、指针离开文档都会直接收，避免从浏览器工具栏回来时卡住。 */
-  useEffect(() => {
-    const root = navRef.current?.closest('.app');
-    const navEl = navRef.current;
-    const wide = () => window.matchMedia('(min-width: 861px)').matches;
-    if (!lunaAuto || !wide()) {
-      setNavAway(false);
-      root?.classList.remove('is-navaway');
-      return;
-    }
-
-    let shown = false;
-    let timer = 0;
-    const apply = (next: boolean) => {
-      if (next === shown) return;
-      shown = next;
-      setNavAway(!next);
-      root?.classList.toggle('is-navaway', !next);
-      /* 导航收回时顺手关掉浮层：卡片比导航条高，导航一收就会挂在半空 */
-      if (!next) { setProd(false); setMenu(false); }
-    };
-    const clearTimer = () => { if (timer) { window.clearTimeout(timer); timer = 0; } };
-    const show = () => { clearTimer(); apply(true); };
-    const hide = (delay = 260) => {
-      clearTimer();
-      if (!shown) return;
-      timer = window.setTimeout(() => { timer = 0; apply(false); }, delay);
-    };
-    /* 收起时留 16px 的热区（屏幕最上面一行），展开时以导航条实际底边 +8 为准 */
-    const inZone = (y: number) => {
-      if (!shown) return y <= 24;
-      const r = navEl?.getBoundingClientRect();
-      const bottom = r && r.height > 0 ? r.bottom + 6 : 72;
-      return y <= bottom;
-    };
-
-    apply(false);
-
-    const onMove = (e: PointerEvent) => {
-      if (!wide()) return;
-      /* 指针停在导航自己的子树里（含往下伸出来的下拉卡片）就别收：
-         卡片顶边在导航条底边之下，只按 y 判断会一移过去就把导航收走 */
-      if (navEl?.contains(e.target as Node)) { show(); return; }
-      if (inZone(e.clientY)) show();
-      else hide();
-    };
-    const onNavEnter = () => show();
-    const onNavLeave = () => hide(260);
-    const onWheel = (e: WheelEvent) => {
-      if (navEl?.contains(e.target as Node)) return;
-      hide(300);
-    };
-    const onBlur = () => hide(0);
-    const onLeaveDoc = () => hide(0);
-    const onFocusIn = (e: FocusEvent) => { if (navEl?.contains(e.target as Node)) show(); };
-    const onFocusOut = (e: FocusEvent) => {
-      const to = e.relatedTarget as Node | null;
-      if (!to || !navEl?.contains(to)) hide(260);
-    };
-    /* 拖窗口跨过断点时要把状态归位：宽屏才收放，窄屏必须常驻 */
-    const onResize = () => {
-      if (!wide()) show();
-      else hide(0);
-    };
-
-    window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('blur', onBlur);
-    window.addEventListener('wheel', onWheel, { passive: true });
-    window.addEventListener('resize', onResize);
-    document.addEventListener('pointerleave', onLeaveDoc);
-    document.documentElement.addEventListener('mouseleave', onLeaveDoc);
-    document.addEventListener('focusin', onFocusIn);
-    document.addEventListener('focusout', onFocusOut);
-    navEl?.addEventListener('pointerenter', onNavEnter);
-    navEl?.addEventListener('pointerleave', onNavLeave);
-
-    return () => {
-      clearTimer();
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('blur', onBlur);
-      window.removeEventListener('wheel', onWheel);
-      window.removeEventListener('resize', onResize);
-      document.removeEventListener('pointerleave', onLeaveDoc);
-      document.documentElement.removeEventListener('mouseleave', onLeaveDoc);
-      document.removeEventListener('focusin', onFocusIn);
-      document.removeEventListener('focusout', onFocusOut);
-      navEl?.removeEventListener('pointerenter', onNavEnter);
-      navEl?.removeEventListener('pointerleave', onNavLeave);
-      root?.classList.remove('is-navaway');
-    };
-  }, [lunaAuto]);
 
   useEffect(() => {
     if (!menu) return;
@@ -207,7 +107,7 @@ export default function SiteNav({ onLogin }: { onLogin: () => void }) {
   const isAdmin = !!user && user.email === PRICING.adminEmail;
 
   return <>
-    <nav ref={navRef} className={`site-nav ${stuck ? 'is-stuck' : ''} ${navAway ? 'is-away' : ''} ${prod || menu ? 'has-pop' : ''}`} aria-label={t('主导航', 'Main')}>
+    <nav ref={navRef} className={`site-nav ${stuck ? 'is-stuck' : ''} ${prod || menu ? 'has-pop' : ''}`} aria-label={t('主导航', 'Main')}>
       <div className="site-wrap site-nav-in">
         <SiteLogo />
 
