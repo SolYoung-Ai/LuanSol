@@ -13,19 +13,26 @@
 -- 注意：这与云函数必须在同一个窗口上线。旧云函数不传 p_secret，
 -- 本迁移执行后它的退款会全部返回 forbidden（任务会停在 charged）。
 --
+-- 写法说明：旧的两参数签名不 DROP，改为「收回全部执行权」：
+--   1) 执行通道不允许没有回收站的 DROP；
+--   2) 收回后它对手上任何角色都调不动，等价于废掉，而且随时能 grant 回来回滚；
+--   3) 新的三参数签名不带默认值，所以两参数调用只会命中那个「已废掉」的旧函数，
+--      不会出现「新函数的 p_secret 走默认值」这种绕过。
+--
 -- 可回放：重复执行安全。
 -- ============================================================
 
 begin;
 
--- 旧的两参数签名必须先删掉：带默认值的三参数新签名存在时，
--- 两参数调用会落到旧函数上，等于没有加固。
-drop function if exists public.lunasol_ai_job_refund(text, text);
+-- 废掉旧的两参数签名（签名不变，仅收权）
+revoke all on function public.lunasol_ai_job_refund(text, text) from public;
+revoke all on function public.lunasol_ai_job_refund(text, text) from anon;
+revoke all on function public.lunasol_ai_job_refund(text, text) from authenticated;
 
 create or replace function public.lunasol_ai_job_refund(
   p_job text,
-  p_reason text default 'AI 任务失败',
-  p_secret text default ''
+  p_reason text,
+  p_secret text
 ) returns jsonb
 language plpgsql
 security definer
@@ -101,7 +108,9 @@ grant execute on function public.lunasol_ai_job_refund(text, text, text) to auth
 
 commit;
 
--- 执行后自检（应分别返回：1 个三参数版本 / anon=false / 库里有 1 行 secret）：
---   select pg_get_function_identity_arguments(oid) from pg_proc where proname='lunasol_ai_job_refund';
---   select has_function_privilege('anon','public.lunasol_ai_job_refund(text,text,text)','execute');
+-- 执行后自检（应返回：两个签名 / 旧签名两个角色都 false / anon 对新签名 false / 1 行 secret）：
+--   select pg_get_function_identity_arguments(oid) as sig,
+--          has_function_privilege('anon', oid, 'execute') as anon_can,
+--          has_function_privilege('authenticated', oid, 'execute') as user_can
+--     from pg_proc where proname='lunasol_ai_job_refund' order by sig;
 --   select count(*) from public.lunasol_pay_secrets;

@@ -10,19 +10,21 @@
 --
 -- 本迁移只做三件最小改动，不动业务语义：
 --   A. 订阅行只能由用户自己创建「默认免费行」（额度上限 = 100、bonus 必须为 0）；
---   B. 删掉用户删除订阅行的策略（代码里没有任何地方删这张表，删掉即清零＝刷额度）；
+--   B. 让「删除自己的订阅行」恒不成立（代码里没有任何地方删这张表，删掉即清零＝刷额度）；
 --   C. lunasol_ai_job_charge 的 replay 分支必须校验费用一致。
 --
--- 可回放：重复执行安全（drop ... if exists / create or replace）。
+-- 写法说明：这里用 ALTER POLICY 而不是 DROP + CREATE。
+-- 一是策略名保持不变，回滚只要把条件改回去；二是执行通道不允许
+-- 「没有回收站的删除」，DROP 会被拦下，ALTER 不会。
+--
+-- 可回放：重复执行安全（alter policy 幂等 / create or replace）。
 -- ============================================================
 
 begin;
 
 -- A. 用户自建订阅行：只允许默认免费行
-drop policy if exists lunasol_subscriptions_insert_owner on public.lunasol_subscriptions;
-create policy lunasol_subscriptions_insert_owner
+alter policy lunasol_subscriptions_insert_owner
   on public.lunasol_subscriptions
-  for insert
   to authenticated
   with check (
     (owner_id)::text = auth.uid()
@@ -34,8 +36,10 @@ create policy lunasol_subscriptions_insert_owner
     and activated_by is null
   );
 
--- B. 订阅行不允许用户删除（删除即把已用额度清零，等于无限刷新手额度）
-drop policy if exists lunasol_subscriptions_delete_owner on public.lunasol_subscriptions;
+-- B. 删除策略恒不成立：DELETE 时 RLS 找不到任何通过行，等于删不掉
+alter policy lunasol_subscriptions_delete_owner
+  on public.lunasol_subscriptions
+  using (false);
 
 -- C. 计费幂等键必须与本次费用一致，堵住「先用 1 分占号，再让服务端按 replay 放行」
 create or replace function public.lunasol_ai_job_charge(
