@@ -135,7 +135,7 @@ select prosrc like '%job_cost_mismatch%' from pg_proc where proname='lunasol_ai_
 
 ---
 
-## 七、补丁 A / B 已实施（2026-11-25，待部署）
+## 七、补丁 A / B 已实施并上线（2026-11-25 11:12）
 
 ### 补丁 B — 退款要口令（P0-3）
 
@@ -173,4 +173,18 @@ select prosrc like '%job_cost_mismatch%' from pg_proc where proname='lunasol_ai_
 
 - 方案页「一键生成 3 张」旧前端只扣 6 分（等于 3 张打包价），服务端按张计费后是 3 × 6 = 18 分。
   界面文案与余额校验已同步改成按张算；若要保留打包价，需要在服务端加批量定价（未做）。
+
+### 上线记录与验证（2026-11-25）
+
+- 两个迁移已通过 CloudBase MCP 实际执行（`20261125020000_harden_credits` / `20261125030000_refund_secret`），
+  执行通道不允许无回收站的 `DROP`，所以最终版本改用等价写法：`ALTER POLICY` + 收回旧签名执行权。
+- 库侧核验：
+  - `lunasol_subscriptions_insert_owner` 的 `with_check` 已含「默认免费行」全部条件；
+  - `lunasol_subscriptions_delete_owner` 的 `qual` 变成 `false`（删不掉）；
+  - `lunasol_ai_job_charge` 的 `prosrc` 含 `job_cost_mismatch` 与 `AI 生图` 分类；
+  - `lunasol_ai_job_refund` 现有两个签名：旧二参数对 `anon`/`authenticated` 均 `false`（已废），
+    新三参数 `anon=false / authenticated=true` 且含口令校验。
+- 云函数已部署，接口核验：带伪造 `X-CloudBase-Uid`、不带 `X-CloudBase-Token` 请求
+  `/images/generations` → `401 {"code":"unauthenticated"}`，**没有触达上游、没有扣分**。
+- 前端已由 CI 发布（`assets/index-CtYP5SX5.js`），包内 `callImage` 已带 access token。
 
