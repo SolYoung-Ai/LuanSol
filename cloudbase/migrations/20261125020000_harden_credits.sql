@@ -124,7 +124,9 @@ BEGIN
 
   INSERT INTO public.lunasol_credit_logs (owner_id, change_type, amount, balance_after, reason, task_type)
   VALUES (v_uid, 'consume', -v_cost, v_balance,
-    CASE WHEN v_kind = 'layer_split' THEN 'Seedream 5.5 图层拆分' ELSE 'Seedream 5.5 生成' END, v_kind);
+    CASE WHEN v_kind = 'layer_split' THEN 'Seedream 5.5 图层拆分'
+         WHEN v_kind = 'image' THEN 'AI 生图'
+         ELSE 'Seedream 5.5 生成' END, v_kind);
 
   RETURN jsonb_build_object('ok', true, 'replay', false, 'cost', v_cost, 'balance', v_balance);
 END;

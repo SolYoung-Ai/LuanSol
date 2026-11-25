@@ -132,3 +132,45 @@ select prosrc like '%job_cost_mismatch%' from pg_proc where proname='lunasol_ai_
 - 打开 main 分支保护、依赖自动更新、第三方 action 锁 SHA；
 - 清理 `lunasol.chats.v1` 旧缓存；
 - 确认删除 `submissions` / `kv` / `kv_backup` 三张无关表。
+
+---
+
+## 七、补丁 A / B 已实施（2026-11-25，待部署）
+
+### 补丁 B — 退款要口令（P0-3）
+
+- 新迁移 `cloudbase/migrations/20261125030000_refund_secret.sql`：
+  `lunasol_ai_job_refund(p_job, p_reason, p_secret)`，开头比对 `sha256(p_secret)`
+  与 `lunasol_pay_secrets.name='creem'`（= 环境变量 `PAY_APPLY_SECRET` 的哈希，
+  与支付落库同一把钥匙，不新增配置）；先 `drop` 掉旧的两参数签名，否则重载还在；
+  执行权从 `PUBLIC` / `anon` 收回，`authenticated` 保留（云函数带用户 token 调用）。
+- 云函数 `refundJob()` 每次带 `p_secret`，studio / 拆图 / 生图三条退款路径自动生效。
+
+### 补丁 A — `/ai/image` 服务端扣费（P0-1 + P0-4）
+
+- 云函数新增 `IMAGE_TIER_COST`（flash 6 / pro 12 / sd55 20 / gpt2-text 42 / gpt2-ref 46），
+  与 `src/cloud/plans.ts` 严格对齐；`npm test` 新增一条解析比对的断言，改价漏一处就红。
+- `handleImage` 在「审核 → 档位校验 → 参考图校验」全部通过之后才预扣：
+  预扣失败返回 402/401/409；上游 4xx/5xx、未返回图片、抛异常、客户端断开都原路退款。
+- `jobId` 改由服务端生成，`body.jobId` 直接忽略 → 客户端再也拿不到可预占的幂等键。
+- 成功响应多返回 `jobId / cost / balance`，前端只刷新余额。
+- 前端 `callImage()` 补 `X-CloudBase-Token`（扣费认 token，不认可伪造的 uid 头）；
+  `llmImage()` 同样补 token，并**关掉重试**（每次请求都预扣，重试＝重复扣分）。
+- 删掉 6 处前端 `recordUsage()`（Luna 对话、方案批生成、单张重生、编辑器 3 处），
+  只保留 `sub.refresh()`。`recordUsage()` 本身标记为「不要再用」。
+
+### 部署顺序（必须同一窗口）
+
+1. 控制台 SQL 编辑器跑 `20261125020000_harden_credits.sql`（若还没跑）；
+2. 紧接着跑 `20261125030000_refund_secret.sql`；
+3. 立刻部署云函数 `lunasol-ai`；
+4. 最后发前端（GitHub Pages 走 CI）。
+
+顺序反了会有一段「退款全失败、任务停在 charged」的窗口——不会丢钱，只是要人工核对，
+所以第 3 步越快越好。
+
+### 已知口径变化
+
+- 方案页「一键生成 3 张」旧前端只扣 6 分（等于 3 张打包价），服务端按张计费后是 3 × 6 = 18 分。
+  界面文案与余额校验已同步改成按张算；若要保留打包价，需要在服务端加批量定价（未做）。
+

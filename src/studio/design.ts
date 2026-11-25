@@ -194,16 +194,17 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 const mapFace = (d: StudioDesign, face: string, fn: (els: DesignEl[]) => DesignEl[]): StudioDesign =>
   withFaceEls(d, face, fn(faceEls(d, face)));
 
-/** 移动：允许贴边，但不能整个拖出画布（至少留 8% 在视野里） */
+/** 移动：允许贴边，但不能整个拖出画布（至少留 8% 在视野里）。
+ *  2.0：locked 元素不响应拖动（数据层先兜住，界面后续再加锁图标）。 */
 export function moveEl(d: StudioDesign, id: string, x: number, y: number, face = 'front'): StudioDesign {
-  return mapFace(d, face, (els) => els.map((e) => (e.id === id
-    ? { ...e, x: clamp(x, -e.w + 8, 96), y: clamp(y, -4, 98) } : e)));
+  return mapFace(d, face, (els) => els.map((e) => (e.id === id && !e.locked
+    ? { ...e, x: clamp(x, -e.w + 8, 96), y: clamp(y, -4, 98), updatedAt: Date.now() } : e)));
 }
 
 /** 改宽度：文字与贴纸的最小宽度不同，文字太窄会折成一条竖线 */
 export function resizeEl(d: StudioDesign, id: string, w: number, face = 'front'): StudioDesign {
-  return mapFace(d, face, (els) => els.map((e) => (e.id === id
-    ? { ...e, w: clamp(w, e.kind === 'rect' ? 1 : 8, 100) } : e)));
+  return mapFace(d, face, (els) => els.map((e) => (e.id === id && !e.locked
+    ? { ...e, w: clamp(w, e.kind === 'rect' ? 1 : 8, 100), updatedAt: Date.now() } : e)));
 }
 
 export function patchEl(d: StudioDesign, id: string, patch: Partial<DesignEl>, face = 'front'): StudioDesign {
@@ -229,21 +230,27 @@ export function reorderEl(d: StudioDesign, id: string, dir: -1 | 1, face = 'fron
 /** 生成/重新生成贴纸后写回：这一面没有贴纸位就新建一个，有就原地换图 */
 export function setSticker(d: StudioDesign, src: string, face = 'front'): StudioDesign {
   const els = faceEls(d, face);
+  const now = Date.now();
   const has = els.some((e) => e.kind === 'sticker');
   const next = has
-    ? els.map((e) => (e.kind === 'sticker' ? { ...e, src } : e))
-    : [...els, { id: `sticker_${Date.now().toString(36)}`, kind: 'sticker' as const, src, x: 52, y: 36, w: 40 }];
+    ? els.map((e) => (e.kind === 'sticker' ? { ...e, src, createdAt: e.createdAt ?? now, updatedAt: now } : e))
+    : [...els, {
+      id: `sticker_${now.toString(36)}`, kind: 'sticker' as const, src,
+      x: 52, y: 36, w: 40, createdAt: now, updatedAt: now,
+    }];
   return withFaceEls(d, face, next);
 }
 
 /** 加一条新文字：给「加文字」按钮用，位置错开，避免每次都叠在同一处 */
 export function addText(d: StudioDesign, text = '双击改文字', face = 'front'): StudioDesign {
   const n = faceEls(d, face).filter((e) => e.kind === 'text').length;
+  const now = Date.now();
   const el: DesignEl = {
-    id: `t_${Date.now().toString(36)}_${n}`,
+    id: `t_${now.toString(36)}_${n}`,
     kind: 'text', text,
     x: 10, y: clamp(20 + n * 6, 5, 85), w: 50,
     size: 3, weight: 400, color: d.ink, align: 'left',
+    source: 'system', createdAt: now, updatedAt: now,
   };
   return withFaceEls(d, face, [...faceEls(d, face), el]);
 }
@@ -253,15 +260,200 @@ export function duplicateEl(d: StudioDesign, id: string, face = 'front'): Studio
   const els = faceEls(d, face);
   const src = els.find((e) => e.id === id);
   if (!src) return d;
+  const now = Date.now();
   const copy: DesignEl = {
     ...src,
-    id: `${src.id}_c${Date.now().toString(36).slice(-3)}`,
+    id: `${src.id}_c${now.toString(36).slice(-3)}`,
     x: clamp(src.x + 2, -src.w + 8, 96),
     y: clamp(src.y + 3, -4, 98),
+    createdAt: now,
+    updatedAt: now,
   };
   return withFaceEls(d, face, [...els, copy]);
 }
 
 export function selectedEl(d: StudioDesign, id: string, face = 'front'): DesignEl | null {
   return faceEls(d, face).find((e) => e.id === id) || null;
+}
+
+/* ============================================================
+   2.0 阶段二 — 矢量编辑器用的批量操作
+   ------------------------------------------------------------
+   全部纯函数：不读 DOM、不读面板尺寸；需要毫米的换算由调用方
+   （CanvasSVG）先用 frames/vec 算好，再以百分比写回。
+   ============================================================ */
+
+let seq = 0;
+const newId = (p: string) => {
+  seq += 1;
+  return `${p}_${Date.now().toString(36)}${seq.toString(36)}`;
+};
+
+/** 批量改属性（多选、锁定、可见、字号……都走这里）；id / kind 永远不可改 */
+export function patchEls(d: StudioDesign, ids: string[], patch: Partial<DesignEl>, face = 'front'): StudioDesign {
+  if (!ids.length) return d;
+  const set = new Set(ids);
+  const now = Date.now();
+  return mapFace(d, face, (els) => els.map((e) => (set.has(e.id)
+    ? { ...e, ...patch, id: e.id, kind: e.kind, updatedAt: now } : e)));
+}
+
+/** 把一组元素的绝对百分比坐标写回（拖动 / 缩放 / 旋转结束时用） */
+export function setElsBox(
+  d: StudioDesign,
+  boxes: Record<string, { x?: number; y?: number; w?: number; h?: number; rotation?: number }>,
+  face = 'front',
+): StudioDesign {
+  const now = Date.now();
+  return mapFace(d, face, (els) => els.map((e) => {
+    const b = boxes[e.id];
+    return b ? { ...e, ...b, id: e.id, kind: e.kind, updatedAt: now } : e;
+  }));
+}
+
+/** 叠放次序：数组末尾 = 最上层。写回时把 zIndex 归一化成 0..n-1，
+ *  这样画布 SVG、刀板、3D、导出读的是同一串数字。 */
+function orderWith(els: DesignEl[], ids: string[], action: 'front' | 'back' | 'up' | 'down'): DesignEl[] {
+  const set = new Set(ids);
+  const picked = els.filter((e) => set.has(e.id));
+  if (!picked.length) return els;
+  const rest = els.filter((e) => !set.has(e.id));
+
+  if (action === 'front') return [...rest, ...picked];
+  if (action === 'back') return [...picked, ...rest];
+
+  // 上/下移一层：按数组顺序逐个交换（保持多选之间的相对次序）
+  const next = [...els];
+  if (action === 'up') {
+    for (let i = next.length - 2; i >= 0; i -= 1) {
+      if (set.has(next[i].id) && !set.has(next[i + 1].id)) [next[i], next[i + 1]] = [next[i + 1], next[i]];
+    }
+  } else {
+    for (let i = 1; i < next.length; i += 1) {
+      if (set.has(next[i].id) && !set.has(next[i - 1].id)) [next[i], next[i - 1]] = [next[i - 1], next[i]];
+    }
+  }
+  return next;
+}
+
+export function orderEls(
+  d: StudioDesign, ids: string[], action: 'front' | 'back' | 'up' | 'down', face = 'front',
+): StudioDesign {
+  return mapFace(d, face, (els) => orderWith(els, ids, action)
+    .map((e, i) => ({ ...e, zIndex: i, updatedAt: Date.now() })));
+}
+
+/** 多选复制：位置错开 2%/3%，groupId 一起换新，避免和原件同组 */
+export function duplicateEls(d: StudioDesign, ids: string[], face = 'front'): { design: StudioDesign; ids: string[] } {
+  const els = faceEls(d, face);
+  const picked = els.filter((e) => ids.includes(e.id));
+  if (!picked.length) return { design: d, ids: [] };
+  const now = Date.now();
+  const gmap = new Map<string, string>();
+  const copies = picked.map((e) => {
+    if (e.groupId && !gmap.has(e.groupId)) gmap.set(e.groupId, newId('g'));
+    return {
+      ...e,
+      id: newId(e.kind === 'text' ? 't' : e.kind === 'rect' ? 's' : 'img'),
+      x: clamp(e.x + 2, -e.w + 8, 96),
+      y: clamp(e.y + 3, -4, 98),
+      groupId: e.groupId ? gmap.get(e.groupId) : undefined,
+      createdAt: now,
+      updatedAt: now,
+    } as DesignEl;
+  });
+  const zStart = els.reduce((m, e) => Math.max(m, e.zIndex ?? 0), -1) + 1;
+  const stamped = copies.map((e, i) => ({ ...e, zIndex: zStart + i }));
+  return {
+    design: withFaceEls(d, face, [...els, ...stamped]),
+    ids: stamped.map((e) => e.id),
+  };
+}
+
+export function removeEls(d: StudioDesign, ids: string[], face = 'front'): StudioDesign {
+  if (!ids.length) return d;
+  const set = new Set(ids);
+  return mapFace(d, face, (els) => els.filter((e) => !set.has(e.id)));
+}
+
+/** 组合：只打标签，不嵌套坐标 —— 元素仍各自持久化，导出/3D 不受影响；
+ *  选中、移动、缩放、旋转、显示隐藏由编辑器按 groupId 一起处理。 */
+export function groupEls(d: StudioDesign, ids: string[], face = 'front'): { design: StudioDesign; groupId: string } {
+  if (ids.length < 2) return { design: d, groupId: '' };
+  const groupId = newId('g');
+  return { design: patchEls(d, ids, { groupId }, face), groupId };
+}
+
+export function ungroupEls(d: StudioDesign, ids: string[], face = 'front'): StudioDesign {
+  return patchEls(d, ids, { groupId: undefined }, face);
+}
+
+/** 新增图形：宽高以百分比给出，默认落在安全区内 */
+export function addShape(
+  d: StudioDesign,
+  shape: 'rect' | 'ellipse' | 'line',
+  face = 'front',
+  o: Partial<DesignEl> = {},
+): DesignEl {
+  const els = faceEls(d, face);
+  const now = Date.now();
+  const n = els.length;
+  return {
+    id: newId('s'),
+    kind: 'rect',
+    shape,
+    name: shape === 'ellipse' ? '圆形' : shape === 'line' ? '直线' : '矩形',
+    x: clamp(24 + (n % 4) * 4, 0, 70),
+    y: clamp(30 + (n % 4) * 6, 0, 80),
+    w: shape === 'line' ? 40 : 30,
+    h: shape === 'line' ? 0.5 : shape === 'ellipse' ? 40 : 22,
+    color: d.accent,
+    source: 'system',
+    createdAt: now,
+    updatedAt: now,
+    ...o,
+  };
+}
+
+/** 新增图片：默认按原图比例放成 40% 宽，落点偏右，避免盖住已有文字 */
+export function addImage(
+  d: StudioDesign,
+  src: string,
+  naturalW: number,
+  naturalH: number,
+  face = 'front',
+  o: Partial<DesignEl> = {},
+): DesignEl {
+  const els = faceEls(d, face);
+  const now = Date.now();
+  const ratio = naturalH > 0 && naturalW > 0 ? naturalH / naturalW : 1;
+  const w = 40;
+  const h = clamp(w * ratio, 1, 95);
+  return {
+    id: newId('img'),
+    kind: 'sticker',
+    name: '插图',
+    src,
+    x: clamp(46 + (els.length % 3) * 3, 0, 95 - w),
+    y: clamp(30 + (els.length % 3) * 4, 0, 95 - h),
+    w,
+    h,
+    naturalW,
+    naturalH,
+    fit: 'contain',
+    source: o.source || 'upload',
+    createdAt: now,
+    updatedAt: now,
+    ...o,
+  };
+}
+
+/** 等比例缩放：给一个目标宽，按原图比例算高（画布只需要百分比） */
+export function imageHeightPct(el: DesignEl, wPct: number, faceRatioWH: [number, number]): number {
+  const [fw, fh] = faceRatioWH;
+  const nw = el.naturalW || 1;
+  const nh = el.naturalH || 1;
+  const mmW = (wPct / 100) * fw;
+  const mmH = mmW * (nh / nw);
+  return clamp((mmH / fh) * 100, 0.5, 200);
 }

@@ -84,6 +84,9 @@ export interface StudioAnswers {
   customColors: Ans<string[]>;
   /** 色彩参考图（data URL） */
   colorRef: Ans<string | null>;
+  /** 结构补充参数（mm）：粘胶位 / 插舌 / 盖墙 / 间隙 / 侧翼 / 封口边 / 圆角。
+   *  旧项目没有这个字段；有值时必须传给结构引擎，不能在工作台链路里被忽略。 */
+  structureExtra?: Record<string, number>;
   patterns: Ans<PatternId[]>;
   logo: LogoPick;
   extra: Ans<string>;
@@ -99,13 +102,45 @@ export interface StudioChatMsg {
   content: string;
   at: number;
   error?: boolean;
+  /** 阶段四：普通文本 / 待确认计划 / 执行结果 */
+  kind?: 'text' | 'plan' | 'result' | 'error';
+  /** 待确认或已执行的操作预览（随项目一起保存） */
+  plan?: import('./ai/types').StudioPlanPreview;
+  planStatus?: 'pending' | 'applied' | 'rejected' | 'failed' | 'stale' | 'superseded' | 'undone';
+  /** 执行后每一条动作的真实结果 */
+  results?: import('./ai/types').ActionResult[];
+  /** 执行后的设计指纹，用于判断是否还能直接撤销这次 AI 操作 */
+  afterDigest?: string;
 }
 
 /* ============================ 设计稿（编辑器里的画布内容） ============================ */
 
 /** 画布上的一个元素。坐标一律用百分比：0-100，
- *  这样缩放、换设备、换画布尺寸都不用重算一遍像素。 */
+ *  这样缩放、换设备、换画布尺寸都不用重算一遍像素。
+ *
+ *  LunaSol 2.0 阶段一（渐进式加固）：在原字段之上**追加**可选字段，
+ *  不改动任何既有必填字段，旧项目读进来不需要迁移即可继续用。
+ *  新字段的语义与缺省值见各自注释；换算规则集中在 studio/frames.ts。 */
 export type ElKind = 'text' | 'sticker' | 'rect';
+
+/** 图形对象的几何形态。`rect` 这个 kind 就是「形状」，用 shape 区分具体语法，
+ *  这样旧数据（只有色块）不需要迁移，新图形直接复用同一套坐标与图层逻辑。 */
+export type ElShape = 'rect' | 'ellipse' | 'line';
+
+/** 图片适配：contain 留白完整显示，cover 裁满画框 */
+export type ElFit = 'contain' | 'cover';
+
+/** 图片裁切窗口（相对原图 0–1，画布内生效；导出仍按 cover 近似） */
+export interface ElCrop { x: number; y: number; w: number; h: number }
+
+/** 素材来源。用于追溯「这张图是 AI 生成的、用户上传的、还是 Logo」，
+ *  旧数据没有这个字段，读取时保持 undefined，不当成伪造信息。 */
+export type ElSource = 'ai' | 'upload' | 'logo' | 'library' | 'system';
+
+/** AI 拆图导入后的素材类型。只是标签，不参与几何/导出；
+ *  用户可以手动改，模型分类也不保证 100% 准确。 */
+export type ElLayerType =
+  | 'background' | 'illustration' | 'decorative' | 'product' | 'logo' | 'text' | 'unknown';
 
 export interface DesignEl {
   id: string;
@@ -127,6 +162,69 @@ export interface DesignEl {
   weight?: number;
   align?: 'left' | 'center' | 'right';
   opacity?: number;
+
+  /* ---- 2.0 追加的可选字段（全部可缺省，缺省即旧行为） ---- */
+
+  /** 元素所属面板。**以 faces 容器为准**，这里的值只是冗余快照：
+   *  保存/读回时由 normalizeDesign 按容器重写，避免两面各说各话。 */
+  faceId?: string;
+  /** 图层显示名；不填时界面按内容兜底（文字取前 14 字、图片显示「插图」）。 */
+  name?: string;
+  /** 顺时针旋转角度（度）。不填 = 0，与旧行为一致。 */
+  rotation?: number;
+  /** 是否可见。不填 = true；false 时画布不画、导出不再输出，但数据仍在。 */
+  visible?: boolean;
+  /** 是否锁定。不填 = false；锁定元素的拖动/改尺寸在数据层忽略。 */
+  locked?: boolean;
+  /** 同一面内的叠放次序，越小越靠后。不填时按数组顺序（旧行为）。 */
+  zIndex?: number;
+  /** 文字字体族。不填时用引擎默认的中文黑体。 */
+  fontFamily?: string;
+  /** 图片素材来源，用于追溯与素材库回链。 */
+  source?: ElSource;
+  /** 素材库 ID（图片来自素材库时填）。 */
+  assetId?: string;
+  /** 首次创建 / 最近一次修改时间（毫秒）。旧数据为空。 */
+  createdAt?: number;
+  updatedAt?: number;
+
+  /* ---- 2.0 阶段二：矢量编辑所需字段（同样全部可选） ---- */
+
+  /** rect 的具体形态：矩形 / 椭圆 / 直线。不填 = 矩形。 */
+  shape?: ElShape;
+  /** 圆角半径（毫米）。仅矩形有效，不填 = 0。 */
+  radius?: number;
+  /** 图形描边颜色；不填 = 无描边。 */
+  stroke?: string;
+  /** 描边宽度（毫米），夹 0..20。 */
+  strokeWidth?: number;
+  /** 文字字间距（em），与引擎语义一致，不填 = 0。 */
+  letterSpacing?: number;
+  /** 文字行高（em），不填 = 1.4。 */
+  lineHeight?: number;
+  /** 图片适配方式；不填 = contain（旧版行为）。 */
+  fit?: ElFit;
+  /** 图片裁切窗口（contain 之外再裁一部分时用）。 */
+  crop?: ElCrop;
+  /** 图片原始像素尺寸，用于等比例缩放与裁切提示；旧数据为空。 */
+  naturalW?: number;
+  naturalH?: number;
+  /** 组合 ID：同一 groupId 的元素一起被选中、移动、缩放、旋转、隐藏。 */
+  groupId?: string;
+
+  /* ---- 2.0 阶段三：AI 拆图导入的追溯字段（全部可选） ---- */
+
+  /** 模型给出的素材类型标签（background / illustration / ...）。 */
+  layerType?: ElLayerType;
+  /** 该图层来自哪次拆图任务，便于排查与去重。 */
+  importJob?: string;
+  /** OCR 识别原文，仅用于提示；不是字体/排版事实。 */
+  ocrText?: string;
+  /** OCR 结构完整度启发值 0..1，不是模型置信度。 */
+  ocrConfidence?: number;
+
+  /** 印刷工艺：缺省 = 普通印刷；foil / uv / spot 必须独立图层导出。 */
+  process?: 'print' | 'foil' | 'uv' | 'spot';
 }
 
 /** 编辑器里的画布状态。跟着项目一起存（本机 + 云端），换设备能接着改。
@@ -140,6 +238,8 @@ export interface StudioDesign {
   els: DesignEl[];
   /** 按面存的元素；key 为 FaceId（front / back / left / right / top） */
   faces?: Partial<Record<string, DesignEl[]>>;
+  /** 按面覆盖的背景色。缺省时回落到 bg（旧数据无需迁移）。 */
+  faceBg?: Partial<Record<string, string>>;
   updatedAt: number;
 }
 
@@ -151,13 +251,31 @@ export function faceEls(d: StudioDesign | null | undefined, face = 'front'): Des
   return face === 'front' ? d.els : [];
 }
 
-/** 写某个面：同时维护 els 与 faces，老代码读 els 不会读到旧内容 */
+/** 某个面实际使用的底色：面覆盖优先，否则用整份设计的 bg。 */
+export function bgForFace(d: StudioDesign | null | undefined, face = 'front'): string {
+  if (!d) return '#FFFFFF';
+  const own = d.faceBg?.[face];
+  return typeof own === 'string' && /^#[0-9a-fA-F]{6}$/.test(own) ? own : d.bg;
+}
+
+/** 写入某个面的底色，不影响其它面的覆盖值。 */
+export function withFaceBg(d: StudioDesign, face: string, color: string): StudioDesign {
+  return {
+    ...d,
+    faceBg: { ...(d.faceBg || {}), [face]: color },
+    updatedAt: Date.now(),
+  };
+}
+
+/** 写某个面：同时维护 els 与 faces，老代码读 els 不会读到旧内容。
+ *  2.0：顺手把每个元素的 faceId 校正成所在面（容器是唯一权威，元素里的只是快照）。 */
 export function withFaceEls(d: StudioDesign, face: string, els: DesignEl[]): StudioDesign {
-  const faces = { ...(d.faces || {}), [face]: els };
+  const stamped = els.map((e) => (e.faceId === face ? e : { ...e, faceId: face }));
+  const faces = { ...(d.faces || {}), [face]: stamped };
   return {
     ...d,
     faces,
-    els: face === 'front' ? els : faceEls({ ...d, faces }, 'front'),
+    els: face === 'front' ? stamped : faceEls({ ...d, faces }, 'front'),
     updatedAt: Date.now(),
   };
 }
@@ -561,18 +679,29 @@ const num = (v: unknown, min: number, max: number, fallback: number): number => 
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 
-/** 单个元素的白名单清洗：云端 / localStorage 里来的东西一律当作不可信 */
-function cleanEls(raw: unknown, limit = 24): DesignEl[] {
+/** 一个面的元素上限。旧上限 24 对真实包装版面不够用，2.0 阶段二提到 60，
+ *  但仍然是硬上限，避免脏数据把画布拖死。 */
+export const MAX_ELS_PER_FACE = 60;
+
+/** 单个元素的白名单清洗：云端 / localStorage 里来的东西一律当作不可信。
+ *  2.0 起同时清洗追加字段：旋转夹到 -180..180、透明度 0.05..1、
+ *  zIndex 取整夹到 -99..99；faceId 由容器传入并**覆盖**数据里的值。 */
+function cleanEls(raw: unknown, limit = 24, faceId?: string): DesignEl[] {
   if (!Array.isArray(raw)) return [];
   const clean: DesignEl[] = [];
   for (const e of raw.slice(0, limit)) {
     if (!e || typeof e !== 'object') continue;
     const o = e as Partial<DesignEl>;
     const kind: ElKind = o.kind === 'sticker' ? 'sticker' : o.kind === 'rect' ? 'rect' : 'text';
-    const src = typeof o.src === 'string' && o.src.startsWith('data:image/') ? o.src : undefined;
-    if (kind === 'sticker' && src && src.length > 6_000_000) continue;
+    const rawSrc = typeof o.src === 'string' ? o.src : '';
+    if (rawSrc.startsWith('data:image/') && rawSrc.length > 6_000_000) continue;
+    /* 阶段三起，拆图图层用服务端素材短链（HTTPS）而不是把几十张 base64
+       塞进项目 JSON。只接受 https，不接受 http / javascript / data:svg。 */
+    const src = rawSrc.startsWith('data:image/')
+      ? (rawSrc.length <= 6_000_000 ? rawSrc : undefined)
+      : (rawSrc.startsWith('https://') && rawSrc.length <= 1000 ? rawSrc : undefined);
     const id = typeof o.id === 'string' && o.id ? o.id : `el_${clean.length}`;
-    clean.push({
+    const el: DesignEl = {
       id,
       kind,
       text: typeof o.text === 'string' ? o.text.slice(0, 200) : undefined,
@@ -586,24 +715,62 @@ function cleanEls(raw: unknown, limit = 24): DesignEl[] {
       weight: o.weight === undefined ? undefined : num(o.weight, 300, 800, 400),
       align: o.align === 'center' || o.align === 'right' ? o.align : 'left',
       opacity: o.opacity === undefined ? undefined : num(o.opacity, 0.05, 1, 1),
-    });
+    };
+    /* 追加字段：只有明确给出了合法值才写，没给就保持 undefined（= 旧行为） */
+    if (faceId) el.faceId = faceId;
+    if (typeof o.name === 'string' && o.name.trim()) el.name = o.name.trim().slice(0, 40);
+    if (o.rotation !== undefined) el.rotation = num(o.rotation, -180, 180, 0);
+    if (typeof o.visible === 'boolean') el.visible = o.visible;
+    if (typeof o.locked === 'boolean') el.locked = o.locked;
+    if (o.zIndex !== undefined) el.zIndex = Math.round(num(o.zIndex, -99, 99, 0));
+    if (typeof o.fontFamily === 'string' && o.fontFamily.trim()) el.fontFamily = o.fontFamily.trim().slice(0, 80);
+    if (o.source === 'ai' || o.source === 'upload' || o.source === 'logo'
+      || o.source === 'library' || o.source === 'system') el.source = o.source;
+    if (typeof o.assetId === 'string' && o.assetId.trim()) el.assetId = o.assetId.trim().slice(0, 64);
+    if (o.createdAt !== undefined) el.createdAt = num(o.createdAt, 0, Number.MAX_SAFE_INTEGER, 0) || undefined;
+    if (o.updatedAt !== undefined) el.updatedAt = num(o.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0) || undefined;
+
+    /* 阶段二：图形 / 文字排版 / 图片 / 组合 */
+    if (o.shape === 'ellipse' || o.shape === 'line') el.shape = o.shape;
+    if (o.radius !== undefined) el.radius = num(o.radius, 0, 60, 0);
+    if (typeof o.stroke === 'string' && HEX.test(o.stroke)) el.stroke = o.stroke;
+    if (o.strokeWidth !== undefined) el.strokeWidth = num(o.strokeWidth, 0, 20, 0);
+    if (o.letterSpacing !== undefined) el.letterSpacing = num(o.letterSpacing, -0.2, 1, 0);
+    if (o.lineHeight !== undefined) el.lineHeight = num(o.lineHeight, 0.8, 3, 1.4);
+    if (o.fit === 'cover') el.fit = 'cover';
+    if (o.crop && typeof o.crop === 'object') {
+      const c = o.crop as Partial<ElCrop>;
+      const cw = num(c.w, 0.05, 1, 1);
+      const ch = num(c.h, 0.05, 1, 1);
+      el.crop = { x: num(c.x, 0, 1 - cw, 0), y: num(c.y, 0, 1 - ch, 0), w: cw, h: ch };
+    }
+    if (o.naturalW !== undefined) el.naturalW = num(o.naturalW, 1, 20000, 1000);
+    if (o.naturalH !== undefined) el.naturalH = num(o.naturalH, 1, 20000, 1000);
+    if (typeof o.groupId === 'string' && o.groupId.trim()) el.groupId = o.groupId.trim().slice(0, 40);
+    if (o.layerType === 'background' || o.layerType === 'illustration' || o.layerType === 'decorative'
+      || o.layerType === 'product' || o.layerType === 'logo' || o.layerType === 'text'
+      || o.layerType === 'unknown') el.layerType = o.layerType;
+    if (typeof o.importJob === 'string' && o.importJob.trim()) el.importJob = o.importJob.trim().slice(0, 64);
+    if (typeof o.ocrText === 'string' && o.ocrText.trim()) el.ocrText = o.ocrText.trim().slice(0, 500);
+    if (o.ocrConfidence !== undefined) el.ocrConfidence = num(o.ocrConfidence, 0, 1, 0.5);
+    clean.push(el);
   }
   return clean;
 }
 
 /** 设计稿的读书笔记：云端/localStorage 里的东西不可信，
  *  坐标越界、字号为 0、贴一张 40MB 的图都可能把画布弄崩，一律夹到安全范围。
- *  3.0 起按面清洗；老稿只有 els，等同于 faces.front。 */
+ *  3.0 起按面清洗；老稿只有 els，等同于 faces.front。
+ *  2.0：每个元素的 faceId 由容器决定，数据里写错的 faceId 会被重写。 */
 export function normalizeDesign(raw: unknown): StudioDesign | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Partial<StudioDesign>;
-  const front = cleanEls(o.els);
+  const front = cleanEls(o.els, MAX_ELS_PER_FACE, 'front');
   const faces: Partial<Record<string, DesignEl[]>> = {};
   if (o.faces && typeof o.faces === 'object') {
     for (const [face, list] of Object.entries(o.faces)) {
       if (!/^[a-zA-Z]{2,8}$/.test(face)) continue;
-      faces[face] = cleanEls(list);
-      if (face === 'front') faces.front = cleanEls(list);
+      faces[face] = cleanEls(list, MAX_ELS_PER_FACE, face);
     }
   }
   if (!faces.front && front.length) faces.front = front;
@@ -620,6 +787,8 @@ export function normalizeDesign(raw: unknown): StudioDesign | null {
     accent: typeof o.accent === 'string' && HEX.test(o.accent) ? o.accent : '#F47735',
     els,
     faces,
+    faceBg: Object.fromEntries(Object.entries(o.faceBg || {})
+      .filter(([key, value]) => /^[a-zA-Z]{2,8}$/.test(key) && typeof value === 'string' && HEX.test(value as string))),
     updatedAt: Number(o.updatedAt) || Date.now(),
   };
 }

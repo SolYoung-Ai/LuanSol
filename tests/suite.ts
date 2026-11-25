@@ -1,10 +1,12 @@
 /* LunaSol 真实功能测试套件（Node + 浏览器共用同一套断言）
  * 浏览器部分覆盖 PDF 生成与字节级预检、SVG 位图渲染等依赖 DOM 的能力。 */
 import { createEmptyBrief, nextQuestion, parseSize, parseUtterance } from '../src/engine/brief';
-import { buildDieline, dielineStats, faceSizes, STRUCTURES, structureById } from '../src/engine/structure';
+import { STRUCTURE_MIN, buildDieline, dielineStats, faceSizes, STRUCTURES, structureById } from '../src/engine/structure';
 import { buildSchemes, cloneDesign, faceSvg, fitText, makeText, textOverflow } from '../src/engine/design';
 import { applyPatch, localIntent } from '../src/engine/modify';
 import { autoFix, runPrepress } from '../src/engine/prepress';
+import { auditDieline, validateStructureInput } from '../src/engine/structureAudit';
+import { viewerSupport } from '../src/studio/viewerSupport';
 import { buildBundle, buildDxf, buildPdf, spreadSvg, svgToCanvas, verifyPdf } from '../src/engine/export';
 import type { DesignBrief, DesignDoc, StructureId, TextLayer } from '../src/types';
 import { STYLES, TRADITION_COUNT, styleById, stylePrimaryColor, buildStylePrompt } from '../src/v3/styles';
@@ -34,16 +36,34 @@ import type { DesignTask, Project, ProjectWorkflow } from '../src/types';
 import {
   CATEGORIES, FORMS_BY_CATEGORY, PAGES, PAGE_TOTAL, STUDIO_ID_PREFIX, createStudioProject, emptyAnswers,
   exportStructured, isBlankStudio, missingRequired, normalizeStudioProject, pageOfStep, projectName,
-  recommendSize, sizeOk, stepOfPage, ans, normalizeDesign, faceEls, withFaceEls, type StudioProject,
+  recommendSize, sizeOk, stepOfPage, ans, normalizeDesign, faceEls, withFaceEls,
+  type DesignEl, type StudioProject,
 } from '../src/studio/types';
 import {
-  STUDIO_BLEED, STUDIO_SAFE, designDocFor, dielineOf, dielineSummary, dimsOf, elToLayer, faceRatio,
-  facesOf, hasDieline, structureFor, PT_PER_MM,
+  STUDIO_BLEED, STUDIO_SAFE, designDocFor, dielineOf, dielineSummary, dimsOf, drawOrder, elLocalRect,
+  elSheetRect, elToLayer, faceDoc, faceOrigins, faceRatio, facesOf, hasDieline, layerToEl, mmToPct,
+  pctToMm, structureFor, validBox, PT_PER_MM,
 } from '../src/studio/frames';
 import {
-  addText, buildDesign, moveEl, patchEl, ratioFor, removeEl, reorderEl, resizeEl, setSticker,
-  stickerPrompt,
+  addImage, addShape, addText, buildDesign, duplicateEls, groupEls, moveEl, orderEls, patchEl,
+  patchEls, ratioFor, removeEl, reorderEl, resizeEl, setElsBox, setSticker, stickerPrompt, ungroupEls,
 } from '../src/studio/design';
+import {
+  clientToMm, expandSelection, mmRectToPct, resizeBox, selectionFrame, textOverflow as elOverflows,
+  corners, normalizeAngle,
+} from '../src/studio/vec';
+import {
+  HISTORY_LIMIT, canRedo, canUndo, createHistory, pushHistory, redoHistory, undoHistory,
+} from '../src/studio/history';
+import {
+  mapBoxToCanvas, mmBoxToPct, normalizeBox, placementSelfCheck,
+} from '../src/engine/layerPlacement';
+import { classifyLayer, parseSplitResponse } from '../src/engine/seedreamLayers';
+import { importSplitLayers } from '../src/studio/layerImport';
+import { previewPlan, executePlan, planIsStale } from '../src/studio/ai/executor';
+import { buildAIContext as buildStudioAIContext, designDigest } from '../src/studio/ai/context';
+import { STUDIO_TOOL_DEFS } from '../src/studio/ai/tools';
+import type { StudioAIPlan, StudioAISnapshot } from '../src/studio/ai/types';
 
 export interface Result { name: string; ok: boolean; detail: string }
 const A = (cond: unknown, msg: string) => { if (!cond) throw new Error(msg); };
@@ -711,6 +731,242 @@ export async function runTests(): Promise<Result[]> {
     return '噪音吞掉 / 常见错误中文化 / 未知消息保真';
   });
 
+
+  /* ---------------- 阶段五：结构验证、3D 映射与导出交付 ---------------- */
+  await t('阶段五 · 七种结构基础计算：尺寸有限、面板为正、无零边', () => {
+    const dims = { l: 80, w: 50, h: 40 };
+    const expectFaces: Record<StructureId, string[]> = {
+      tuck: ['front', 'back', 'left', 'right', 'top'],
+      topBottom: ['front', 'back', 'left', 'right', 'top'],
+      drawer: ['front', 'back', 'left', 'right', 'top'],
+      mailer: ['front', 'back', 'left', 'right', 'top'],
+      pouch: ['front', 'back'],
+      labelRect: ['front'],
+      labelRound: ['front'],
+    };
+    const rows: string[] = [];
+    for (const s of STRUCTURES) {
+      const d = buildDieline(s.id, dims, 3, 5);
+      A(d.sheets.length >= 1 && d.sheets.length <= 2, `${s.id} 展开图数量异常 ${d.sheets.length}`);
+      A(Number.isFinite(d.finished.l) && Number.isFinite(d.finished.w) && Number.isFinite(d.finished.h), `${s.id} 成品尺寸非有限数`);
+      for (const sh of d.sheets) {
+        A(Number.isFinite(sh.width) && sh.width > 0, `${s.id}/${sh.id} 展开宽非正`);
+        A(Number.isFinite(sh.height) && sh.height > 0, `${s.id}/${sh.id} 展开高非正`);
+        for (const r of sh.rects) {
+          A([r.x, r.y, r.w, r.h].every(Number.isFinite), `${s.id}/${sh.id}/${r.label} 面板坐标非有限`);
+          A(r.w > 0 && r.h > 0, `${s.id}/${sh.id}/${r.label} 面板非正面积 ${r.w}×${r.h}`);
+        }
+        for (const g of sh.segments) {
+          A([g.x1, g.y1, g.x2, g.y2].every(Number.isFinite), `${s.id} 线段坐标非有限`);
+          A(Math.abs(g.x1 - g.x2) > 1e-6 || Math.abs(g.y1 - g.y2) > 1e-6, `${s.id} 存在零长度 ${g.kind} 线段`);
+        }
+      }
+      const trueFaces = [...new Set(d.sheets.flatMap((sh) => sh.rects.filter((r) => r.face && r.artwork).map((r) => r.face!)))];
+      const declared = Object.keys(faceSizes(s.id, dims));
+      A(trueFaces.every((f) => declared.includes(f)), `${s.id} faceSizes 漏掉真实面 ${trueFaces.join(',')}`);
+      A(declared.every((f) => (expectFaces[s.id] as string[]).includes(f)), `${s.id} faceSizes 虚构了不存在的面 ${declared.join(',')}`);
+      const audit = auditDieline(d);
+      A(!audit.issues.some((i) => i.level === 'error'), `${s.id} 审计报错：${audit.issues.filter((i) => i.level === 'error').map((i) => i.code + ' ' + i.detail).join('；')}`);
+      rows.push(`${s.id}:${d.sheets.length}张/${d.sheets[0].width}×${d.sheets[0].height}`);
+    }
+    return rows.join(' | ');
+  });
+
+  await t('阶段五 · tuck 多尺寸矩阵：小/中/大/极端/非法全部可解释', () => {
+    const cases: { name: string; size: { l: number; w: number; h: number } }[] = [
+      { name: '小型', size: { l: 30, w: 20, h: 12 } },
+      { name: '中型', size: { l: 80, w: 50, h: 40 } },
+      { name: '大型', size: { l: 300, w: 200, h: 150 } },
+      { name: '细长', size: { l: 200, w: 20, h: 40 } },
+      { name: '最小', size: { l: 20, w: 15, h: 8 } },
+      { name: '零值', size: { l: 0, w: 0, h: 0 } },
+      { name: '负值', size: { l: -50, w: -20, h: -10 } },
+      { name: 'NaN', size: { l: Number.NaN, w: 30, h: 20 } },
+    ];
+    const out: string[] = [];
+    for (const c of cases) {
+      const d = buildDieline('tuck', c.size, 3, 5);
+      const sh = d.sheets[0];
+      A(Number.isFinite(sh.width) && Number.isFinite(sh.height), `${c.name} 展开尺寸非有限`);
+      for (const r of sh.rects) A(Number.isFinite(r.x + r.y + r.w + r.h) && r.w > 0 && r.h > 0, `${c.name} 面板非法`);
+      const audit = auditDieline(d);
+      const invalid = ['零值', '负值', 'NaN'].includes(c.name);
+      const structuralErrors = audit.issues.filter((i) => i.level === 'error' && i.code !== 'input-clamped');
+      A(!structuralErrors.length, `${c.name} 几何审计报错：${structuralErrors.map((i) => i.code).join(',')}`);
+      if (invalid) A(audit.issues.some((i) => i.code === 'input-clamped'), `${c.name} 审计未标记 input-clamped`);
+      if (invalid) {
+        A(d.clamped, `${c.name} 被静默改成合法尺寸，未标记 clamped`);
+        A(d.input !== undefined, `${c.name} 未保留原始输入`);
+        A(d.warnings.some((w) => /下限|非法|NaN|有限/.test(w)), `${c.name} 未给出可读警告`);
+      } else {
+        A(!d.clamped, `${c.name} 合法输入被误判为 clamped`);
+      }
+      out.push(`${c.name}:${sh.width.toFixed(1)}×${sh.height.toFixed(1)}${d.clamped ? '(clamped)' : ''}`);
+    }
+    // 非法补充参数不能静默吃掉：仍要生成合法几何，同时说明采用了什么值
+    const weird = buildDieline('tuck', { l: 80, w: 50, h: 40 }, 3, 5, { glue: -50, tuckLen: Number.POSITIVE_INFINITY });
+    A(weird.warnings.some((w) => /结构参数「glue」/.test(w)), '非法 glue 没有可读警告');
+    A(weird.warnings.some((w) => /结构参数「tuckLen」/.test(w)), 'Infinity tuckLen 没有可读警告');
+    A(auditDieline(weird).issues.every((i) => i.level !== 'error'), '非法补充参数导致几何错误');
+    return out.join(' | ');
+  });
+
+  await t('阶段五 · 切割线与压痕线：无重复、压痕落在面板、裁切不穿面板内部', () => {
+    const d = buildDieline('tuck', { l: 80, w: 50, h: 40 }, 3, 5);
+    const s = d.sheets[0];
+    const keys = new Map<string, string>();
+    for (const g of s.segments) {
+      const k = `${g.kind}:${Math.min(g.x1, g.x2).toFixed(2)},${Math.min(g.y1, g.y2).toFixed(2)}:${Math.max(g.x1, g.x2).toFixed(2)},${Math.max(g.y1, g.y2).toFixed(2)}`;
+      A(!keys.has(k), `重复线段 ${k}（${keys.get(k)} 与 ${g.kind}）`);
+      keys.set(k, g.kind);
+    }
+    const creases = s.segments.filter((g) => g.kind === 'crease');
+    A(creases.length >= 4, `压痕线过少 ${creases.length}`);
+    for (const cr of creases) {
+      const midX = (cr.x1 + cr.x2) / 2, midY = (cr.y1 + cr.y2) / 2;
+      const owners = s.rects.filter((r) => midX >= r.x - 0.6 && midX <= r.x + r.w + 0.6 && midY >= r.y - 0.6 && midY <= r.y + r.h + 0.6).length;
+      A(owners >= 2, `压痕 ${midX},${midY} 只落在 ${owners} 块面板上，不是有效折线`);
+      A(!s.rects.some((r) => midX > r.x + 0.6 && midX < r.x + r.w - 0.6 && midY > r.y + 0.6 && midY < r.y + r.h - 0.6), '压痕线穿过了面板内部');
+    }
+    const cut = s.segments.filter((g) => g.kind === 'cut');
+    A(cut.length >= 8, `裁切线过少 ${cut.length}`);
+    return `${cut.length} 裁切 / ${creases.length} 压痕；无重复，压痕均落在 ≥2 块面板交界`;
+  });
+
+  await t('阶段五 · 出血与安全区：出血为外轮廓并集，安全区不产生零边', () => {
+    const mid = buildDieline('tuck', { l: 80, w: 50, h: 40 }, 3, 5);
+    const s = mid.sheets[0];
+    const panels = s.rects.length;
+    const bleed = s.segments.filter((g) => g.kind === 'bleed');
+    A(bleed.length > 0, '没有出血线');
+    A(bleed.length < panels * 4, `出血线仍是逐面板 4 边（${bleed.length} = ${panels}×4），未合并外轮廓`);
+    A(s.safeRects.length > 0 && s.safeRects.every((r) => r.w > 0 && r.h > 0), '安全区存在非正矩形');
+    A(!s.segments.some((g) => g.kind === 'safe' && Math.abs(g.x1 - g.x2) < 1e-6 && Math.abs(g.y1 - g.y2) < 1e-6), '安全区出现零长度线');
+    // 小面板：宽高小于 2×safe，安全区必须为空而非负尺寸
+    const tiny = buildDieline('labelRect', { l: 20, w: 15, h: 0 }, 3, 5).sheets[0];
+    A(tiny.safeRects.every((r) => r.w > 0 && r.h > 0), '小面板安全区出现非正宽高');
+    A(tiny.segments.filter((g) => g.kind === 'safe').every((g) => Math.abs(g.x1 - g.x2) > 1e-6 || Math.abs(g.y1 - g.y2) > 1e-6), '小面板安全区零边');
+    return `出血 ${bleed.length} 段 < ${panels * 4}；安全区 ${s.safeRects.length} 块 / 小面板 ${tiny.safeRects.length} 块`;
+  });
+
+  await t('阶段五 · 2D↔3D 面板映射：尺寸同源，不可靠结构明确标记不支持', () => {
+    const sizes = { l: 80, w: 50, h: 40 };
+    const expect: Record<StructureId, string> = {
+      tuck: 'reliable', topBottom: 'reliable', labelRect: 'reliable', labelRound: 'reliable',
+      drawer: 'unsupported', mailer: 'unsupported', pouch: 'unsupported',
+    };
+    const rows: string[] = [];
+    for (const s of STRUCTURES) {
+      const d = buildDieline(s.id, sizes, 3, 5);
+      const v = viewerSupport(s.id);
+      A(v.level === expect[s.id], `${s.id} 3D 支持级别错误 ${v.level}`);
+      A(!!v.title && !!v.detail, `${s.id} 缺少不可用说明`);
+      if (v.level === 'reliable') {
+        const fs = faceSizes(s.id, sizes);
+        for (const [face, dim] of Object.entries(fs)) {
+          const rects = d.sheets.flatMap((sh) => sh.rects.filter((r) => r.face === face && r.artwork));
+          A(rects.length > 0, `${s.id} 声称可靠但缺少 ${face} 面板`);
+          A(Math.abs(dim.w - rects[0].w) < 1e-6 && Math.abs(dim.h - rects[0].h) < 1e-6, `${s.id}/${face} 3D 读取尺寸 ${dim.w}×${dim.h} 与刀模 ${rects[0].w}×${rects[0].h} 不一致`);
+        }
+      }
+      if (s.id === 'labelRect' || s.id === 'labelRound') A(!('back' in faceSizes(s.id, sizes)), `${s.id} 不应虚构背面`);
+      rows.push(`${s.id}:${v.level}`);
+    }
+    return rows.join(' | ');
+  });
+
+  await t('阶段五 · SVG 真实毫米尺寸与可编辑文字', () => {
+    const svg = spreadSvg(design, dieline, 0, true);
+    const sh = dieline.sheets[0];
+    A(svg.includes(`width="${sh.width}mm"`) && svg.includes(`height="${sh.height}mm"`), 'SVG 根尺寸不是真实毫米');
+    A(/viewBox="0 0 [\d.]+ [\d.]+"/.test(svg), 'SVG 缺少毫米 viewBox');
+    A(svg.includes('data-width-mm=') && svg.includes('data-height-mm='), 'SVG 缺少尺寸说明元数据');
+    A(svg.includes('<text'), 'SVG 丢失可编辑文字');
+    const layers = ['layer-print', 'layer-cut', 'layer-crease', 'layer-bleed', 'layer-safe'];
+    for (const l of layers) A(svg.includes(`id="${l}"`), `SVG 缺少分层 ${l}`);
+    return `${sh.width}×${sh.height}mm / ${svg.length} bytes / 5 层`;
+  });
+
+  await t('阶段五 · DXF 单位与真实毫米坐标', () => {
+    const dxf = buildDxf(dieline, 0);
+    A(/\$INSUNITS\n70\n4/.test(dxf), 'DXF 未声明毫米');
+    A(/\$MEASUREMENT\n70\n1/.test(dxf), 'DXF 未声明公制');
+    const sh = dieline.sheets[0];
+    const first = dxf.split('\n');
+    let checked = 0;
+    for (let i = 0; i < first.length - 1; i++) {
+      if (first[i] !== '0' || first[i + 1] !== 'LINE') continue;
+      const x1 = Number(first[i + 8]), y1 = Number(first[i + 10]);
+      const x2 = Number(first[i + 14]), y2 = Number(first[i + 16]);
+      A([x1, y1, x2, y2].every(Number.isFinite), 'DXF 坐标非有限');
+      A(x1 >= -0.01 && x1 <= sh.width + 0.01 && x2 >= -0.01 && x2 <= sh.width + 0.01, `DXF X 超展开宽 ${x1}..${x2}`);
+      A(y1 >= -0.01 && y1 <= sh.height + 0.01 && y2 >= -0.01 && y2 <= sh.height + 0.01, `DXF Y 超展开高 ${y1}..${y2}`);
+      checked++;
+    }
+    A(checked > 8, `DXF 实体过少 ${checked}`);
+    return `${checked} 条 LINE 均在 0..${sh.width} / 0..${sh.height} mm 内`;
+  });
+
+  await t('阶段五 · 印前异常报告：非法尺寸被拦截，不静默通过', () => {
+    const bad = buildDieline('tuck', { l: 0, w: 0, h: 0 }, 3, 5);
+    const b = { ...brief, size: { l: 0, w: 0, h: 0 }, structure: 'tuck' as StructureId };
+    const r = runPrepress({ design, brief: b, dieline: bad, dpi: 300 });
+    A(r.status === 'error', `非法尺寸印前状态为 ${r.status}，应拦截`);
+    const size = r.items.find((i) => i.id === 'size');
+    A(size?.level === 'error', '非法尺寸未报 size error');
+    const geo = r.items.find((i) => i.id === 'geometry-integrity');
+    A(geo?.level === 'error', 'clamped 输入未报几何错误');
+    A(r.items.some((i) => /下限|夹/.test(i.detail)), '报告未说明尺寸被夹取');
+    const v = validateStructureInput('tuck', { l: 0, w: 0, h: 0 });
+    A(v.some((i) => i.level === 'error'), 'validateStructureInput 未拦截零值');
+    return `status=${r.status} / size=${size?.level} / geometry=${geo?.level}`;
+  });
+
+  await t('阶段五 · 印前异常报告：低 PPI / 缺图 / 透明底 / 文字越界与过小', () => {
+    const doc = cloneDesign(design);
+    const face = doc.faces.front!;
+    face.bg = '';
+    const tpl = face.layers.find((l) => l.type === 'text') as TextLayer;
+    const png1x1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    face.layers.push(
+      { ...tpl, id: 'tiny_cross', name: '越界小字', text: '越界', x: Math.max(0, face.w - 10), y: 0, w: 30, h: 10, fontSize: 3, zIndex: 999 },
+      { id: 'low_img', name: '低分辨率图', type: 'image', x: 0, y: 0, w: face.w + 10, h: 50, rotation: 0, opacity: 1, locked: false, zIndex: 998, src: png1x1, naturalW: 100, naturalH: 100, fit: 'cover' },
+      { id: 'missing_img', name: '空图', type: 'image', x: 0, y: 0, w: 10, h: 10, rotation: 0, opacity: 1, locked: false, zIndex: 997, src: '', naturalW: 0, naturalH: 0, fit: 'cover' },
+    );
+    const rep = runPrepress({ design: doc, brief, dieline, dpi: 300 });
+    const item = (id: string) => rep.items.find((i) => i.id === id);
+    A(item('dpi')?.level === 'error', `低 PPI 未报 error：${item('dpi')?.level}`);
+    A(/按实际印刷毫米尺寸反算/.test(item('dpi')?.detail || ''), '未说明按实际印刷尺寸计算 PPI');
+    A(item('image-missing')?.level === 'error', '缺图未报 error');
+    A(item('image-alpha')?.level === 'error', '透明图叠在无底色面上未报 error');
+    A(item('image-bounds')?.level === 'warning', '图片越界未报 warning');
+    A(item('text-cross')?.level === 'error', '文字跨面板未报 error');
+    A(item('text-small')?.level === 'warning', '文字小于 1.5mm 未报 warning');
+    A(rep.status === 'error', `综合状态应为 error，实际 ${rep.status}`);
+    return `dpi=${item('dpi')?.level} / missing=${item('image-missing')?.level} / alpha=${item('image-alpha')?.level} / bounds=${item('image-bounds')?.level} / text-cross=${item('text-cross')?.level}`;
+  });
+
+  await t('阶段五 · PDF 真实毫米页面与透明图 alpha 保留', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const doc = {
+      id: 'alpha', name: '透明图测试', scheme: 'minimal',
+      palette: { bg: '#FFFFFF', ink: '#191919', accent: '#F47735', muted: '#999999' },
+      rationale: '', createdAt: 1,
+      faces: { front: { id: 'front', w: 80, h: 80, bg: '#FFFFFF', layers: [
+        { id: 'alpha_img', name: '透明 PNG', type: 'image', x: 10, y: 10, w: 40, h: 40, rotation: 0, opacity: 1, locked: false, src: png, naturalW: 1, naturalH: 1, fit: 'cover', process: 'print' },
+      ] } },
+    } as unknown as DesignDoc;
+    const d = buildDieline('labelRect', { l: 80, w: 80, h: 0 }, 3, 5);
+    const { bytes } = await buildPdf(doc, d, 300);
+    const text = new TextDecoder('latin1').decode(bytes);
+    const box = text.match(/\/MediaBox\s*\[0 0 ([\d.]+) ([\d.]+)\]/);
+    A(!!box, 'PDF 缺少 MediaBox');
+    A(Math.abs(Number(box![1]) - d.sheets[0].width * 72 / 25.4) < 0.2 && Math.abs(Number(box![2]) - d.sheets[0].height * 72 / 25.4) < 0.2, `PDF 页面不是 ${d.sheets[0].width}×${d.sheets[0].height}mm：${box?.[1]}×${box?.[2]}pt`);
+    A(text.includes('/SMask'), '透明 PNG 在 PDF 中丢失 alpha（没有 SMask）');
+    A((text.match(/\/Type \/Page\b/g) || []).length >= 3, 'PDF 未按印刷 / CUT / CREASE 分页');
+    return `${Number(box![1]).toFixed(2)}×${Number(box![2]).toFixed(2)}pt / SMask 存在 / ≥3 页`;
+  });
+
   if (inBrowser) {
     await t('浏览器渲染 · SVG 转 300DPI 位图', async () => {
       const sh = dieline.sheets[0];
@@ -719,13 +975,26 @@ export async function runTests(): Promise<Result[]> {
       return `${c.width}×${c.height} px`;
     });
 
-    await t('印刷 PDF · 毫米页面 / 独立刀模页 / 逐图层绘制', async () => {
+    await t('印刷 PDF · 毫米页面 / 印刷裁切压痕分页 / 逐图层绘制', async () => {
       const { bytes } = await buildPdf(design, dieline, 150);
       A(bytes[0] === 0x25 && bytes[1] === 0x50, '缺少 %PDF 文件头');
       const v = verifyPdf(bytes, dieline.sheets);
       A(v.ok, `PDF 预检失败: ${v.issues.join('；')} | ${bytes.length} bytes`);
-      A(v.pages >= dieline.sheets.length * 2, '页面数不足');
-      return `${v.pages} 页 / ${Math.round(v.bytes / 1024)} KB / MediaBox ${v.boxes.length} 个`;
+      A(v.pages >= dieline.sheets.length * 3, `页面数不足：${v.pages} < ${dieline.sheets.length * 3}`);
+      A(v.cutPages >= dieline.sheets.length && v.creasePages >= dieline.sheets.length, 'CUT / CREASE 未按展开图独立成页');
+      return `${v.pages} 页 / CUT ${v.cutPages} / CREASE ${v.creasePages} / ${Math.round(v.bytes / 1024)} KB`;
+    });
+
+    await t('阶段五 · 工艺图层独立出页：烫金页 100% 黑，不混进印刷页', async () => {
+      const pd = cloneDesign(design);
+      const foil = pd.faces.front!.layers.find((l) => l.type === 'text' || l.type === 'shape');
+      A(!!foil, '找不到可标记工艺的图层');
+      foil!.process = 'foil';
+      const { bytes } = await buildPdf(pd, dieline, 150);
+      const txt = new TextDecoder('latin1').decode(bytes);
+      A((txt.match(/\/Type\s*\/Page\b/g) || []).length >= dieline.sheets.length * 4, '工艺图层未单独成页');
+      A(txt.includes('SPOT FOIL') && txt.includes('BLACK 100% = PROCESS AREA'), '工艺页缺少独立标记');
+      return '印刷 / CUT / CREASE / FOIL 四页；工艺页 100% 黑';
     });
 
     await t('文件包 · ZIP 内 PDF 预检通过', async () => {
@@ -1206,8 +1475,13 @@ export async function runTests(): Promise<Result[]> {
     const rule = elToLayer({ id: 'rule', kind: 'rect', x: 10, y: 25, w: 13, h: 0.5 }, face, palette, 'front')!;
     A(rule.type === 'shape' && near(rule.h!, 0.9, 0.2), `色块高度跟着面高换算，实际 ${rule.h}mm`);
 
-    A(elToLayer({ id: 'sticker', kind: 'sticker', x: 50, y: 50, w: 30 }, face, palette, 'front') === null,
-      '没生成图的贴纸位不能进印刷稿，否则导出里会出现空框');
+    const empty = elToLayer({ id: 'sticker', kind: 'sticker', x: 50, y: 50, w: 30 }, face, palette, 'front')!;
+    A(empty.type === 'image' && empty.src === '', '没生成图的贴纸位要作为空图占位进入印前，才能报「图片缺失」');
+    const stickerDoc = designDocFor(
+      { ...createStudioProject('u1', 10), answers: { ...emptyAnswers(), form: ans('box', 'option'), size: { mode: 'custom', dims: { l: 100, w: 60, h: 180 }, src: 'user', confirmed: true } }, design: null } as StudioProject,
+      { front: [{ id: 'sticker', kind: 'sticker', x: 50, y: 50, w: 30 }] },
+    )!;
+    A(!spreadSvg(stickerDoc, dieline, 0, false).includes('href=""'), '空图占位不得输出为空 <image>，否则 SVG/PDF 出现空框');
     const photo = elToLayer({ id: 'photo', kind: 'sticker', x: 50, y: 50, w: 30, src: 'data:image/png;base64,xx' }, face, palette, 'front')!;
     A(photo.type === 'image' && photo.src === 'data:image/png;base64,xx', '有图的贴纸要变成 image 图层');
 
@@ -1245,6 +1519,798 @@ export async function runTests(): Promise<Result[]> {
     const d2 = withFaceEls(d, 'back', [{ id: 'b', kind: 'text', text: '背', x: 5, y: 5, w: 50 }]);
     A(faceEls(d2, 'back').length === 1 && faceEls(d2, 'front').length === 1, '改背面不该动正面');
     return 'els→faces.front 迁移 · 按面读写互不串';
+  });
+
+
+
+  /* ───────────── LunaSol 2.0 · 阶段一：设计数据层与坐标换算 ───────────── */
+
+  const boxProject = (() => {
+    const p = createStudioProject('u1', 10);
+    p.answers.form = ans('box', 'option');
+    p.answers.size = { mode: 'custom', dims: { l: 100, w: 60, h: 180 }, src: 'user', confirmed: true };
+    return p;
+  })();
+  const palette = { bg: '#ffffff', primary: '#F47735', accent: '#F47735', ink: '#191919', muted: '#8a8a84' };
+
+  await t('坐标 · 百分比只在面内：62×62 面板 50% 横向 = 31mm', () => {
+    A(near(pctToMm(50, 62), 31, 0.01), `50% of 62 应为 31mm，实际 ${pctToMm(50, 62)}`);
+    A(near(mmToPct(31, 62), 50, 0.01), '31mm 换回百分比应为 50%');
+    const bottle = createStudioProject('u1', 10);
+    bottle.answers.form = ans('bottle', 'option');
+    bottle.answers.size = { mode: 'custom', dims: { l: 62, w: 62, h: 180 }, src: 'user', confirmed: true };
+    const front = facesOf(bottle).find((f) => f.id === 'front')!;
+    A(front.w === 62 && front.h === 62, `瓶标正面应为 62×62mm，实际 ${front.w}×${front.h}`);
+    const r = elLocalRect({ id: 'a', kind: 'rect', x: 50, y: 50, w: 20, h: 20 }, front);
+    A(near(r.x, 31, 0.01) && near(r.y, 31, 0.01), `居中元素应落在 31/31mm，实际 ${r.x}/${r.y}`);
+    A(near(r.w, 12.4, 0.01), '宽度同样按面宽换算');
+    return '62×62 · 50% → 31mm';
+  });
+
+  await t('坐标 · 同一百分比在不同宽高的面板得到不同的毫米位置', () => {
+    const el: DesignEl = { id: 'a', kind: 'rect', x: 50, y: 25, w: 20, h: 10 };
+    const square = elLocalRect(el, { w: 62, h: 62 });
+    const wide = elLocalRect(el, { w: 120, h: 80 });
+    A(near(square.x, 31, 0.01) && near(wide.x, 60, 0.01), `横向 50% 应分别为 31 / 60mm，实际 ${square.x} / ${wide.x}`);
+    A(near(square.y, 15.5, 0.01) && near(wide.y, 20, 0.01), `纵向 25% 应随面高变化，实际 ${square.y} / ${wide.y}`);
+    A(near(square.w, 12.4, 0.01) && near(wide.w, 24, 0.01), '同一宽度百分比在宽面上更大');
+    return '62×62 / 120×80 · 百分比同、毫米不同';
+  });
+
+  await t('坐标 · 面局部 → 刀模全局必须带面板在展开图里的偏移', () => {
+    const d = dielineOf(boxProject)!;
+    const rects = d.sheets.flatMap((s) => s.rects);
+    const front = rects.find((r) => r.face === 'front' && r.artwork)!;
+    const back = rects.find((r) => r.face === 'back' && r.artwork)!;
+    A(!!front && !!back, '折叠纸盒必须有正背两个可设计面');
+    const origin = faceOrigins(d, 'front')[0];
+    A(origin.x === front.x && origin.y === front.y, `正面原点应等于刀模面板偏移，实际 ${origin.x}/${origin.y} vs ${front.x}/${front.y}`);
+    A(back.x !== front.x || back.y !== front.y, '正背面的局部 (0,0) 绝不能落到同一个全局点');
+    const at0 = elSheetRect({ id: 'a', kind: 'rect', x: 0, y: 0, w: 10, h: 10 }, front, origin);
+    A(near(at0.x, front.x, 0.01) && near(at0.y, front.y, 0.01), '局部 0,0 应正好落在面板偏移处');
+    const at50 = elSheetRect({ id: 'a', kind: 'rect', x: 50, y: 50, w: 10, h: 10 }, front, origin);
+    A(near(at50.x, front.x + front.w / 2, 0.05), `局部 50% 应加上面板偏移，实际 ${at50.x}`);
+    const backOrigin = faceOrigins(d, 'back')[0];
+    A(backOrigin.x !== origin.x || backOrigin.y !== origin.y, '背面有自己的原点');
+    return `正面偏移 ${front.x},${front.y} · 背面偏移 ${back.x},${back.y}`;
+  });
+
+  await t('数据 · 旋转/透明度/隐藏/锁定/层级/来源 存得下、读得回', () => {
+    const raw = {
+      ratio: [3, 4], bg: '#fff', ink: '#111', accent: '#f47735', updatedAt: 1,
+      els: [{
+        id: 't1', kind: 'text', text: '山隐', x: 10, y: 10, w: 80,
+        rotation: 15, opacity: 0.42, visible: false, locked: true, zIndex: 3,
+        name: '主标题', fontFamily: 'serif', source: 'upload', assetId: 'as_1',
+        createdAt: 5, updatedAt: 7, faceId: 'back',
+      }],
+    };
+    const d = normalizeDesign(raw as never)!;
+    const e = faceEls(d, 'front')[0];
+    A(e.rotation === 15 && e.opacity === 0.42, `旋转/透明度应保留，实际 ${e.rotation}/${e.opacity}`);
+    A(e.visible === false && e.locked === true && e.zIndex === 3, '隐藏/锁定/层级应保留');
+    A(e.name === '主标题' && e.fontFamily === 'serif' && e.source === 'upload' && e.assetId === 'as_1', '名称/字体/来源/素材引用应保留');
+    A(e.createdAt === 5 && e.updatedAt === 7, '时间戳应保留');
+    A(e.faceId === 'front', '元素的 faceId 以所在容器为准，数据里写错要被纠正');
+    A(elToLayer(e, { w: 100, h: 180 }, palette, 'front') === null, 'visible:false 的元素不能进入印刷输出');
+    const shown = elToLayer({ ...e, visible: true }, { w: 100, h: 180 }, palette, 'front')!;
+    A(shown.rotation === 15 && shown.opacity === 0.42 && shown.locked === true, '几何属性要带到图层上');
+    const bad = normalizeDesign({ ...raw, els: [{ ...raw.els[0], rotation: NaN, opacity: Infinity }] } as never)!;
+    const e2 = faceEls(bad, 'front')[0];
+    A(e2.rotation === 0 && e2.opacity === 1, `垃圾数值要夹回默认，实际 ${e2.rotation}/${e2.opacity}`);
+    return 'rotation 15° · opacity .42 · hidden · locked · zIndex 3';
+  });
+
+  await t('往返 · 新版元素 → 印刷图层 → 新版元素，关键属性不丢', () => {
+    const panel = { w: 120, h: 60 };
+    const el: DesignEl = {
+      id: 't1', kind: 'text', text: '山隐茶集', x: 12, y: 30, w: 60, size: 6,
+      weight: 600, color: '#191919', align: 'center', rotation: 12, opacity: 0.5,
+      locked: true, name: '主标题', fontFamily: 'serif',
+    };
+    const layer = elToLayer(el, panel, palette, 'front')!;
+    const back = layerToEl(layer, panel, 'front')!;
+    A(back.id === 't1' && back.kind === 'text' && back.text === '山隐茶集', 'id/类型/文案必须原样回来');
+    A(near(back.x, 12, 0.3) && near(back.y, 30, 0.3) && near(back.w, 60, 0.3), `坐标往返偏差过大：${back.x}/${back.y}/${back.w}`);
+    A(near(back.size!, 6, 0.6), `字号往返偏差过大，实际 ${back.size}`);
+    A(back.color === '#191919' && back.weight === 600 && back.align === 'center', '字色/字重/对齐不丢');
+    A(back.rotation === 12 && back.opacity === 0.5 && back.locked === true && back.name === '主标题', '旋转/透明度/锁定/名称不丢');
+    const rect = layerToEl(elToLayer({ id: 'r', kind: 'rect', x: 10, y: 20, w: 30, h: 10, color: '#F47735' }, panel, palette, 'front')!, panel, 'front')!;
+    A(near(rect.h!, 10, 0.3) && rect.kind === 'rect', `色块高度往返偏差过大，实际 ${rect.h}`);
+    const sticker = layerToEl(elToLayer({ id: 's', kind: 'sticker', src: 'data:image/png;base64,xx', x: 40, y: 40, w: 30, h: 20 }, panel, palette, 'front')!, panel, 'front')!;
+    A(sticker.kind === 'sticker' && sticker.src === 'data:image/png;base64,xx' && near(sticker.h!, 20, 0.3), '贴纸的图与高度不丢');
+    return '文字/色块/贴纸三类都往返';
+  });
+
+  await t('多面 · 正面元素不会出现在背面，空面也保留', () => {
+    const doc = designDocFor(boxProject, {
+      front: [{ id: 'f1', kind: 'text', text: '正面文案', x: 10, y: 10, w: 60, size: 5 }],
+      back: [{ id: 'b1', kind: 'text', text: '背面文案', x: 10, y: 10, w: 60, size: 5 }],
+      left: [],
+    })!;
+    A(doc.faces.front!.layers.length === 1 && doc.faces.back!.layers.length === 1, '每面只应拿到自己的元素');
+    A(doc.faces.back!.layers[0].id === 'back_b1', `背面图层的 id 应带面前缀，实际 ${doc.faces.back!.layers[0].id}`);
+    A(doc.faces.back!.layers.every((l) => (l as { text?: string }).text !== '正面文案'), '正面文案绝不能画到背面');
+    A(doc.faces.left!.layers.length === 0 && !!doc.faces.left, '空面仍要建出来，3D 才不会缺面');
+    const d = withFaceEls(normalizeDesign({ ratio: [3, 4], bg: '#fff', ink: '#111', accent: '#f47735', els: [{ id: 'x', kind: 'text', text: '正', x: 5, y: 5, w: 50 }], updatedAt: 1 })!, 'back', [{ id: 'y', kind: 'text', text: '背', x: 5, y: 5, w: 50 }]);
+    A(faceEls(d, 'front')[0].faceId === 'front' && faceEls(d, 'back')[0].faceId === 'back', '写面时要把 faceId 校正成所在面');
+    return '正/背/侧面互不串 · faceId 跟随容器';
+  });
+
+  await t('层级 · 有 zIndex 才重排，没写 zIndex 的老稿渲染不变', () => {
+    const a: DesignEl = { id: 'a', kind: 'rect', x: 10, y: 10, w: 20, h: 20, zIndex: 2 };
+    const b: DesignEl = { id: 'b', kind: 'rect', x: 20, y: 20, w: 20, h: 20, zIndex: 1 };
+    const hidden: DesignEl = { id: 'c', kind: 'rect', x: 30, y: 30, w: 20, h: 20, visible: false };
+    const doc = faceDoc('front', { w: 100, h: 100 }, [a, b, hidden], palette);
+    A(doc.layers.map((l) => l.id).join(',') === 'front_b,front_a', `zIndex 小的先画，实际 ${doc.layers.map((l) => l.id).join(',')}`);
+    const legacy = [{ id: 'a', kind: 'rect' as const, x: 1, y: 1, w: 5, h: 5 }, { id: 'b', kind: 'rect' as const, x: 2, y: 2, w: 5, h: 5 }];
+    A(drawOrder(legacy) === legacy, '没有 zIndex 时必须原样返回同一个数组，旧稿零变化');
+    A(faceDoc('front', { w: 100, h: 100 }, legacy, palette).layers.map((l) => l.id).join(',') === 'front_a,front_b', '旧稿按数组顺序绘制');
+    return 'zIndex 升序 · 隐藏跳过 · 旧稿原序';
+  });
+
+  await t('脏输入 · NaN / Infinity / 零尺寸 / 缺面板都安全处理', () => {
+    A(pctToMm(NaN, 62) === 0 && pctToMm(50, NaN) === 0 && pctToMm(50, 0) === 0 && pctToMm(50, -3) === 0, '非法百分比或尺寸要回落到 0，不能产出 NaN');
+    A(mmToPct(Infinity, 62) === 0 && mmToPct(31, 0) === 0, '毫米侧同样兜底');
+    A(validBox({ w: 0, h: 10 }) === null && validBox({ w: NaN, h: 10 }) === null && validBox(null) === null, '空/非正/缺失尺寸的面板必须判为无效');
+    const bad = elLocalRect({ id: 'a', kind: 'rect', x: NaN, y: Infinity, w: 0, h: 0 }, { w: 0, h: 0 });
+    A([bad.x, bad.y, bad.w, bad.h].every(Number.isFinite), '面尺寸为 0 时也不能算出 NaN');
+    const layer = elToLayer({ id: 'a', kind: 'text', text: 'A', x: NaN, y: Infinity, w: 0, size: Infinity }, { w: 62, h: 62 }, palette, 'front')!;
+    A([layer.x, layer.y, layer.w, layer.h!, layer.opacity].every(Number.isFinite), '图层字段必须全是有限数值');
+    A(layer.x === 0 && layer.y === 0, `非法坐标要落回 0，实际 ${layer.x}/${layer.y}`);
+    const blank = createStudioProject('u1', 10);
+    A(facesOf(blank).length === 0, '没填形式时没有面');
+    A(dielineOf(blank) === null && designDocFor(blank, {}) === null, '没有刀模时不硬造设计稿');
+    A(faceRatio(blank, 'front')[0] === 3, '没有刀模时比例给 3:4 兜底，空态不崩');
+    return 'NaN/Infinity/0/缺面板 全部兜底';
+  });
+
+  await t('兼容 · 旧 Studio 项目与旧 DesignDoc 都能继续读进来', () => {
+    const legacy = {
+      schema: 'lunasol.studio.v1', id: 'st_legacy1', ownerId: 'u1', name: '旧稿', status: 'confirmed',
+      createdAt: 1, updatedAt: 2, step: 9,
+      answers: {}, chat: [], design: {
+        ratio: [3, 4], bg: '#ffffff', ink: '#191919', accent: '#F47735', updatedAt: 1,
+        els: [{ id: 'name', kind: 'text', text: '旧文字', x: 10, y: 10, w: 80, size: 4 }],
+      },
+    };
+    const p = normalizeStudioProject(legacy as never)!;
+    A(!!p && p.id === 'st_legacy1' && p.step === 9, `旧项目应能恢复，实际 ${p && p.id}/${p && p.step}`);
+    const d = p.design!;
+    A(d.faces!.front!.length === 1 && faceEls(d, 'front')[0].text === '旧文字', '旧稿的 els 应迁到 faces.front');
+    A(faceEls(d, 'front')[0].rotation === undefined, '旧元素没写过旋转，读进来就是 undefined，不能凭空补值');
+    const oldDoc = designDocFor(boxProject, { front: [{ id: 'f1', kind: 'text', text: '旧引擎稿', x: 10, y: 10, w: 60, size: 5 }] })!;
+    const imported = layerToEl(oldDoc.faces.front!.layers[0], { w: 100, h: 180 }, 'front')!;
+    A(imported.id === 'f1' && imported.text === '旧引擎稿', '旧 DesignDoc 可反向导入 Studio 元素');
+    A(imported.source === 'system' && imported.visible === true, '导入的元素要标注来源与可见状态');
+    return '旧 Studio 稿 + 旧 DesignDoc 双向可读';
+  });
+
+  await t('一致性 · 画布毫米 / 刀板全局 / 导出图层用同一份换算', () => {
+    const el: DesignEl = { id: 'hero', kind: 'rect', x: 50, y: 25, w: 40, h: 20, color: '#F47735' };
+    const front = facesOf(boxProject).find((f) => f.id === 'front')!;
+    const d = dielineOf(boxProject)!;
+    const origin = faceOrigins(d, 'front')[0];
+    const local = elLocalRect(el, front);
+    const global = elSheetRect(el, front, origin);
+    const doc = designDocFor(boxProject, { front: [el] })!;
+    const layer = doc.faces.front!.layers[0];
+    A(near(local.x, layer.x, 0.2) && near(local.y, layer.y, 0.2) && near(local.w, layer.w, 0.2),
+      `画布与导出几何必须同源：${local.x}/${layer.x} · ${local.y}/${layer.y} · ${local.w}/${layer.w}`);
+    A(near(global.x, layer.x + origin.x, 0.2) && near(global.y, layer.y + origin.y, 0.2),
+      '刀板全局坐标 = 面局部毫米 + 面板偏移');
+    const rect = d.sheets.flatMap((s) => s.rects).find((r) => r.face === 'front' && r.artwork)!;
+    A(origin.x === rect.x && origin.y === rect.y, '3D / SVG / PDF 用的是同一个面板偏移，不允许各算一套');
+    return '面局部 → 图层 → 刀板全局 三段对齐';
+  });
+
+  await t('矢量 · 屏幕坐标 → 设计毫米：缩放/平移/滚动/DPR 都被 rect 吸收', () => {
+    const face = { w: 100, h: 150 };
+    const base = { left: 100, top: 50, width: 200, height: 300 };
+    const p1 = clientToMm(200, 200, base, face);
+    A(near(p1.x, 50) && near(p1.y, 75), `200/300px 应落在 50/75mm，实际 ${p1.x}/${p1.y}`);
+    // 画布被平移到 (40,20)：同一个鼠标点在设计里要往右下走
+    const p2 = clientToMm(200, 200, { ...base, left: 40, top: 20 }, face);
+    A(near(p2.x, 80) && near(p2.y, 90), `平移后同一屏幕点应落 80/90mm，实际 ${p2.x}/${p2.y}`);
+    // 放大一倍：同样的像素位移 → 毫米位移减半
+    const p3 = clientToMm(200, 200, { left: 0, top: 0, width: 400, height: 600 }, face);
+    A(near(p3.x, 50) && near(p3.y, 50), `2× 画布应落 50/50mm，实际 ${p3.x}/${p3.y}`);
+    return '同一换算函数吃掉缩放、平移与页面滚动';
+  });
+
+  await t('矢量 · 毫米 ↔ 百分比 往返不漂移', () => {
+    const face = { w: 120, h: 180 };
+    const mm = { x: 10, y: 20, w: 30, h: 40 };
+    const pct = mmRectToPct(mm, face);
+    A(near(pct.x, 8.333, 0.01) && near(pct.y, 11.111, 0.01), `x/y 应换算成百分比，实际 ${pct.x}/${pct.y}`);
+    A(near(pct.w, 25, 0.01) && near(pct.h, 22.222, 0.01), `w/h 应换算成百分比，实际 ${pct.w}/${pct.h}`);
+    const back = { x: (pct.x / 100) * face.w, y: (pct.y / 100) * face.h, w: (pct.w / 100) * face.w, h: (pct.h / 100) * face.h };
+    A(near(back.x, mm.x, 0.01) && near(back.y, mm.y, 0.01) && near(back.w, mm.w, 0.01) && near(back.h, mm.h, 0.01),
+      '往返回来必须还是同一块毫米框');
+    return '10/20/30/40mm → 8.33%/11.11%/25%/22.22% → 原值';
+  });
+
+  await t('矢量 · 八向缩放：东把手只改宽，Shift 锁比例', () => {
+    const start = { x: 10, y: 20, w: 30, h: 40 };
+    const east = resizeBox(start, 'e', 15, 0, 0);
+    A(near(east.w, 45) && near(east.x, 10) && near(east.y, 20) && near(east.h, 40), `e 把手应只加宽，实际 ${east.w}/${east.h}`);
+    const west = resizeBox(start, 'w', 10, 0, 0);
+    A(near(west.x, 20) && near(west.w, 20), `w 把手应从左边收，实际 x=${west.x} w=${west.w}`);
+    const locked = resizeBox(start, 'se', 10, 0, 0, { keepRatio: true });
+    A(locked.w > 30 && Math.abs((locked.w / locked.h) - (30 / 40)) < 0.05,
+      `Shift 角把手应保持 3:4，实际 ${locked.w}×${locked.h}`);
+    const north = resizeBox(start, 'n', 0, -8, 0);
+    A(near(north.y, 12) && near(north.h, 48), `n 把手向下长高，实际 y=${north.y} h=${north.h}`);
+    return 'e/w/n 三个方向 + 锁定比例都正确';
+  });
+
+  await t('矢量 · 旋转框四角与选择外框是多选的真实并集', () => {
+    const els: DesignEl[] = [
+      { id: 'a', kind: 'rect', x: 10, y: 20, w: 20, h: 20, color: '#000' },
+      { id: 'b', kind: 'rect', x: 50, y: 30, w: 20, h: 30, color: '#000' },
+    ];
+    const f = selectionFrame(els, { w: 100, h: 100 })!;
+    A(near(f.box.x, 10) && near(f.box.y, 20) && near(f.box.w, 60) && near(f.box.h, 40),
+      `并集框应是 10/20/60/40，实际 ${f.box.x}/${f.box.y}/${f.box.w}/${f.box.h}`);
+    A(f.rotation === 0, '多选框不带单元素旋转，否则把手会跟着斜');
+    const one = selectionFrame([els[0]], { w: 100, h: 100 })!;
+    A(one.box.w === 20 && one.rotation === 0, '单选框就是元素自己的框');
+    const rot = corners({ x: 0, y: 0, w: 10, h: 10 }, 45);
+    const dist = Math.hypot(rot[0].x - 5, rot[0].y - 5);
+    A(rot.length === 4 && near(rot[0].x, 5, 0.2) && near(dist, 7.07, 0.1),
+      `45° 角点应绕中心保持半径 7.07mm，实际 (${rot[0].x},${rot[0].y}) r=${dist}`);
+    return '并集框 + 旋转角点 + 单选框';
+  });
+
+  await t('矢量 · 组合选中：点一个就带上同组全部', () => {
+    const els: DesignEl[] = [
+      { id: 'a', kind: 'text', x: 0, y: 0, w: 20, text: 'A', groupId: 'g1' },
+      { id: 'b', kind: 'rect', x: 0, y: 20, w: 20, h: 5, groupId: 'g1' },
+      { id: 'c', kind: 'rect', x: 0, y: 40, w: 20, h: 5 },
+    ];
+    const hit = expandSelection(els, ['a']);
+    A(hit.length === 2 && hit.includes('a') && hit.includes('b'), `应选中同组两个，实际 ${hit.join(',')}`);
+    A(expandSelection(els, ['c']).length === 1, '没有组合的元素只选自己');
+    return 'groupId 扁平标签，不嵌套坐标';
+  });
+
+  await t('矢量 · 文字溢出只在写了固定高度时判定', () => {
+    const face = { w: 100, h: 50 };
+    const auto: DesignEl = { id: 't1', kind: 'text', x: 0, y: 0, w: 40, size: 6, text: '很长的一行文字'.repeat(3) };
+    A(elOverflows(auto, face) === false, '没写高度的文字会自己撑开，不应误报溢出');
+    const fixed: DesignEl = { ...auto, id: 't2', h: 6 };
+    A(elOverflows(fixed, face) === true, '固定高度装不下时必须报溢出');
+    const fits: DesignEl = { ...auto, id: 't3', h: 98 };
+    A(elOverflows(fits, face) === false, '装得下就不报');
+    return '自动高度不误报 · 固定高度能报';
+  });
+
+  await t('设计操作 · 图形与图片按真实比例落位', () => {
+    const d = normalizeDesign({
+      ratio: [3, 4], bg: '#FFFFFF', ink: '#191919', accent: '#F47735',
+      els: [{ id: 't', kind: 'text', text: '起点', x: 10, y: 10, w: 40, size: 4 }],
+    })!;
+    const ell = addShape(d, 'ellipse', 'front', { x: 12, y: 20 });
+    A(ell.kind === 'rect' && ell.shape === 'ellipse' && ell.w === 30 && ell.h === 40, `圆形默认 30×40，实际 ${ell.w}×${ell.h}`);
+    const line = addShape(d, 'line', 'front');
+    A(line.shape === 'line' && line.h === 0.5, '直线用 0.5% 高度，导出才有线宽');
+    const img = addImage(d, 'data:image/png;base64,aa', 200, 100, 'front');
+    A(img.kind === 'sticker' && img.w === 40 && near(img.h, 20), `200×100 的图按 40% 宽应得 20% 高，实际 ${img.h}`);
+    A(img.naturalW === 200 && img.naturalH === 100 && img.fit === 'contain', '原图尺寸与适配方式要写进设计数据');
+    return 'ellipse / line / image 尺寸正确且字段持久化';
+  });
+
+  await t('设计操作 · 批量改属性、写回框、层级归一', () => {
+    const d = normalizeDesign({
+      ratio: [3, 4], bg: '#FFFFFF', ink: '#191919', accent: '#F47735',
+      els: [
+        { id: 'a', kind: 'rect', x: 10, y: 10, w: 20, h: 10, color: '#000', zIndex: 5 },
+        { id: 'b', kind: 'rect', x: 30, y: 30, w: 20, h: 10, color: '#000', zIndex: 9 },
+        { id: 'c', kind: 'text', text: 'C', x: 50, y: 50, w: 20, size: 4, zIndex: 2 },
+      ],
+    })!;
+    const patched = patchEls(d, ['a', 'b'], { opacity: 0.4, locked: true }, 'front');
+    const list = faceEls(patched, 'front');
+    A(list[0].opacity === 0.4 && list[1].locked === true && list[0].id === 'a' && list[0].kind === 'rect',
+      '批量改属性不能动 id/kind');
+    const boxed = setElsBox(d, { a: { x: 25, y: 5, w: 30, rotation: 15 } }, 'front');
+    const a = faceEls(boxed, 'front')[0];
+    A(near(a.x, 25) && near(a.y, 5) && near(a.w, 30) && a.rotation === 15, `写回框应生效，实际 ${a.x}/${a.y}/${a.w}/${a.rotation}`);
+    const top = orderEls(d, ['a'], 'front', 'front');
+    const topList = faceEls(top, 'front');
+    const z = topList.map((e) => e.zIndex);
+    A(topList[2].id === 'a' && z.join(',') === '0,1,2', `置顶后 a 应在末尾且 z=0..2，实际 ${topList.map((e) => e.id).join(',')} / ${z.join(',')}`);
+    const back = orderEls(d, ['a'], 'back', 'front');
+    A(faceEls(back, 'front')[0].id === 'a', '置底后排最前');
+    return '批量属性 / 框写回 / 置顶置底与 zIndex 同步';
+  });
+
+  await t('设计操作 · 复制、组合、取消组合都不破坏原对象', () => {
+    const d = normalizeDesign({
+      ratio: [3, 4], bg: '#FFFFFF', ink: '#191919', accent: '#F47735',
+      els: [
+        { id: 'a', kind: 'rect', x: 10, y: 10, w: 20, h: 10, groupId: 'g0' },
+        { id: 'b', kind: 'rect', x: 30, y: 30, w: 20, h: 10, groupId: 'g0' },
+      ],
+    })!;
+    const dup = duplicateEls(d, ['a', 'b'], 'front');
+    A(dup.ids.length === 2 && !dup.ids.includes('a') && faceEls(dup.design, 'front').length === 4,
+      '复制应新增两条且保留原件');
+    const g = groupEls(d, ['a', 'b'], 'front');
+    const gid = faceEls(g.design, 'front').map((e) => e.groupId);
+    A(gid[0] === gid[1] && gid[0] !== 'g0', '重新组合应给新组号');
+    const u = ungroupEls(g.design, ['a', 'b'], 'front');
+    A(faceEls(u, 'front').every((e) => !e.groupId), '取消组合后不留组号');
+    return 'duplicate / group / ungroup 三件套';
+  });
+
+  await t('历史 · 合并连续输入、撤销重做、40 条上限', () => {
+    const base = normalizeDesign({
+      ratio: [3, 4], bg: '#FFFFFF', ink: '#191919', accent: '#F47735',
+      els: [{ id: 'a', kind: 'rect', x: 10, y: 10, w: 20, h: 10, color: '#000' }],
+    })!;
+    let h = createHistory(base);
+    A(!canUndo(h) && !canRedo(h), '刚建栈不能撤也不能重做');
+    const s1 = patchEls(base, ['a'], { x: 12 }, 'front');
+    h = pushHistory(h, s1, 'move:a', 1000);
+    A(canUndo(h) && !canRedo(h), '一次操作后应可撤销');
+    const s2 = patchEls(s1, ['a'], { x: 14 }, 'front');
+    h = pushHistory(h, s2, 'move:a', 1500);
+    A(h.past.length === 1, `900ms 内同一 mergeKey 应合并成一条，实际 ${h.past.length}`);
+    const s3 = patchEls(s2, ['a'], { x: 30 }, 'front');
+    h = pushHistory(h, s3, 'move:a', 3000);
+    A(h.past.length === 2, '超过 900ms 应另起一条');
+    h = undoHistory(h);
+    A(faceEls(h.present, 'front')[0].x === 14,
+      `超过合并窗口后另起一条，撤销应回到上一段结束时的 14（而不是 12），实际 ${faceEls(h.present, 'front')[0].x}`);
+    h = redoHistory(h);
+    A(faceEls(h.present, 'front')[0].x === 30, `重做应回到 30，实际 ${faceEls(h.present, 'front')[0].x}`);
+    let bottom = h;
+    while (canUndo(bottom)) bottom = undoHistory(bottom);
+    A(!canUndo(bottom) && faceEls(bottom.present, 'front')[0].x === 10, '一直撤应回到最初的 10，且不能再撤');
+    let many = createHistory(base);
+    for (let i = 0; i < 60; i += 1) {
+      many = pushHistory(many, patchEls(base, ['a'], { x: 5 + i }, 'front'), '', 10000 + i);
+    }
+    A(many.past.length === HISTORY_LIMIT, `历史上限 ${HISTORY_LIMIT}，实际 ${many.past.length}`);
+    return `合并 / 撤销 / 重做 / 上限 ${HISTORY_LIMIT} 条`;
+  });
+
+  await t('历史 · 换面不丢栈，撤销恢复所有面的改动', () => {
+    const base = normalizeDesign({
+      ratio: [3, 4], bg: '#FFFFFF', ink: '#191919', accent: '#F47735',
+      faces: {
+        front: [{ id: 'f', kind: 'text', text: '正面', x: 10, y: 10, w: 40, size: 4 }],
+        back: [{ id: 'b', kind: 'text', text: '背面', x: 10, y: 10, w: 40, size: 4 }],
+      },
+    })!;
+    let h = createHistory(base);
+    const next = patchEls(patchEls(base, ['f'], { text: '正面改' }, 'front'), ['b'], { text: '背面改' }, 'back');
+    h = pushHistory(h, next, '', 1);
+    // 模拟切到背面再撤：历史快照是整份设计，两个面都要回去
+    h = undoHistory(h);
+    A(faceEls(h.present, 'front')[0].text === '正面' && faceEls(h.present, 'back')[0].text === '背面',
+      '撤销必须同时恢复所有面，不能只恢复当前面');
+    A(faceEls(h.present, 'back').length === 1, '另一面不能被清空');
+    return '整份快照跨面保留';
+  });
+
+  await t('渲染顺序 · 图层数组 = SVG / 刀板 / 3D / 导出同一顺序', () => {
+    const d = normalizeDesign({
+      ratio: [3, 4], bg: '#FFFFFF', ink: '#191919', accent: '#F47735',
+      els: [
+        { id: 'a', kind: 'rect', x: 10, y: 10, w: 20, h: 10, zIndex: 3 },
+        { id: 'b', kind: 'text', text: 'B', x: 10, y: 20, w: 20, size: 4, zIndex: 1 },
+      ],
+    })!;
+    const order = drawOrder(faceEls(d, 'front')).map((e) => e.id);
+    A(order[0] === 'b' && order[1] === 'a', `zIndex 小的先画，实际 ${order.join('→')}`);
+    const front = designDocFor(
+      { ...createStudioProject('u1', 10), answers: { ...emptyAnswers(), form: ans('box', 'option'), size: { mode: 'custom', dims: { l: 100, w: 60, h: 180 }, src: 'user', confirmed: true } }, design: null } as StudioProject,
+      { front: drawOrder(faceEls(d, 'front')) },
+    )!;
+    A(front.faces.front!.layers[0].id === 'front_b' && front.faces.front!.layers[1].id === 'front_a',
+      `导出图层顺序必须和画布数组一致，实际 ${front.faces.front!.layers.map((l) => l.id).join('→')}`);
+    return '底 → 顶 与图层列表倒序一致';
+  });
+
+  await t('几何 · 角度归一化后旋转按钮不积累 360°', () => {
+    A(normalizeAngle(370) === 10 && normalizeAngle(-90) === -90, `370→10 / -90 保持 -90，实际 ${normalizeAngle(370)}/${normalizeAngle(-90)}`);
+    A(normalizeAngle(190) === -170, '190 应折到 -170，画布与滑块同一区间');
+    A(normalizeAngle(0) === 0, '0 还是 0');
+    return '旋转值始终 -180..180，不积累整圈';
+  });
+
+
+  await t('阶段三 · 官方坐标还原：1000px → 200mm 验收用例', () => {
+    const r = placementSelfCheck();
+    A(r.ok, `官方公式不符：${r.detail}`);
+    const mm = mapBoxToCanvas({ left: 200, top: 100, right: 600, bottom: 500 }, 1000, 1000, 200, 200, 'stretch');
+    A(near(mm.x, 40, 1e-9) && near(mm.y, 20, 1e-9) && near(mm.w, 80, 1e-9) && near(mm.h, 80, 1e-9),
+      `应为 x40 y20 w80 h80，实际 ${mm.x}/${mm.y}/${mm.w}/${mm.h}`);
+    const pct = mmBoxToPct(mm, 200, 200);
+    A(near(pct.x, 20) && near(pct.y, 10) && near(pct.w, 40) && near(pct.h, 40),
+      `200mm 面板的百分比应为 20/10/40/40，实际 ${pct.x}/${pct.y}/${pct.w}/${pct.h}`);
+    return `${r.detail} → 40×20mm 起点，宽高 80mm；百分比 20/10/40/40`;
+  });
+
+  await t('阶段三 · 比例不一致时 contain 不拉伸，图层相对位置保持', () => {
+    // 正方形底图装进 300×200mm：等比缩放 0.2，左右各留 50mm
+    const a = mapBoxToCanvas({ left: 200, top: 100, right: 600, bottom: 500 }, 1000, 1000, 300, 200, 'contain');
+    A(near(a.scale, 0.2, 1e-9), `contain 比例应为 0.2，实际 ${a.scale}`);
+    A(near(a.x, 50 + 40, 1e-9) && near(a.y, 20, 1e-9) && near(a.w, 80, 1e-9) && near(a.h, 80, 1e-9),
+      `contain 应居中留白，实际 x=${a.x} y=${a.y} w=${a.w} h=${a.h}`);
+    const b = mapBoxToCanvas({ left: 200, top: 100, right: 600, bottom: 500 }, 1000, 1000, 300, 200, 'cover');
+    A(near(b.scale, 0.3, 1e-9), `cover 比例应为 0.3，实际 ${b.scale}`);
+    A(b.y < 0 && near(b.h, 120, 1e-9), `cover 应裁切并保持 4:4 比例，实际 y=${b.y} h=${b.h}`);
+    return 'contain 居中留白 / cover 等比裁切，均不改变图层宽高比';
+  });
+
+  await t('阶段三 · 解析器：底图/图层、z 顺序、bbox、OCR 与未知字段', () => {
+    const raw = {
+      model: 'doubao-seedream-5-5-261028',
+      data: [
+        { z_index: 2, name: '标题文字', size: '1024x1024', url: 'https://x/2.png', bounding_box: { absolute: [100, 100, 800, 220], normalized: [97, 97, 781, 214] }, text_recognition: { text: '山野\n好茶', lines: [{ text: '山野', bounding_box: { absolute: [100, 100, 400, 160] }, runs: [{ text: '山野', style: { similar_font_family: 'unknown', foreground_color: '#112233', bold: true } }] }, { text: '好茶', bounding_box: { absolute: [100, 170, 300, 220] }, runs: [{ text: '好茶', style: { similar_font_family: 'unknown' } }] }] }, unknown_field: 1 },
+        { z_index: 0, name: '底图', size: '2048x2048', url: 'https://x/base.png', background: '#ffffff' },
+        { z_index: 1, name: '插画', size: '1024x1024', url: 'https://x/1.png', bounding_box: { absolute: [40, 40, 900, 900] } },
+      ],
+    };
+    const p = parseSplitResponse(raw);
+    A(!!p.base && p.base.name === '底图', '应识别 z_index=0 且无 bbox 的底图');
+    A(p.layers.length === 2 && p.layers[0].zIndex === 1 && p.layers[1].zIndex === 2, `图层应按 z 升序，实际 ${p.layers.map((x) => x.zIndex).join(',')}`);
+    A(p.layers[1].kind === 'text' && p.layers[1].ocr?.text === '山野\n好茶', 'OCR 文本应保留并分类为 text');
+    A(p.layers[1].ocr?.uncertain === true, 'unknown 字体必须标记为不确定，不能当真实字体');
+    A(p.layers[1].kindConfidence < 1, '分类置信度不能是 100%');
+    return `${p.layers.length} 图层 + 底图；z 升序；OCR 保留但标记字体不确定`;
+  });
+
+  await t('阶段三 · 解析器容错：缺 bbox / 空响应 / 越界框', () => {
+    const p = parseSplitResponse({ data: [
+      { z_index: 0, size: '1000x1000', url: 'u0' },
+      { z_index: 1, name: '无框', size: '1000x1000', url: 'u1' },
+      { z_index: 2, name: '越界', size: '1000x1000', url: 'u2', bounding_box: { absolute: [-10, 20, 1100, 900] } },
+    ] });
+    A(p.issues.some((s) => s.includes('缺少 bounding_box')), '缺 bbox 应进 issues，而不是静默随机摆放');
+    const n = normalizeBox({ left: -10, top: 20, right: 1100, bottom: 900 }, 1000, 1000);
+    A(n.clipped && n.box.left === 0 && n.box.right === 1000, '越界 bbox 应夹回底图范围并标记 clipped');
+    const empty = parseSplitResponse({});
+    A(!empty.base && empty.layers.length === 0 && empty.issues.length > 0, '空响应必须明确报错，不能返回空成功');
+    return '缺 bbox 报错、越界夹回、空响应失败';
+  });
+
+  await t('阶段三 · 导入：底图只一次、按 bbox 落位、OCR 原图保留', () => {
+    const base = normalizeDesign({
+      ratio: [1, 1], bg: '#FFFFFF', ink: '#191919', accent: '#F47735',
+      els: [{ id: 'old', kind: 'text', text: '旧', x: 5, y: 5, w: 20, size: 3 }],
+    })!;
+    const split = parseSplitResponse({
+      jobId: 'job_test_1',
+      data: [
+        { z_index: 0, name: '底图', size: '1000x1000', assetId: 'a0', assetUrl: 'https://cdn.example/a0.png' },
+        { z_index: 1, name: '主插画', size: '1000x1000', assetId: 'a1', assetUrl: 'https://cdn.example/a1.png', bounding_box: { absolute: [200, 100, 600, 500] } },
+        { z_index: 2, name: '标题', size: '1000x1000', assetId: 'a2', assetUrl: 'https://cdn.example/a2.png', bounding_box: { absolute: [100, 600, 500, 700] }, text_recognition: { text: '好茶', lines: [{ text: '好茶', bounding_box: { absolute: [100, 600, 500, 700] }, runs: [{ text: '好茶', style: { similar_font_family: 'Source Han Sans', foreground_color: '#222222', bold: true } }] }] } },
+      ],
+    });
+    const r = importSplitLayers(base, split, { panel: { id: 'front', w: 200, h: 200 }, face: 'front', now: 99 });
+    const els = faceEls(r.design, 'front');
+    A(r.imported === 4, `底图 1 + 图层 2 + 文字替换 1 = 4，实际 ${r.imported}`);
+    const baseEls = els.filter((e) => e.layerType === 'background');
+    A(baseEls.length === 1, `底图对象只能有 1 个，实际 ${baseEls.length}`);
+    const ill = els.find((e) => e.id.includes('a1'))!;
+    A(near(ill.x, 20) && near(ill.y, 10) && near(ill.w, 40) && near(ill.h, 40),
+      `200mm 面板上 bbox [200,100,600,500] 应为 20/10/40/40%，实际 ${ill.x}/${ill.y}/${ill.w}/${ill.h}`);
+    const text = els.find((e) => e.kind === 'text' && e.ocrText === '好茶')!;
+    const orig = els.find((e) => e.kind === 'sticker' && e.ocrText === '好茶')!;
+    A(!!text && !!orig && orig.visible === false, 'OCR 文字对象应生成，原 PNG 保留且默认隐藏，不能删除');
+    A(!text.fontFamily, '不能把 similar_font_family 当真实字体写进 fontFamily');
+    A(els.some((e) => e.id === 'old'), '旧图层必须保留');
+    A(baseEls[0].zIndex === 0 && ill.zIndex > 0, `旧图与导入图层应按数组顺序归一化 z，实际 base=${baseEls[0].zIndex} ill=${ill.zIndex}`);
+    const again = importSplitLayers(r.design, split, { panel: { id: 'front', w: 200, h: 200 }, face: 'front', now: 100 });
+    A(again.duplicates >= 3 && again.imported === 0, `重复导入应跳过同一批图层，实际 dup=${again.duplicates} add=${again.imported}`);
+    return `4 个对象；底图不重复；bbox 精确落位；OCR 原图隐藏保留；重复导入 0 新增`;
+  });
+
+  await t('阶段三 · 解析器：云函数持久化后只回 assetUrl 仍可用', () => {
+    const p = parseSplitResponse({
+      jobId: 'job_asset_only',
+      data: [
+        { z_index: 0, name: '底图', size: '1024x1024', assetId: 'base1', assetUrl: 'https://cdn.example/assets/base1' },
+        { z_index: 1, name: '插画', size: '2048x2048', assetId: 'ill1', assetUrl: 'https://cdn.example/assets/ill1', bounding_box: { absolute: [100, 100, 500, 500] } },
+      ],
+    });
+    A(!!p.base && p.base.assetUrl === 'https://cdn.example/assets/base1', '底图应读取 assetUrl 作为可用资源');
+    A(p.layers.length === 1 && !p.layers[0].url && p.layers[0].assetUrl === 'https://cdn.example/assets/ill1', '图层只有 assetUrl 时不能被当成缺失资源丢弃');
+    A(p.layers[0].width === 2048 && p.layers[0].height === 2048, 'size 应解析为图层自身画布像素尺寸');
+    return '只返回 assetUrl 的持久化响应仍可解析，不误判为缺失图层';
+  });
+
+  await t('阶段三 · 分类低置信度归 unknown，不把模型猜测当事实', () => {
+    const c = classifyLayer({ zIndex: 3, name: '未命名元素 07', description: '', ocr: null, prompt: '包装视觉' });
+    A(c.kind === 'unknown' && c.confidence < 0.5, `无法判断必须归 unknown，实际 ${c.kind}/${c.confidence}`);
+    A(classifyLayer({ zIndex: 0, name: '任意', description: '', ocr: null }).kind === 'background', 'z=0 是底图');
+    A(classifyLayer({ zIndex: 1, name: '品牌 Logo', description: '', ocr: null }).kind === 'logo', 'Logo 名称应识别');
+    return 'unknown 兜底 + background/logo 明确规则';
+  });
+
+
+  /* ================= 阶段四 · DeepSeek 画布操作智能体 ================= */
+
+  const stage4Project = (): StudioProject => {
+    const p = createStudioProject('tester', 1000);
+    p.name = '阶段四测试';
+    p.step = 10;
+    p.answers.category = ans('tea', 'user');
+    p.answers.productName = ans('桂花茶', 'user');
+    p.answers.form = ans('box', 'user');
+    p.answers.size = { mode: 'custom', dims: { l: 120, w: 60, h: 180 }, src: 'user', confirmed: true };
+    const design = normalizeDesign({
+      ratio: [1, 1], bg: '#FFFFFF', ink: '#191919', accent: '#F47735',
+      faces: {
+        front: [
+          { id: 'title_01', kind: 'text', name: '正面标题', text: '桂花', x: 10, y: 10, w: 50, size: 6, color: '#111111', zIndex: 2 },
+          { id: 'illustration_01', kind: 'sticker', name: '插画', src: 'data:image/png;base64,AAAA', x: 20, y: 30, w: 40, h: 40, zIndex: 3 },
+          { id: 'locked_01', kind: 'text', name: '锁定字', text: '锁', x: 10, y: 80, w: 20, size: 3, color: '#222222', locked: true, zIndex: 4 },
+        ],
+        back: [
+          { id: 'back_01', kind: 'text', name: '背面字', text: '背面', x: 5, y: 5, w: 30, size: 3, color: '#333333', zIndex: 1 },
+        ],
+      },
+      els: [],
+    })!;
+    p.design = design;
+    return p;
+  };
+
+  const snapshotOf = (p: StudioProject, selectedIds = ['title_01']): StudioAISnapshot => {
+    const panel = facesOf(p).find((f) => f.id === 'front')!;
+    return { project: p, design: p.design!, face: 'front', panel, selectedIds };
+  };
+
+  await t('阶段四 · 工具清单：19 个 Studio 工具全部复用旧校验器', () => {
+    A(STUDIO_TOOL_DEFS.length === 19, `工具数应为 19，实际 ${STUDIO_TOOL_DEFS.length}`);
+    const names = new Set(STUDIO_TOOL_DEFS.map((x) => x.name));
+    for (const n of ['inspect_design', 'update_text_layer', 'update_layer_position', 'resize_design_object',
+      'change_object_color', 'replace_image_layer', 'delete_layer', 'change_background',
+      'run_prepress_check', 'update_dimensions', 'update_structure']) {
+      A(names.has(n as never), `缺少工具 ${n}`);
+    }
+    A(new Set(names).size === names.size, '工具名不能重复');
+    return '19 个工具；覆盖文字 / 移动 / 缩放 / 颜色 / 图片 / 删除 / 背景 / 印前 / 尺寸';
+  });
+
+  await t('阶段四 · 上下文：真实面板尺寸、元素 ID、选中对象，不猜 ID', () => {
+    const p = stage4Project();
+    const front = facesOf(p).find((f) => f.id === 'front')!;
+    const ctx = buildStudioAIContext(p, p.design!, 'front', ['title_01']);
+    const all = JSON.stringify(ctx);
+    A(ctx.projectId === p.id, '上下文必须带项目 ID');
+    A(ctx.currentFace === 'front' && !!ctx.currentPanelMm && ctx.currentPanelMm.w === front.w, '上下文必须带当前面板与真实毫米尺寸');
+    A(all.includes('title_01') && all.includes('illustration_01') && all.includes('locked_01'), '上下文必须列出当前面元素 ID');
+    A(ctx.selected && ctx.selected.length === 1 && ctx.selected[0].id === 'title_01', '上下文必须带当前选中对象');
+    A(all.includes(String(front.w)) && all.includes(String(front.h)), '上下文必须带真实毫米宽高');
+    A(!all.includes('data:image'), '大 Base64 不得进入上下文');
+    return `front ${front.w}×${front.h}mm；3 个元素；选中 title_01`;
+  });
+
+  await t('阶段四 · 修改文字颜色：预览 after 正确，原设计不变，确认后才落盘', () => {
+    const p = stage4Project();
+    const before = designDigest(p.design!);
+    const plan: StudioAIPlan = {
+      mode: 'edit', summary: '标题改深绿',
+      actions: [{ name: 'change_object_color', params: { layerId: 'title_01', color: '#234B38' } }],
+    };
+    const r = previewPlan(plan, snapshotOf(p));
+    A(r.ok && !!r.preview, `预览应成功：${r.error}`);
+    A(r.preview!.items.length === 1 && r.preview!.items[0].targetId === 'title_01', '预览必须指向 title_01');
+    A(r.preview!.items[0].change.some((c) => c.after === '#234B38'), '预览必须给出目标颜色');
+    A(faceEls(p.design!, 'front').find((e) => e.id === 'title_01')!.color === '#111111', '预览阶段不得改原设计');
+    A(designDigest(r.design!) !== before, '候选设计指纹必须变化');
+    A(faceEls(r.design!, 'front').find((e) => e.id === 'title_01')!.color === '#234B38', '候选设计必须是新颜色');
+    const again = executePlan(plan, snapshotOf(p));
+    A(again.ok && faceEls(again.design!, 'front').find((e) => e.id === 'title_01')!.color === '#234B38', '执行器与预览必须一致');
+    return '预览 before #111111 → after #234B38；原对象未提前改变';
+  });
+
+  await t('阶段四 · 移动图片对象：毫米位移按当前面板换算，其他对象不动', () => {
+    const p = stage4Project();
+    const panel = facesOf(p).find((f) => f.id === 'front')!;
+    const before = faceEls(p.design!, 'front').find((e) => e.id === 'illustration_01')!;
+    const r = previewPlan({
+      mode: 'edit', summary: '插画上移 5mm',
+      actions: [{ name: 'update_layer_position', params: { layerId: 'illustration_01', dy_mm: -5 } }],
+    }, snapshotOf(p));
+    A(r.ok, r.error);
+    const after = faceEls(r.design!, 'front').find((e) => e.id === 'illustration_01')!;
+    A(near(after.y, before.y - 5 / panel.h * 100), `应上移 ${5 / panel.h * 100}%，实际 ${before.y}→${after.y}`);
+    A(after.x === before.x && after.w === before.w && after.h === before.h, '移动不能改 X / 尺寸');
+    const title = faceEls(r.design!, 'front').find((e) => e.id === 'title_01')!;
+    A(JSON.stringify(title) === JSON.stringify(faceEls(p.design!, 'front').find((e) => e.id === 'title_01')), '未指定对象不得被改');
+    return `y ${before.y}% → ${after.y}%；标题不变`;
+  });
+
+  await t('阶段四 · 缩小插画 15%：中心锚点、可保持比例', () => {
+    const p = stage4Project();
+    const before = faceEls(p.design!, 'front').find((e) => e.id === 'illustration_01')!;
+    const r = previewPlan({
+      mode: 'edit', summary: '插画缩小 15%',
+      actions: [{ name: 'resize_design_object', params: { layerId: 'illustration_01', scale: 0.85, keepAspectRatio: true } }],
+    }, snapshotOf(p));
+    A(r.ok, r.error);
+    const after = faceEls(r.design!, 'front').find((e) => e.id === 'illustration_01')!;
+    A(near(after.w, before.w * 0.85, 0.2) && near(after.h, before.h * 0.85, 0.2), `宽高应缩到 85%，实际 ${after.w}×${after.h}`);
+    A(near(after.x + after.w / 2, before.x + before.w / 2, 0.2) && near(after.y + after.h / 2, before.y + before.h / 2, 0.2), '必须以中心为锚点');
+    return `${before.w}×${before.h}% → ${after.w}×${after.h}%`;
+  });
+
+  await t('阶段四 · 批量调整两个对象：一次确认，两处同时生效', () => {
+    const p = stage4Project();
+    const r = previewPlan({
+      mode: 'edit', summary: '标题改色 + 插画缩放',
+      actions: [
+        { name: 'change_object_color', params: { layerId: 'title_01', color: '#234B38' } },
+        { name: 'resize_design_object', params: { layerId: 'illustration_01', scale: 0.85 } },
+      ],
+    }, snapshotOf(p));
+    A(r.ok, r.error);
+    A(r.preview!.items.length === 2, `应预览 2 个对象，实际 ${r.preview!.items.length}`);
+    const title = faceEls(r.design!, 'front').find((e) => e.id === 'title_01')!;
+    const ill = faceEls(r.design!, 'front').find((e) => e.id === 'illustration_01')!;
+    A(title.color === '#234B38' && near(ill.w, 34, 0.2), `两处修改必须都生效：${title.color}/${ill.w}`);
+    return '2 个对象；标题 #234B38；插画宽 34%';
+  });
+
+  await t('阶段四 · 目标对象不存在 / 在其它面板：明确拒绝，不猜 ID', () => {
+    const p = stage4Project();
+    const miss = previewPlan({
+      mode: 'edit', summary: '改不存在对象',
+      actions: [{ name: 'change_object_color', params: { layerId: 'no_such_layer', color: '#234B38' } }],
+    }, snapshotOf(p));
+    A(!miss.ok && /不存在|找不到|没有/.test(miss.error), `不存在对象必须明确拒绝，实际：${miss.error}`);
+    const back = previewPlan({
+      mode: 'edit', summary: '改背面对象',
+      actions: [{ name: 'change_object_color', params: { layerId: 'back_01', color: '#234B38' } }],
+    }, snapshotOf(p));
+    A(!back.ok && /背面|back/.test(back.error), `必须说明对象在其它面，实际：${back.error}`);
+    A(back.design === null, '拒绝时不得返回可提交设计');
+    return `不存在 → ${miss.error.slice(0, 24)}…；跨面 → ${back.error.slice(0, 24)}…`;
+  });
+
+  await t('阶段四 · 锁定对象：所有改属性动作拒绝', () => {
+    const p = stage4Project();
+    for (const act of [
+      { name: 'change_object_color' as const, params: { layerId: 'locked_01', color: '#234B38' } },
+      { name: 'update_layer_position' as const, params: { layerId: 'locked_01', dy_mm: -5 } },
+      { name: 'delete_layer' as const, params: { layerId: 'locked_01' } },
+    ]) {
+      const r = previewPlan({ mode: 'edit', summary: '改锁定对象', actions: [act] }, snapshotOf(p, ['locked_01']));
+      A(!r.ok && /锁定/.test(r.error), `${act.name} 必须拒绝锁定对象，实际：${r.error}`);
+    }
+    return '改色 / 移动 / 删除均拒绝 locked_01';
+  });
+
+  await t('阶段四 · 原子事务：第二动作失败时第一动作也不落盘', () => {
+    const p = stage4Project();
+    const before = JSON.stringify(p.design);
+    const r = previewPlan({
+      mode: 'edit', summary: '一半会失败的计划',
+      actions: [
+        { name: 'change_object_color', params: { layerId: 'title_01', color: '#234B38' } },
+        { name: 'resize_design_object', params: { layerId: 'no_such_layer', scale: 0.85 } },
+      ],
+    }, snapshotOf(p));
+    A(!r.ok, '任一动作失败必须整体失败');
+    A(r.design === null && r.project === null, '失败时不得返回候选设计');
+    A(r.results.length === 2 && r.results[0].ok && !r.results[1].ok, `结果应记录成功与失败，实际 ${JSON.stringify(r.results)}`);
+    A(JSON.stringify(p.design) === before, '原设计必须保持原样');
+    return '动作 1 成功、动作 2 失败 → 整体回滚，原设计未变';
+  });
+
+  await t('阶段四 · 删除多个对象 / 改尺寸：danger 二次确认，不自动执行', () => {
+    const p = stage4Project();
+    const del = previewPlan({
+      mode: 'edit', summary: '删两个装饰对象',
+      actions: [
+        { name: 'delete_layer', params: { layerId: 'title_01' } },
+        { name: 'delete_layer', params: { layerId: 'illustration_01' } },
+      ],
+    }, snapshotOf(p));
+    A(del.ok && del.preview!.permission === 'danger', `批量删除必须 danger，实际 ${del.preview?.permission}`);
+    A(del.preview!.dangerReasons.some((x) => /删除/.test(x)), '必须说明批量删除风险');
+    const dim = previewPlan({
+      mode: 'edit', summary: '改成品尺寸',
+      actions: [{ name: 'update_dimensions', params: { l: 100, w: 50, h: 150 } }],
+    }, snapshotOf(p));
+    A(dim.ok && dim.preview!.structural && dim.preview!.permission === 'danger', '改尺寸必须标记结构影响 + danger');
+    A(dim.project!.answers.size!.dims.l === 100, '候选项目必须写入新尺寸');
+    return '批量删除 danger；改尺寸 structural + danger';
+  });
+
+  await t('阶段四 · 结构变更：AI 不得直接改刀模/结构', () => {
+    const p = stage4Project();
+    const r = previewPlan({
+      mode: 'edit', summary: '换结构',
+      actions: [{ name: 'update_structure', params: { structure: 'pouch' } }],
+    }, snapshotOf(p));
+    A(!r.ok && /结构变更/.test(r.error), `必须拒绝直接改结构，实际：${r.error}`);
+    return r.error;
+  });
+
+  await t('阶段四 · 指代：唯一选中可解析「它」，多选/无选中必须拒绝', () => {
+    const p = stage4Project();
+    const ok = previewPlan({
+      mode: 'edit', summary: '把它放大',
+      actions: [{ name: 'resize_design_object', params: { layerId: '它', scale: 1.1 } }],
+    }, snapshotOf(p, ['title_01']));
+    A(ok.ok, `唯一选中应解析「它」：${ok.error}`);
+    A(ok.preview!.items[0].targetId === 'title_01', '「它」必须落到当前唯一选中对象');
+    const many = previewPlan({
+      mode: 'edit', summary: '把它放大',
+      actions: [{ name: 'resize_design_object', params: { layerId: '它', scale: 1.1 } }],
+    }, snapshotOf(p, ['title_01', 'illustration_01']));
+    A(!many.ok && /不明确|选中/.test(many.error), `多选必须要求澄清，实际：${many.error}`);
+    const none = previewPlan({
+      mode: 'edit', summary: '把它放大',
+      actions: [{ name: 'resize_design_object', params: { layerId: '它', scale: 1.1 } }],
+    }, snapshotOf(p, []));
+    A(!none.ok && /选中|不明确/.test(none.error), `无选中必须要求澄清，实际：${none.error}`);
+    return '唯一选中 → title_01；多选 / 无选中均拒绝';
+  });
+
+  await t('阶段四 · 面板背景：只改指定面，不波及其它面', () => {
+    const p = stage4Project();
+    const r = previewPlan({
+      mode: 'edit', summary: '背面改米色',
+      actions: [{ name: 'change_background', params: { face: 'back', color: '#F5EFE4' } }],
+    }, snapshotOf(p));
+    A(r.ok, r.error);
+    A(r.preview!.crossPanel && r.preview!.permission === 'danger', '跨面修改必须提示并升级确认');
+    A(r.design!.faceBg!.back === '#F5EFE4', '目标面必须改成米色');
+    A((r.design!.faceBg!.front || r.design!.bg) === '#FFFFFF', '正面背景不得被改');
+    const frontOnly = previewPlan({
+      mode: 'edit', summary: '正面改暖白',
+      actions: [{ name: 'change_background', params: { face: 'front', color: '#FBF7F0' } }],
+    }, snapshotOf(p));
+    A(frontOnly.ok && frontOnly.design!.faceBg!.front === '#FBF7F0' && !frontOnly.design!.faceBg!.back, '当前面改色不得影响背面');
+    return 'back #F5EFE4 / front 保持 #FFFFFF；跨面 danger';
+  });
+
+  await t('阶段四 · 预览过期：画布指纹变化后计划作废', () => {
+    const p = stage4Project();
+    const r = previewPlan({
+      mode: 'edit', summary: '标题改色',
+      actions: [{ name: 'change_object_color', params: { layerId: 'title_01', color: '#234B38' } }],
+    }, snapshotOf(p));
+    A(r.ok, r.error);
+    A(!planIsStale(r.preview!, p.design!), '刚生成时不得判定过期');
+    const changed = normalizeDesign({ ...p.design!, bg: '#FAFAFA' })!;
+    A(planIsStale(r.preview!, changed), '画布指纹变化后必须判定过期');
+    return `${r.preview!.baseDigest} → 变化后 stale`;
+  });
+
+  await t('阶段四 · 纯咨询：不产生动作，不调用执行器', () => {
+    const p = stage4Project();
+    const r = previewPlan({ mode: 'advice', summary: '正面留白偏少', actions: [] }, snapshotOf(p));
+    A(!r.ok && /不是修改计划/.test(r.error), 'advice 不应进入执行器');
+    return 'advice 被执行器拒绝，咨询不落盘';
+  });
+
+  await t('阶段四 · 撤销事务：历史一次 push，撤销回到 AI 前状态', () => {
+    const p = stage4Project();
+    const h = createHistory(p.design!);
+    const r = previewPlan({
+      mode: 'edit', summary: '标题改色 + 插画缩放',
+      actions: [
+        { name: 'change_object_color', params: { layerId: 'title_01', color: '#234B38' } },
+        { name: 'resize_design_object', params: { layerId: 'illustration_01', scale: 0.85 } },
+      ],
+    }, snapshotOf(p));
+    A(r.ok, r.error);
+    const pushed = pushHistory(h, r.design!, 'ai:plan_test', 10_000);
+    A(pushed.past.length === 1, `一次 AI 事务只能产生一条历史，实际 ${pushed.past.length}`);
+    const undone = undoHistory(pushed);
+    A(undone.present && faceEls(undone.present, 'front').find((e) => e.id === 'title_01')!.color === '#111111', '撤销必须恢复标题颜色');
+    A(faceEls(undone.present!, 'front').find((e) => e.id === 'illustration_01')!.w === 40, '撤销必须恢复插画尺寸');
+    return '1 条历史；撤销后颜色与尺寸都回到 AI 前';
   });
 
   return R;

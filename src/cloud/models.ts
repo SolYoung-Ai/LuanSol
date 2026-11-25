@@ -156,5 +156,34 @@ export function resolveTier(id: ImageTier | undefined | null, _isPro?: boolean):
 /** 3D 生成（Hyper3D-Gen2）目前只定价、未接入界面，价格单独放这里方便后面接 */
 export const HYPER3D_COST = PRICING.costs.hyper3d;
 
+/* ============================================================
+   阶段三 — Seedream 5.5 图层拆分定价（前端展示口径）
+   ------------------------------------------------------------
+   实际扣分由云函数计算并写入数据库，前端只用来做“预估消耗”展示。
+   两边公式必须一致：base + perImage * max_images，夹在 2..100 层。
+   ============================================================ */
+export const LAYER_SPLIT = {
+  /** 一次拆图的基础调用成本（含底图） */
+  base: 12,
+  /** 每张输出图层（含底图）增加的成本 */
+  perImage: 1,
+  /** 官方支持 1 + 99，但默认不拉满 */
+  minImages: 2,
+  maxImages: 100,
+  defaultImages: 16,
+  /** 常见复杂度预设 */
+  presets: [12, 16, 20, 30],
+} as const;
+
+export function layerSplitCost(maxImages: number): number {
+  const n = Math.max(LAYER_SPLIT.minImages, Math.min(LAYER_SPLIT.maxImages, Math.round(Number(maxImages) || LAYER_SPLIT.defaultImages)));
+  return Math.max(1, LAYER_SPLIT.base + LAYER_SPLIT.perImage * n);
+}
+
+/** Seedream 5.5 完整概念图 / 独立透明素材：也是服务端扣费，前端只展示。 */
+export const SEEDREAM55_COST = 20;
+export const SEEDREAM55_ASSET_COST = 16;
+
+
 /** 按语言取说明文字 */
 export const imageModelNote = (m: ImageModel, lang: string) => (lang === 'en' ? m.noteEn : m.note);

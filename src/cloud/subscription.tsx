@@ -140,7 +140,11 @@ function asObject(v: unknown): Record<string, any> | null {
 
 /** 自增用量计数（成功调用 AI 后）。返回最新 used，失败返回 -1。
  *  优先走数据库端的原子函数：并发调用不会互相覆盖计数；
- *  数据库函数不可用时退回「读-改-写」，结果仍然正确，只是并发下可能少计一次。 */
+ *  数据库函数不可用时退回「读-改-写」，结果仍然正确，只是并发下可能少计一次。
+ *
+ *  ⚠️ 2026-11-25 起 AI 生图一律由云函数在出图前预扣（安全审计 P0-1），
+ *  前端**不要**再在生图路径上调用本函数，否则就是双扣。现在只剩兜底用途，
+ *  没有调用方；新代码要计费请走云函数的 chargeJob。 */
 export async function recordUsage(uid: string, n = 1, taskType = 'ai_call'): Promise<number> {
   const d = await db(); if (!d) return -1;
 

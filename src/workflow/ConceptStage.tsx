@@ -12,7 +12,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ConceptImage, ImageTier, ProductInfo } from '../types';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
-import { useSubscription, recordUsage } from '../cloud/subscription';
+import { useSubscription } from '../cloud/subscription';
 import { PRICING } from '../cloud/plans';
 import { callImage } from '../engine/seedream';
 import { OPEN_IMAGE_MODELS, imageCost, imageModelNote, resolveTier } from '../cloud/models';
@@ -20,7 +20,9 @@ import { assembleFromConceptImage, buildBrief, inferStructure, refineTextColors 
 import { useLang } from '../i18n';
 import { Icon } from '../components/icons';
 
-const BATCH_COST = PRICING.costs.imageFlash; // 整批 3 张按 6 积分档计
+const BATCH_COUNT = 3;
+// 服务端按张扣分（安全审计 P0-1 之后只有一个计费口径），所以一批 3 张 = 3 × Flash 单价
+const BATCH_COST = PRICING.costs.imageFlash * BATCH_COUNT;
 const tierCost = (t: ImageTier) => imageCost(t);
 
 /** 三个方向的差异化提示。
@@ -131,10 +133,8 @@ export default function ConceptStage() {
         selectedConceptImageId: next[0]?.id || null,
         autoGenPending: false,
       });
-      if (auth.user) {
-        await recordUsage(auth.user.id, BATCH_COST, 'image');
-        sub.refresh();
-      }
+      // 扣分由云函数按张完成（失败的那张自动退回），前端只刷新余额
+      if (auth.user) sub.refresh();
       if (ok.length < 3) {
         setToast(t(`已生成 ${ok.length}/3 张，可对失败的方案单独重新生成`,
           `${ok.length} of 3 generated — you can regenerate the failed ones individually.`));
@@ -188,10 +188,8 @@ export default function ConceptStage() {
         ? { ...it, src, prompt: draftPrompt, model: tier, tier, at: Date.now(), naturalW: w, naturalH: h }
         : it);
       patchWorkflow(project.id, { conceptImages: next, selectedConceptImageId: img.id });
-      if (auth.user) {
-        await recordUsage(auth.user.id, cost, 'image');
-        sub.refresh();
-      }
+      // 扣分由云函数完成（安全审计 P0-1），前端只刷新余额
+      if (auth.user) sub.refresh();
       setEditing(null);
     } catch (e) {
       setToast(e instanceof Error ? e.message : t('重新生成失败，请重试', 'Regeneration failed. Please try again.'));
@@ -346,8 +344,8 @@ export default function ConceptStage() {
       )}
 
       <p className="wf-foot-note">
-        {t(`生成 3 张共 ${BATCH_COST} 积分（Flash 档）；单张重新生成按所选档位计费。积分余额 ${sub.usedLeft ?? '—'}。`,
-          `3 concepts cost ${BATCH_COST} credits total (Flash). Regenerating one is charged at the tier you pick. Balance: ${sub.usedLeft ?? '—'}.`)}
+        {t(`生成 3 张共 ${BATCH_COST} 积分（Flash 档，每张 ${PRICING.costs.imageFlash} 分，失败的那张自动退回）；单张重新生成按所选档位计费。积分余额 ${sub.usedLeft ?? '—'}。`,
+          `3 concepts cost ${BATCH_COST} credits total (Flash, ${PRICING.costs.imageFlash} each; failed renders are refunded). Regenerating one is charged at the tier you pick. Balance: ${sub.usedLeft ?? '—'}.`)}
       </p>
     </div>
   );

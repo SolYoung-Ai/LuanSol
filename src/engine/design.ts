@@ -314,9 +314,12 @@ export function layerMarkup(l: Layer): string {
   const t = `translate(${n(l.x)} ${n(l.y)})` + (l.rotation ? ` rotate(${n(l.rotation)} ${n(l.w / 2)} ${n(l.h / 2)})` : '');
   let inner = '';
   if (l.type === 'shape') inner = shapePrims(l).map(primSvg).join('');
-  else if (l.type === 'image') inner = `<image href="${l.src}" x="0" y="0" width="${n(l.w)}" height="${n(l.h)}" preserveAspectRatio="${l.fit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet'}"/>`;
+  else if (l.type === 'image') inner = l.src
+    ? `<image href="${l.src}" x="0" y="0" width="${n(l.w)}" height="${n(l.h)}" preserveAspectRatio="${l.fit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet'}"/>`
+    : '';
   else inner = textMarkup(l);
-  return `<g transform="${t}" opacity="${n(l.opacity)}" data-layer="${l.id}">${inner}</g>`;
+  if (!inner) return '';
+  return `<g transform="${t}" opacity="${n(l.opacity)}" data-layer="${l.id}" data-process="${l.process || 'print'}">${inner}</g>`;
 }
 
 export function faceMarkup(face: Face, roundClip = false): string {

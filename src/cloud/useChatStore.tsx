@@ -20,7 +20,7 @@ import { callImage } from '../engine/seedream';
 import { imageCost, imageShort, resolveTier } from './models';
 import { CHAT_MODELS, FREE_CHAT_MODEL } from './chatModels';
 import { LUNA_PERSONA_PROMPT } from '../engine/persona';
-import { recordUsage, useSubscription } from './subscription';
+import { useSubscription } from './subscription';
 import { canSyncChats, pullAllConversations, pushConversation, removeConversation, payloadHash } from './chats';
 
 const LS_PREFIX = 'lunasol.chats.v2';
@@ -393,7 +393,7 @@ function useChatStoreState(): ChatStore {
 
     setBusy(true);
     // 每一次发送都有自己的取消句柄：用户点「取消」时掐掉这次 fetch，
-    // 后面的 recordUsage 就走不到，积分不会被扣。
+    // 云函数那边收到断开后会立刻把这次预扣的积分退回。
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
@@ -562,10 +562,9 @@ function useChatStoreState(): ChatStore {
           : '画面被版权审核拦下了，已把平台名换成「社交平台」重试一次');
         url = await callImage(safer, imgOpts);
       }
-      if (user) {
-        await recordUsage(user.id, cost, 'image');
-        await sub.refresh();
-      }
+      // 扣分已由云函数在出图前完成（安全审计 P0-1）：前端再扣一次就是双扣，
+      // 这里只负责把界面余额刷新成服务端真实值。
+      if (user) await sub.refresh();
       const imgMsg: LunaMessage = {
         id: uid('msg'), role: 'assistant',
         content: typed ? '' : `画好啦，这一版用的是 ${tierLabel(tier)}，看看感觉对不对，不对我再调：`,
@@ -574,7 +573,7 @@ function useChatStoreState(): ChatStore {
       updateConv(id, (c) => ({ ...c, messages: [...c.messages, imgMsg], updatedAt: Date.now() }));
     } catch (e) {
       if (isCancelled(e)) {
-        // 取消发生在出图之前：recordUsage 没执行，所以一分不扣
+        // 取消／失败：云函数没出图就退款，这里不写「未扣分」以外的话
         updateConv(id, (c) => ({
           ...c,
           messages: [...c.messages, { id: uid('msg'), role: 'assistant' as const, content: '', cancelled: true, at: Date.now() }],

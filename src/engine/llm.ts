@@ -4,6 +4,7 @@
  * 「浏览器直连」模式仅用于个人本机：Key 存在用户自己浏览器的 localStorage。 */
 import type { AISettings } from '../types';
 import { CLOUD, deepSeekPreset, deepSeekReady } from '../cloud/config';
+import { cloudAccessToken } from '../cloud/sdk';
 import { getAIGate, reportAIUsage } from '../ai/gate';
 import { CancelledError } from './cancel';
 
@@ -258,9 +259,13 @@ export async function llmImage(prompt: string, s: AISettings): Promise<{ src: st
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 120000);
     try {
+      // 服务端按 access token 认人扣分；没有 token 云函数会直接 401，不会出图
+      const accessToken = await cloudAccessToken().catch(() => '');
+      const headers = authHeaders(s);
+      if (accessToken) headers['X-CloudBase-Token'] = accessToken;
       const res = await fetch(endpoint(s.baseUrl, '/images/generations'), {
         method: 'POST',
-        headers: authHeaders(s),
+        headers,
         body: JSON.stringify({ model: s.imageModel.trim() || 'gpt-image-1', prompt, n: 1, size: '1024x1024', response_format: 'b64_json' }),
         signal: ctrl.signal,
       });
@@ -293,7 +298,9 @@ export async function llmImage(prompt: string, s: AISettings): Promise<{ src: st
       reportAIUsage('image');
       return { src, naturalW: img.naturalWidth, naturalH: img.naturalHeight };
     } finally { clearTimeout(timer); }
-  }, s.retries);
+  // 服务端已改为「每次请求预扣积分、失败原路退回」，重试等于重复预扣，
+  // 网络抖动时还可能「第一次成功但响应丢了」再扣一次。图像请求一律不重试。
+  }, 0);
 }
 
 export async function testConnection(s: AISettings) {

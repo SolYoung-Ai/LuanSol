@@ -19,6 +19,10 @@ export interface Palette {
   muted: string;
 }
 
+/** 印刷工艺：普通四色 / 烫金 / UV / 其它专色。
+ *  非 print 的图层不进入普通 CMYK 印刷页，必须由导出系统单独出片。 */
+export type PrintProcess = 'print' | 'foil' | 'uv' | 'spot';
+
 export interface BaseLayer {
   id: string;
   name: string;
@@ -27,6 +31,8 @@ export interface BaseLayer {
   opacity: number;
   locked: boolean;
   hidden?: boolean;
+  /** 缺省 = print（旧数据全部按普通印刷处理） */
+  process?: PrintProcess;
 }
 
 export interface TextGradient {
@@ -180,6 +186,11 @@ export interface Dieline {
   safe: number;
   finished: { l: number; w: number; h: number };
   warnings: string[];
+  /** 输入尺寸不合法（零/负/低于结构下限）并被引擎夹取过。
+   *  这类刀模可以显示，但不能当作生产文件。 */
+  clamped?: boolean;
+  /** 用户实际提交的尺寸，用于报告「输入 → 实际计算」 */
+  input?: { l: number; w: number; h: number };
 }
 
 export interface StructureInfo {

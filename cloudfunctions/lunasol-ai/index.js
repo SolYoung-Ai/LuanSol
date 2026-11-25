@@ -17,6 +17,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
+const crypto = require('crypto');
 
 // 积分校验暂时用前端兜底，云函数端用频率限制和全局上限兜底
 // 后续再接入云函数端积分校验
@@ -217,6 +218,7 @@ function imageRoute(tier) {
   const routes = {
     flash: { provider: 'ark', base: seedreamBase, model: 'doubao-seedream-5-0-flash-260915', key: process.env.SEEDREAM_API_KEY },
     pro: { provider: 'ark', base: seedreamBase, model: 'doubao-seedream-5-0-pro-260628', key: process.env.SEEDREAM_API_KEY },
+    sd55: { provider: 'ark', base: seedreamBase, model: 'doubao-seedream-5-5-261028', key: process.env.SEEDREAM_API_KEY },
     'gpt2-text': { provider: 'bai', base: BAI_BASE_URL, model: BAI_IMAGE_MODEL, key: process.env.BAI_API_KEY },
     'gpt2-ref': { provider: 'bai', base: BAI_BASE_URL, model: BAI_IMAGE_MODEL, key: process.env.BAI_API_KEY },
   };
@@ -332,7 +334,7 @@ function sendJson(res, statusCode, data) {
 function sendOptions(res) {
   res.writeHead(204, {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-LunaSol-Token, X-CloudBase-Uid',
+    'Access-Control-Allow-Headers': 'Content-Type, X-LunaSol-Token, X-CloudBase-Uid, X-CloudBase-Token',
     'Access-Control-Max-Age': '600',
     ...(res.cors || {}),
   });
@@ -426,6 +428,10 @@ function callArkChat(payload) {
  * 认不出来的仍然原样透传（附状态码），方便我们排查。 */
 const UPSTREAM_HINTS = [
   {
+    re: /has not activated the model|未开通|not activated/i,
+    zh: '当前火山方舟账号还没有开通 Seedream 5.5。请到方舟控制台「开通管理」找到 Doubao-Seedream-5.5 点「开通服务」，开通后重试；本次积分已自动退回。',
+  },
+  {
     re: /copyright|trademark|infring/i,
     zh: '画出来的画面可能涉及版权或商标（例如像某个品牌或平台的标志），被厂商的内容审核拦下了。常见触发词：小红书 / 抖音 / 微信这类平台名，或真实品牌名。去掉它们换成中性说法（如「社交平台封面」）再试。',
   },
@@ -484,7 +490,7 @@ function callSeedream(payload) {
         resolve({ status: upstream.statusCode || 502, json: parsed, raw: raw.slice(0, 1500) });
       });
     });
-    req.setTimeout(120000, () => req.destroy(new Error('图像生成超时')));
+    req.setTimeout(payload && payload.layer_decomposition ? 240000 : 120000, () => req.destroy(new Error('图像生成超时')));
     req.on('error', reject);
     req.write(data);
     req.end();
@@ -565,6 +571,460 @@ async function moderatePrompt(prompt) {
   }
 }
 
+
+/* ============================================================
+   阶段三 — Seedream 5.5 / 图层拆分 / 服务端计费
+   ------------------------------------------------------------
+   与前端 src/cloud/models.ts 的 LAYER_SPLIT 常量保持一致：
+     cost = base + perImage * max_images
+   前端只展示预估；真正扣分只在这里按用户 access token 调数据库函数。
+   ============================================================ */
+// 默认 5.5；允许用环境变量切到已开通的模型做灰度/回退，避免写死导致账号未开通时整个功能不可用。
+const SD55_MODEL = process.env.SEEDREAM_55_MODEL || 'doubao-seedream-5-5-261028';
+const LAYER_SPLIT_MODEL = process.env.SEEDREAM_LAYER_MODEL || SD55_MODEL;
+const SPLIT_PRICING = { base: 12, perImage: 1, minImages: 2, maxImages: 100, defaultImages: 16 };
+const SD55_COST = 20;
+const SD55_ASSET_COST = 16;
+
+/* /images/generations 的服务端定价（积分/张）。
+ * 唯一权威是前端 src/cloud/plans.ts 的 PRICING.costs（实付 = 原价 × promoRate）：
+ *   flash      = imageFlash 6
+ *   pro        = imagePro 12
+ *   gpt2-text  = 60 × 0.7 = 42
+ *   gpt2-ref   = 65 × 0.7 = 45.5 → 46
+ * sd55 不走前端档位表，但 imageRoute 保留了这个 key，必须一起定价，
+ * 否则有人直接传 model=sd55 就能免费出 5.5 的图。
+ * 改价时必须同步改这里 —— npm test 会解析本文件核对（tests/run-node.mjs）。 */
+const IMAGE_TIER_COST = {
+  flash: 6,
+  pro: 12,
+  sd55: 20,
+  'gpt2-text': 42,
+  'gpt2-ref': 46,
+};
+// 官方限制：透明背景必须且只能传 1 张输入图。独立素材模式没有参考图时，
+// 用一张 512×512 全透明 PNG 作为占位输入，避免上游直接拒绝 background=transparent。
+// 只放服务端，前端无法用它绕开模型或替换输入图。
+const TRANSPARENT_INPUT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAYAAAB/HSuDAAAZIElEQVR4nO3YwQ3AIBDAMOj+Ox9ToErEniDv7JlZAAAAwNu+vwMAAACA+wwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAIMAAAAAAgAADAAAAAAIMAAAAAAgwAAAAACDAAAAAAIAAAwAAAAACDAAAAAAIMAAAAAAgwAAAAACAAAMAAAAAAgwAAAAACDAAAAAAYL3vAC2wCv39Y8BrAAAAAElFTkSuQmCC';
+
+function splitCreditCost(maxImages) {
+  const n = Math.max(SPLIT_PRICING.minImages, Math.min(SPLIT_PRICING.maxImages,
+    Math.round(Number(maxImages) || SPLIT_PRICING.defaultImages)));
+  return SPLIT_PRICING.base + SPLIT_PRICING.perImage * n;
+}
+
+function cloudUserToken(req) {
+  return String(req.headers['x-cloudbase-token'] || '').trim();
+}
+
+/** 以用户身份调 PG RPC：Authorization 用用户 access token，
+ *  auth.uid() 才能在数据库函数里生效。前端无法伪造别人的 uid。 */
+async function pgRpc(req, fn, payload, asUser = true) {
+  const token = asUser ? cloudUserToken(req) : PAY_PUBLISHABLE_KEY;
+  if (!token) {
+    const e = new Error('NO_USER_TOKEN');
+    e.code = 'NO_USER_TOKEN';
+    throw e;
+  }
+  const r = await fetch(`https://${PAY_ENV_ID}.api.tcloudbasegateway.com/v1/rdb/rest/rpc/${fn}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload || {}),
+    signal: AbortSignal.timeout(20000),
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    const e = new Error(`db ${r.status}: ${text.slice(0, 160)}`);
+    e.status = r.status;
+    throw e;
+  }
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+async function chargeJob(req, jobId, kind, cost, provider, model, meta) {
+  return pgRpc(req, 'lunasol_ai_job_charge', {
+    p_job: jobId,
+    p_kind: kind,
+    p_cost: cost,
+    p_provider: provider || 'ark',
+    p_model: model || '',
+    p_meta: meta || {},
+  });
+}
+
+async function refundJob(req, jobId, reason) {
+  try {
+    // p_secret：数据库函数只认 sha256 等于 lunasol_pay_secrets.creem 的调用方。
+    // 用户拿自己的 access token 直接调 RPC 会被拒（安全审计 P0-3），
+    // 所以云函数每次退款都要把 PAY_APPLY_SECRET 一起传下去。
+    return await pgRpc(req, 'lunasol_ai_job_refund', {
+      p_job: jobId,
+      p_reason: String(reason || '').slice(0, 80),
+      p_secret: String(process.env.PAY_APPLY_SECRET || '').trim(),
+    });
+  } catch (e) {
+    console.error('[ai-job] 退款失败，需人工核对 job=' + jobId.slice(0, 18), (e && e.message) || e);
+    return null;
+  }
+}
+
+function publicAiBase(req) {
+  const configured = String(process.env.LUNASOL_AI_PUBLIC_BASE || '').replace(/\/+$/, '');
+  if (configured) return configured;
+  const proto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim() || 'https';
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  return host ? `${proto}://${host}/lunasol-ai` : '/lunasol-ai';
+}
+
+function newAssetId() {
+  return crypto.randomUUID().replace(/-/g, '');
+}
+
+function normalizeMime(v) {
+  const t = String(v || '').toLowerCase().replace(/^\./, '').replace('jpg', 'jpeg');
+  if (t === 'png' || t === 'image/png') return 'image/png';
+  if (t === 'jpeg' || t === 'image/jpeg') return 'image/jpeg';
+  if (t === 'webp' || t === 'image/webp') return 'image/webp';
+  if (/^image\/[a-z0-9.+-]+$/.test(t)) return t;
+  return 'image/png';
+}
+
+function dataUrlOf(b64, mime) {
+  if (!b64) return '';
+  if (b64.startsWith('data:')) return b64;
+  return `data:${normalizeMime(mime)};base64,${b64}`;
+}
+
+async function persistLayerAsset(req, layer, meta) {
+  const id = newAssetId();
+  const mime = normalizeMime(layer.output_format || meta.mime || 'image/png');
+  const dataUrl = dataUrlOf(layer.b64_json, mime);
+  if (!dataUrl) throw new Error('empty asset');
+  const out = await pgRpc(req, 'lunasol_asset_put', {
+    p_id: id,
+    p_name: String(layer.name || '图层').slice(0, 80),
+    p_mime: mime,
+    p_width: Math.round(Number(meta.width) || 0) || null,
+    p_height: Math.round(Number(meta.height) || 0) || null,
+    p_bytes: Math.round(dataUrl.length * 0.75),
+    p_source: String(meta.source || `${LAYER_SPLIT_MODEL}-layer-split`),
+    p_layer_name: String(layer.name || '').slice(0, 80),
+    p_project_id: String(meta.projectId || '').slice(0, 64),
+    p_data_url: dataUrl,
+  });
+  if (!out || out.ok !== true) throw new Error('asset put rejected');
+  return { assetId: id, assetUrl: `${publicAiBase(req)}/assets/${id}` };
+}
+
+function sendChargeError(res, charge, fallback) {
+  const code = charge && charge.code;
+  if (code === 'insufficient') {
+    return sendJson(res, 402, { error: { code, message: charge.message || '积分不足，请先充值或签到' } });
+  }
+  if (code === 'unauthenticated' || code === 'no_account') {
+    return sendJson(res, 401, { error: { code, message: charge.message || '登录状态无效，请重新登录' } });
+  }
+  return sendJson(res, 409, { error: { code: code || 'charge_failed', message: (charge && charge.message) || fallback || '预扣积分失败，未发起模型调用' } });
+}
+
+async function handleStudioAI(req, res, body) {
+  const token = process.env.LUNASOL_PROXY_TOKEN || '';
+  if (!token || String(req.headers['x-lunasol-token'] || '') !== token) {
+    return sendJson(res, 401, { error: { message: '代理令牌无效' } });
+  }
+  const verdict = guard(req);
+  if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
+
+  const mode = body.mode === 'asset' ? 'asset' : body.mode === 'concept' ? 'concept' : '';
+  if (!mode) return sendJson(res, 400, { error: { message: 'mode 必须是 concept 或 asset' } });
+  const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, 2000).trim() : '';
+  if (!prompt) return sendJson(res, 400, { error: { message: '缺少 prompt' } });
+  if (!cloudUserToken(req)) return sendJson(res, 401, { error: { message: '缺少登录凭证，请重新登录' } });
+
+  const mod = await moderatePrompt(prompt);
+  if (!mod.ok) {
+    return sendJson(res, mod.blocked ? 403 : 503, {
+      error: {
+        code: mod.blocked ? 'moderation_blocked' : 'moderation_unavailable',
+        message: mod.blocked ? '这段描述未通过内容审核，请修改后重试。' : '内容审核服务暂时不可用，请稍后重试。',
+      },
+    });
+  }
+
+  const jobId = String(body.jobId || `sd55_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`).slice(0, 90);
+  const cost = mode === 'asset' ? SD55_ASSET_COST : SD55_COST;
+  let charge;
+  try {
+    charge = await chargeJob(req, jobId, 'seedream55', cost, 'ark', SD55_MODEL, { mode });
+  } catch (e) {
+    if (e && e.code === 'NO_USER_TOKEN') return sendJson(res, 401, { error: { message: '缺少登录凭证，请重新登录' } });
+    return sendJson(res, 502, { error: { message: `计费服务失败：${(e && e.message) || e}` } });
+  }
+  if (!charge || charge.ok !== true) return sendChargeError(res, charge);
+
+  let settled = false;
+  const cancelRefund = (reason) => {
+    if (settled) return;
+    settled = true;
+    refundJob(req, jobId, reason || '用户取消').catch(() => null);
+  };
+  res.on('close', () => { if (!res.writableEnded) cancelRefund('用户取消'); });
+
+  const assetImage = mode === 'asset'
+    ? (typeof body.image === 'string' && /^data:image\/(png|jpeg);base64,/.test(body.image)
+      ? body.image
+      : TRANSPARENT_INPUT)
+    : '';
+  const payload = {
+    model: SD55_MODEL,
+    prompt,
+    size: typeof body.size === 'string' ? body.size : '1024x1024',
+    response_format: 'url',
+    ...(mode === 'asset' ? { image: assetImage, background: 'transparent', output_format: 'png' } : {}),
+  };
+
+  try {
+    dayUsed += 1;
+    const r = await callSeedream(payload);
+    if (r.status < 200 || r.status >= 300) {
+      await refundJob(req, jobId, '模型调用失败');
+      settled = true;
+      return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, { error: { message: safeUpstreamError(r), refunded: true } });
+    }
+    const d = (r.json && r.json.data && r.json.data[0]) || null;
+    let b64 = d && d.b64_json ? d.b64_json : '';
+    if (!b64 && d && d.url) b64 = (await downloadToBase64(d.url)).b64;
+    if (!b64) {
+      await refundJob(req, jobId, '模型未返回图片');
+      settled = true;
+      return sendJson(res, 502, { error: { message: '模型没有返回图片，积分已退回', refunded: true } });
+    }
+    // 独立素材也必须进素材库：项目只保存 https 素材地址，不把整张 Base64 塞进设计 JSON。
+    // 持久化失败不扣第二次费，回退返回 b64 让用户这次仍能用上图片。
+    let saved = null;
+    if (mode === 'asset') {
+      const dims = /^(\d+)\s*x\s*(\d+)$/i.exec(String(d.size || ''));
+      try {
+        saved = await persistLayerAsset(req, {
+          b64_json: b64,
+          output_format: 'png',
+          name: '独立素材',
+        }, {
+          width: dims ? Number(dims[1]) : 0,
+          height: dims ? Number(dims[2]) : 0,
+          mime: 'image/png',
+          source: `${SD55_MODEL}-asset`,
+          projectId: String(body.projectId || '').slice(0, 64),
+        });
+      } catch (e) {
+        console.error('[studio-ai] 独立素材持久化失败，回退 b64', (e && e.message) || e);
+      }
+    }
+    settled = true;
+    return sendJson(res, 200, {
+      jobId, b64_json: b64, model: SD55_MODEL, provider: 'ark',
+      cost: charge.cost || cost, balance: charge.balance,
+      assetId: saved ? saved.assetId : '',
+      assetUrl: saved ? saved.assetUrl : '',
+      replay: Boolean(charge.replay),
+    });
+  } catch (e) {
+    await refundJob(req, jobId, '服务异常');
+    settled = true;
+    return sendJson(res, 502, { error: { message: `生成失败：${(e && e.message ? e.message : String(e)).slice(0, 160)}`, refunded: true } });
+  }
+}
+
+async function handleLayerSplit(req, res, body) {
+  const token = process.env.LUNASOL_PROXY_TOKEN || '';
+  if (!token || String(req.headers['x-lunasol-token'] || '') !== token) {
+    return sendJson(res, 401, { error: { message: '代理令牌无效' } });
+  }
+  const verdict = guard(req);
+  if (!verdict.ok) return sendJson(res, verdict.status, { error: { message: verdict.message } });
+  if (!process.env.SEEDREAM_API_KEY) {
+    return sendJson(res, 503, { error: { message: '方舟密钥未配置，拆图暂不可用' } });
+  }
+
+  const image = typeof body.image === 'string' ? body.image : '';
+  if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(image)) {
+    return sendJson(res, 400, { error: { message: '请传入一张 data URL 的 PNG / JPEG 设计图' } });
+  }
+  if (image.length > 10 * 1024 * 1024) {
+    return sendJson(res, 413, { error: { message: '设计图超过 10MB，请先压缩再拆' } });
+  }
+  const prompt = (typeof body.prompt === 'string' && body.prompt.trim()
+    ? body.prompt.trim()
+    : '把这张平面包装设计拆分为彼此独立的图层，保留每个元素的位置、边缘、文字与透明背景。'
+  ).slice(0, 2000);
+  const wantsMax = Math.max(SPLIT_PRICING.minImages, Math.min(SPLIT_PRICING.maxImages,
+    Math.round(Number(body.max_images) || SPLIT_PRICING.defaultImages)));
+  const is55 = /seedream-5-5/i.test(LAYER_SPLIT_MODEL);
+  // 5.0 pro / flash 固定最多 1 底图 + 16 图层，且不支持 options 与富文本 OCR；传了 5.5 专属参数会被上游拒绝。
+  const maxImages = is55 ? wantsMax : Math.min(wantsMax, 17);
+  const textRecognition = is55 && body.text_recognition !== false;
+  const size = ['1K', '1.5K', '2K', 'auto'].includes(body.size) ? body.size : 'auto';
+  const jobId = String(body.jobId || `ls_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`).slice(0, 90);
+  if (!cloudUserToken(req)) return sendJson(res, 401, { error: { message: '缺少登录凭证，请重新登录' } });
+
+  const mod = await moderatePrompt(prompt);
+  if (!mod.ok) {
+    return sendJson(res, mod.blocked ? 403 : 503, {
+      error: {
+        code: mod.blocked ? 'moderation_blocked' : 'moderation_unavailable',
+        message: mod.blocked ? '拆分描述未通过内容审核，请修改后重试。' : '内容审核服务暂时不可用，请稍后重试。',
+      },
+    });
+  }
+
+  const cost = splitCreditCost(maxImages);
+  let charge;
+  try {
+    charge = await chargeJob(req, jobId, 'layer_split', cost, 'ark', LAYER_SPLIT_MODEL, { maxImages, size, textRecognition, requestedMax: wantsMax, modelMax: is55 ? 100 : 17 });
+  } catch (e) {
+    if (e && e.code === 'NO_USER_TOKEN') return sendJson(res, 401, { error: { message: '缺少登录凭证，请重新登录' } });
+    return sendJson(res, 502, { error: { message: `计费服务失败：${(e && e.message) || e}` } });
+  }
+  if (!charge || charge.ok !== true) return sendChargeError(res, charge);
+
+  let settled = false;
+  const cancelRefund = (reason) => {
+    if (settled) return;
+    settled = true;
+    refundJob(req, jobId, reason || '用户取消').catch(() => null);
+  };
+  res.on('close', () => { if (!res.writableEnded) cancelRefund('用户取消'); });
+
+  const payload = {
+    model: LAYER_SPLIT_MODEL,
+    prompt,
+    image,
+    size,
+    response_format: 'url',
+    layer_decomposition: true,
+    // options 与富文本 OCR 仅 5.5 支持；5.0 传了会被直接拒绝。
+    ...(is55 ? {
+      layer_decomposition_options: {
+        max_images: maxImages,
+        text_recognition: textRecognition,
+      },
+    } : {}),
+    // 官方明确：拆分场景不能传 background，传了会报错。
+  };
+
+  try {
+    dayUsed += 1;
+    const r = await callSeedream(payload);
+    if (r.status < 200 || r.status >= 300) {
+      await refundJob(req, jobId, '拆图接口失败');
+      settled = true;
+      return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, {
+        error: { message: safeUpstreamError(r), refunded: true, cost },
+      });
+    }
+    const rawData = Array.isArray(r.json && r.json.data) ? r.json.data : [];
+    if (!rawData.length) {
+      await refundJob(req, jobId, '拆图接口无返回');
+      settled = true;
+      return sendJson(res, 502, { error: { message: '拆图接口没有返回任何图层，积分已退回', refunded: true, cost } });
+    }
+
+    const projectId = String(body.projectId || '').slice(0, 64);
+    const out = [];
+    let assetFailures = 0;
+    for (let i = 0; i < rawData.length; i += 1) {
+      const d = rawData[i];
+      if (!d || typeof d !== 'object') continue;
+      let b64 = typeof d.b64_json === 'string' ? d.b64_json : '';
+      let mime = typeof d.output_format === 'string' ? d.output_format : 'png';
+      if (!b64 && typeof d.url === 'string' && d.url) {
+        try {
+          const dl = await downloadToBase64(d.url);
+          b64 = dl.b64;
+          mime = String(dl.mime || '').includes('png') ? 'png' : (dl.mime || mime);
+        } catch (e) {
+          console.error('[layer-split] 图层下载失败 index=' + i, (e && e.message) || e);
+        }
+      }
+      if (!b64) continue;
+      const sizeText = typeof d.size === 'string' ? d.size : '';
+      const dim = /^(\d+)x(\d+)$/.exec(sizeText) || [];
+      const baseItem = {
+        z_index: Number.isFinite(Number(d.z_index)) ? Number(d.z_index) : (i === 0 ? 0 : i),
+        name: (typeof d.name === 'string' && d.name.trim())
+          ? d.name.slice(0, 80)
+          : ((Number(d.z_index) === 0 || i === 0) ? '底图' : ''),
+        description: typeof d.description === 'string' ? d.description.slice(0, 200) : '',
+        size: sizeText,
+        output_format: mime,
+        background: typeof d.background === 'string' ? d.background : '',
+        bounding_box: d.bounding_box && typeof d.bounding_box === 'object' ? d.bounding_box : undefined,
+        text_recognition: d.text_recognition && typeof d.text_recognition === 'object' ? d.text_recognition : undefined,
+        type: typeof d.type === 'string' ? d.type : '',
+      };
+      try {
+        const saved = await persistLayerAsset(req, { ...baseItem, b64_json: b64 }, {
+          mime, width: Number(dim[1]) || 0, height: Number(dim[2]) || 0, projectId,
+        });
+        out.push({ ...baseItem, assetId: saved.assetId, assetUrl: saved.assetUrl });
+      } catch (e) {
+        assetFailures += 1;
+        // 素材持久化失败时退回 b64，让前端仍能导入；但绝不把临时 URL 当成项目资源。
+        out.push({ ...baseItem, b64_json: b64, url: '' });
+      }
+    }
+    if (!out.length) {
+      await refundJob(req, jobId, '图层数据全部不可用');
+      settled = true;
+      return sendJson(res, 502, { error: { message: '图层数据全部不可用，积分已退回', refunded: true, cost } });
+    }
+
+    settled = true;
+    return sendJson(res, 200, {
+      created: r.json.created || Date.now(),
+      model: LAYER_SPLIT_MODEL,
+      provider: 'ark',
+      jobId,
+      cost: charge.cost || cost,
+      balance: charge.balance,
+      replay: Boolean(charge.replay),
+      assetFailures,
+      data: out,
+    });
+  } catch (e) {
+    await refundJob(req, jobId, '服务异常');
+    settled = true;
+    return sendJson(res, 502, { error: { message: `拆图失败：${(e && e.message ? e.message : String(e)).slice(0, 160)}`, refunded: true, cost } });
+  }
+}
+
+/** 素材短链：给 <image> 和导出内联用。id 是随机 32 位，不可枚举。 */
+async function handleAssetGet(req, res, id) {
+  if (!/^[a-f0-9]{16,64}$/i.test(id)) {
+    return sendJson(res, 404, { error: { message: 'Not Found' } });
+  }
+  try {
+    const out = await pgRpc(req, 'lunasol_asset_get', { p_id: id }, false);
+    if (!out || out.ok !== true || !out.data_url) {
+      return sendJson(res, 404, { error: { message: '素材不存在' } });
+    }
+    const m = /^data:([^;]+);base64,([\s\S]+)$/.exec(String(out.data_url));
+    if (!m) return sendJson(res, 500, { error: { message: '素材格式损坏' } });
+    const buf = Buffer.from(m[2], 'base64');
+    res.writeHead(200, {
+      'Content-Type': normalizeMime(m[1] || out.mime || 'image/png'),
+      'Content-Length': buf.length,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Access-Control-Allow-Origin': '*',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.end(buf);
+  } catch (e) {
+    console.error('[assets] 读取失败', (e && e.message) || e);
+    return sendJson(res, 500, { error: { message: '素材读取失败' } });
+  }
+}
+
 async function handleImage(req, res, body) {
   const token = process.env.LUNASOL_PROXY_TOKEN || '';
   if (!token || String(req.headers['x-lunasol-token'] || '') !== token) {
@@ -621,6 +1081,40 @@ async function handleImage(req, res, body) {
   if (tier === 'gpt2-text' && hasRef) {
     return sendJson(res, 400, { error: { message: '已上传参考图，请切换到「GPT Image 2（输入图）」档位，否则会按文字档计费' } });
   }
+
+  /* ---- 服务端计费（安全审计 P0-1） ----
+   * 这条路由以前只提示「前端按档位扣积分」，服务端一分不扣：
+   * 拿公开的 Publishable Key 注册个号，或者余额 0，都能无限白嫖出图。
+   * 现在与 /studio/ai 走同一套：审核通过 → 预扣 → 出图；失败原路退回。
+   *
+   * jobId 一律服务端生成，body.jobId 直接忽略。客户端可控的幂等键能被
+   * 「先用 1 分占号、再让 replay 放行」玩成低价买高价图（P0-4）。
+   */
+  const cost = IMAGE_TIER_COST[tier] || 0;
+  if (!cost) return sendJson(res, 400, { error: { message: `档位 ${tier} 缺少服务端定价，已拒绝` } });
+  if (!cloudUserToken(req)) {
+    return sendJson(res, 401, { error: { code: 'unauthenticated', message: '缺少登录凭证，请重新登录后再生成' } });
+  }
+  const jobId = `img_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`.slice(0, 90);
+  let charge;
+  try {
+    charge = await chargeJob(req, jobId, 'image', cost, route.provider, route.model, { tier, size: String(body.size || '1024x1024') });
+  } catch (e) {
+    if (e && e.code === 'NO_USER_TOKEN') return sendJson(res, 401, { error: { message: '缺少登录凭证，请重新登录' } });
+    return sendJson(res, 502, { error: { message: `计费服务失败：${(e && e.message) || e}` } });
+  }
+  if (!charge || charge.ok !== true) return sendChargeError(res, charge);
+
+  // 客户端断开（用户点取消 / 关页面）：上游调用白做，积分要退。
+  // res 正常结束后 close 也会触发，所以必须先看 writableEnded。
+  let settled = false;
+  const refundOnce = (reason) => {
+    if (settled) return null;
+    settled = true;
+    return refundJob(req, jobId, reason).catch(() => null);
+  };
+  res.on('close', () => { if (!res.writableEnded) refundOnce('用户取消'); });
+
   const size = typeof body.size === 'string' ? body.size : '1024x1024';
   const payload = route.provider === 'bai'
     ? {
@@ -659,8 +1153,9 @@ async function handleImage(req, res, body) {
       }
     }
     if (r.status < 200 || r.status >= 300) {
+      await refundOnce('模型调用失败');
       return sendJson(res, r.status >= 400 && r.status < 500 ? r.status : 502, {
-        error: { message: safeUpstreamError(r) },
+        error: { message: safeUpstreamError(r), refunded: true },
       });
     }
     // 统一把上游结果转成 b64_json 返回：服务端下载 TOS / CDN 图片，规避前端 CORS
@@ -674,16 +1169,21 @@ async function handleImage(req, res, body) {
       }
     }
     if (!out.length) {
-      return sendJson(res, 502, { error: { message: '图像接口未返回可用图片' } });
+      await refundOnce('模型未返回图片');
+      return sendJson(res, 502, { error: { message: '图像接口未返回可用图片，积分已退回', refunded: true } });
     }
     return sendJson(res, 200, {
       created: r.json.created || Date.now(),
       model: route.model,
       provider: route.provider,
       data: out,
+      jobId,
+      cost,
+      balance: Number(charge.balance) || 0,
     });
   } catch (e) {
-    return sendJson(res, 502, { error: { message: `图像生成失败：${(e && e.message ? e.message : String(e)).slice(0, 160)}` } });
+    await refundOnce('服务异常');
+    return sendJson(res, 502, { error: { message: `图像生成失败：${(e && e.message ? e.message : String(e)).slice(0, 160)}`, refunded: true } });
   }
 }
 
@@ -788,7 +1288,6 @@ async function handleChat(req, res, body) {
  * 产品归属只认服务端白名单，不认前端传来的任何金额或产品 ID——
  * 否则用户改一个请求体就能用低价档买到高额积分。
  */
-const crypto = require('crypto');
 const PAY_ENV_ID = 'solyoung-d4gpp1f7s4e075f6d';
 // publishable key 是公开值（前端 .env 里本来就有），这里只用于调本环境的数据库函数。
 // 真正兜底的权限在数据库函数里：没有 PAY_APPLY_SECRET 无法开通任何人。
@@ -1265,6 +1764,8 @@ const server = http.createServer(async (req, res) => {
       chatPeakHour: isPeakHour(),
       tokenRequired: Boolean(process.env.LUNASOL_PROXY_TOKEN),
       imageGeneration: Boolean(process.env.SEEDREAM_API_KEY),
+      layerSplitEnabled: Boolean(process.env.SEEDREAM_API_KEY),
+      seedream55Enabled: Boolean(process.env.SEEDREAM_API_KEY),
       imageProvider: process.env.SEEDREAM_API_KEY ? 'seedream' : 'none',
       gptImageEnabled: Boolean(process.env.BAI_API_KEY),
       hyper3dEnabled: Boolean(process.env.SEEDREAM_API_KEY),
@@ -1307,6 +1808,28 @@ const server = http.createServer(async (req, res) => {
     return handleChat(req, res, body);
   }
 
+  // 素材短链：GET 直接返回二进制，供 <image> / 导出内联使用
+  const assetMatch = /\/assets\/([^/]+)$/.exec(pathname);
+  if (assetMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+    return handleAssetGet(req, res, decodeURIComponent(assetMatch[1]));
+  }
+
+  if (req.method === 'POST' && pathname.endsWith('/studio/ai')) {
+    let body;
+    try { body = await readJsonBody(req, MAX_IMAGE_BODY_BYTES); } catch (e) {
+      return sendJson(res, 400, { error: { message: (e && e.message) || '请求体错误' } });
+    }
+    return handleStudioAI(req, res, body);
+  }
+
+  if (req.method === 'POST' && pathname.endsWith('/images/layer-split')) {
+    let body;
+    try { body = await readJsonBody(req, 10 * 1024 * 1024); } catch (e) {
+      return sendJson(res, 400, { error: { message: (e && e.message) || '请求体错误' } });
+    }
+    return handleLayerSplit(req, res, body);
+  }
+
   if (req.method === 'POST' && pathname.endsWith('/images/generations')) {
     let body;
     try { body = await readJsonBody(req, MAX_IMAGE_BODY_BYTES); } catch (e) {
@@ -1315,7 +1838,7 @@ const server = http.createServer(async (req, res) => {
     return handleImage(req, res, body);
   }
 
-  if (isChat || pathname.endsWith('/images/generations')) {
+  if (isChat || pathname.endsWith('/images/generations') || pathname.endsWith('/images/layer-split') || pathname.endsWith('/studio/ai')) {
     return sendJson(res, 405, { error: { message: 'Method Not Allowed' } });
   }
   return sendJson(res, 404, { error: { message: 'Not Found' } });

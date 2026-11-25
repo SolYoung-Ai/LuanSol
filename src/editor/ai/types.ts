@@ -26,7 +26,7 @@ export type AIToolName =
   | 'run_prepress_check'
   | 'export_design';
 
-/** 单个参数的校验规则 */
+/** 单个参数的校验规则。Studio 工具也复用这一份，避免出现第二套校验器。 */
 export interface ParamSchema {
   type: 'string' | 'number' | 'boolean' | 'object' | 'array';
   required?: boolean;
@@ -34,6 +34,15 @@ export interface ParamSchema {
   enum?: (string | number)[];
   min?: number;
   max?: number;
+  /** 数字必须是整数（用于图层数量、角度等） */
+  integer?: boolean;
+  /** 字符串正则，例如 HEX 颜色 */
+  pattern?: string;
+  /** 数组元素类型（目前只做逐项基础类型检查） */
+  itemType?: 'string' | 'number';
+  /** 数组最少 / 最多项 */
+  minItems?: number;
+  maxItems?: number;
   default?: unknown;
 }
 

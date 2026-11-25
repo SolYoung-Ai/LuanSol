@@ -3,15 +3,21 @@
  * 校验不通过会抛出明确错误，绝不允许参数流入执行层。 */
 import type { AIToolName, ParamSchema } from './types';
 
-export interface ToolDef {
-  name: AIToolName;
+/** 一份工具声明。旧编辑器把 name 收窄为 AIToolName；
+ *  Studio 2.0 的工具复用同一份参数校验，但 name 是另一组字符串。 */
+export interface ToolSchema {
+  name: string;
   description: string;
   params: Record<string, ParamSchema>;
 }
 
+export interface ToolDef extends ToolSchema {
+  name: AIToolName;
+}
+
 /** 校验单个工具的参数，返回清洗后的参数；失败抛出带字段名的错误。 */
 export function validateParams(
-  def: ToolDef,
+  def: ToolSchema,
   raw: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   const input = raw || {};
@@ -38,11 +44,33 @@ export function validateParams(
     }
     if (schema.type === 'number') {
       const n = value as number;
+      if (!Number.isFinite(n)) throw new Error(`参数「${key}」必须是有限数字`);
+      if (schema.integer && !Number.isInteger(n)) throw new Error(`参数「${key}」必须是整数`);
       if (schema.min !== undefined && n < schema.min) throw new Error(`参数「${key}」不能小于 ${schema.min}`);
       if (schema.max !== undefined && n > schema.max) throw new Error(`参数「${key}」不能大于 ${schema.max}`);
     }
-    if (schema.type === 'string' && (value as string).trim() === '' && schema.required) {
-      throw new Error(`参数「${key}」不能为空`);
+    if (schema.type === 'string') {
+      if ((value as string).trim() === '' && schema.required) {
+        throw new Error(`参数「${key}」不能为空`);
+      }
+      if (schema.pattern && !new RegExp(schema.pattern).test(value as string)) {
+        throw new Error(`参数「${key}」格式不正确`);
+      }
+    }
+    if (schema.type === 'array') {
+      const arr = value as unknown[];
+      if (schema.minItems !== undefined && arr.length < schema.minItems) {
+        throw new Error(`参数「${key}」至少需要 ${schema.minItems} 项`);
+      }
+      if (schema.maxItems !== undefined && arr.length > schema.maxItems) {
+        throw new Error(`参数「${key}」最多 ${schema.maxItems} 项`);
+      }
+      if (schema.itemType) {
+        arr.forEach((item, i) => {
+          const t = Array.isArray(item) ? 'array' : typeof item;
+          if (t !== schema.itemType) throw new Error(`参数「${key}」第 ${i + 1} 项应为 ${schema.itemType}`);
+        });
+      }
     }
     out[key] = value;
   }

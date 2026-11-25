@@ -6,8 +6,7 @@ import { useApp } from '../store';
 import { tl } from '../langStore';
 import { useHash } from '../ui';
 import { useAuth } from '../cloud/auth';
-import { useSubscription, recordUsage } from '../cloud/subscription';
-import { PRICING } from '../cloud/plans';
+import { useSubscription } from '../cloud/subscription';
 import { loadAI, llmChat, llmJson, llmImage, aiEnabled } from '../engine/llm';
 import { LUNA_PERSONA_PROMPT } from '../engine/persona';
 import { buildSchemes, cloneDesign } from '../engine/design';
@@ -337,7 +336,8 @@ export function EditorProvider({
       );
       update({ design: { ...design, faces: { ...design.faces, [currentFace]: { ...face, layers } } } });
       addVersion(`局部修改：${selectedL.name}`);
-      if (auth.user) { await recordUsage(auth.user.id, PRICING.costs.imageFlash, 'image'); sub.refresh(); }
+      // 扣分由云函数完成（安全审计 P0-1），这里只刷新余额，否则双扣
+      if (auth.user) sub.refresh();
       addChat({ role: 'ai', text: `「${selectedL.name}」已经修改好了，你看看效果。如果不满意可以继续告诉我。` });
     } else if (selectedL.type === 'text') {
       const textLayer = selectedL as TextLayer;
@@ -447,7 +447,8 @@ export function EditorProvider({
           addChat({ role: 'ai', text: `${action.name}｜${result.ok ? '已完成' : '未完成'}：${result.message}` });
         }
         const hasImage = plan.actions.some((a) => a.name === 'generate_image_asset');
-        if (auth.user && hasImage) { await recordUsage(auth.user.id, PRICING.costs.imageFlash, 'image'); sub.refresh(); }
+        // 扣分由云函数完成（安全审计 P0-1），这里只刷新余额
+        if (auth.user && hasImage) sub.refresh();
       }
     } catch (e) {
       const msg = (e as Error).message || 'AI 暂时连不上';
@@ -516,8 +517,7 @@ export function EditorProvider({
 
       update({ design: newDesign });
       addVersion('AI 生成初版');
-      // 三张图按 Flash 档计（与实际调用的模型一致），不再按 3×Pro 扣 30 分
-      await recordUsage(auth.user.id, PRICING.costs.imageFlash * 3, 'image');
+      // 三张图由云函数按张扣分（每张 Flash 单价，失败自动退回），这里只刷新余额
       sub.refresh();
       addChat({ role: 'ai', text: '设计初版已经生成完成！你可以点击画布上的任意元素进行修改。' });
     } catch (e) {

@@ -10,7 +10,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../store';
 import { useAuth } from '../cloud/auth';
-import { useSubscription, recordUsage } from '../cloud/subscription';
+import { useSubscription } from '../cloud/subscription';
 import type { DesignTask, TaskVariant, ImageTier } from '../types';
 import { callImage } from '../engine/seedream';
 import { OPEN_IMAGE_MODELS, imageCost, resolveTier } from '../cloud/models';
@@ -108,10 +108,8 @@ export default function WorkflowStage({ onEnterEditor }: { onEnterEditor: (tool:
     try {
       const src = await callImage(task.prompt, { tier, uid: auth.user?.id });
       const { w, h } = await naturalSize(src);
-      if (auth.user) {
-        await recordUsage(auth.user.id, cost, 'image');
-        sub.refresh();
-      }
+      // 扣分由云函数在出图前完成（安全审计 P0-1），前端只刷新余额
+      if (auth.user) sub.refresh();
       const variant: TaskVariant = {
         src, at: Date.now(), prompt: task.prompt, model: tier, tier,
         naturalW: w, naturalH: h,

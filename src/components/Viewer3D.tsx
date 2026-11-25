@@ -2,7 +2,7 @@
  * 不是"把一张图贴在立方体上"：插舌盒有可开合翻盖、天地盖有上下两件、抽屉盒可抽拉、标签贴在瓶身曲面。 */
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as THREE from 'three';
-import type { DesignDoc, FaceId, StructureId } from '../types';
+import type { DesignDoc, Face, FaceId, StructureId, Dieline } from '../types';
 import { faceSvg } from '../engine/design';
 import { mockupSvg } from '../engine/export';
 import { svgToDataUrl } from '../engine/utils';
@@ -20,6 +20,8 @@ interface Props {
   background: BgKind;
   light: number;
   autoRotate: boolean;
+  /** 真实刀模：3D 的墙高、面尺寸从这里读，不再按 size 猜 */
+  dieline?: Dieline | null;
 }
 
 interface Engine {
@@ -34,6 +36,37 @@ interface Engine {
   raf: number;
   ground: THREE.Mesh;
   fit: number;
+}
+
+/* SVG 作为图片加载时不允许再拉外部资源：项目里保存的是 CloudBase 素材 URL，
+ * 直接塞进 <image href> 会变成碎图标。先 fetch 成 data URL 再生成贴图。
+ * 素材服务器返回 access-control-allow-origin: *，且只用于屏幕预览，不导出。 */
+const inlineCache = new Map<string, Promise<string>>();
+function inlineImage(src: string): Promise<string> {
+  if (!src || src.startsWith('data:') || src.startsWith('blob:')) return Promise.resolve(src);
+  if (!inlineCache.has(src)) {
+    inlineCache.set(src, (async () => {
+      try {
+        const res = await fetch(src, { mode: 'cors' });
+        if (!res.ok) return src;
+        const blob = await res.blob();
+        return await new Promise<string>((resolve) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result || src));
+          fr.onerror = () => resolve(src);
+          fr.readAsDataURL(blob);
+        });
+      } catch { return src; }
+    })());
+  }
+  return inlineCache.get(src)!;
+}
+
+async function inlineFaceImages(face: Face): Promise<Face> {
+  const layers = await Promise.all(face.layers.map(async (l) => (
+    l.type === 'image' && l.src ? { ...l, src: await inlineImage(l.src) } : l
+  )));
+  return { ...face, layers };
 }
 
 /* 贴图按长边 1024 重画一次：直接把 SVG 交给 TextureLoader，浏览器按毫米尺寸光栅化（140mm 只有 140px），
@@ -54,8 +87,11 @@ function faceTexture(design: DesignDoc | null, id: FaceId, fallback: string): TH
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   const img = new Image();
-  img.onload = () => { c.getContext('2d')!.drawImage(img, 0, 0, cw, ch); t.needsUpdate = true; };
-  img.src = svgToDataUrl(faceSvg(face));
+  img.onload = () => { c.getContext('2d')!.drawImage(img, 0, 0, cw, ch); t.needsUpdate = true; URL.revokeObjectURL(img.src); };
+  img.onerror = () => { URL.revokeObjectURL(img.src); };
+  /* 素材转 data URL 后整段 SVG 可能有数 MB，再用 encodeURIComponent 拼 data:image/svg+xml 会超过浏览器上限，
+   * 结果整张画布保持透明黑。Blob URL 没有长度限制，且同源，能稳定解码。 */
+  void inlineFaceImages(face).then((ready) => { img.src = URL.createObjectURL(new Blob([faceSvg(ready)], { type: 'image/svg+xml' })); });
   return t;
 }
 
@@ -98,7 +134,13 @@ function buildModel(p: Props): THREE.Group {
   };
 
   if (p.structure === 'labelRect' || p.structure === 'labelRound') {
-    const r = Math.max(14, L * 0.42), bodyH = Math.max(70, H * 0.92);
+    /* 标签按真实尺寸包上去：弧长 = 面宽，高度 = 面高。
+     * 瓶身半径由标签宽度反算，保证包裹角 ≤ 360°；不再把高度压到 bodyH*0.94 造成比例失真。 */
+    const fw = (p.design?.faces.front?.w || p.size.l) * scale;
+    const fh = (p.design?.faces.front?.h || p.size.w * 0.9) * scale;
+    const minR = fw / (Math.PI * 2) + 0.4;
+    const r = Math.max(12, L * 0.42, minR);
+    const bodyH = Math.max(70, fh * 1.35, H);
     const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, bodyH, 64),
       new THREE.MeshStandardMaterial({ color: new THREE.Color(plain), roughness: 0.35, metalness: 0.05 }));
     body.castShadow = true; g.add(body);
@@ -109,22 +151,43 @@ function buildModel(p: Props): THREE.Group {
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.54, r * 0.54, capH, 64),
       new THREE.MeshStandardMaterial({ color: new THREE.Color(primary), roughness: 0.5 }));
     cap.position.y = bodyH / 2 + shoulderH + capH / 2; cap.castShadow = true; g.add(cap);
-    /* 标签按真实尺寸包上去：弧长 = 面宽，高度 = 面高，别再用固定比例把方形稿拉成长条。 */
-    const fw = (p.design?.faces.front?.w || p.size.l) * scale;
-    const fh = (p.design?.faces.front?.h || p.size.w * 0.9) * scale;
-    const theta = p.structure === 'labelRound' ? Math.PI * 2 : Math.min(Math.PI * 2, Math.max(0.6, fw / r));
-    const labelH = Math.min(bodyH * 0.94, Math.max(12, fh));
-    const label = new THREE.Mesh(
-      new THREE.CylinderGeometry(r + 0.8, r + 0.8, labelH, 96, 1, true, -theta / 2, theta),
-      new THREE.MeshStandardMaterial({ map: tex('front'), roughness: p.material === 'gloss' ? 0.3 : 0.8, side: THREE.DoubleSide }),
-    );
-    label.position.y = -bodyH * 0.02; g.add(label);
+
+    if (p.structure === 'labelRound') {
+      // 圆标是平面贴纸：按真实直径贴在盖面，不环绕瓶身
+      const rad = Math.min(fw, fh) / 2;
+      const disc = new THREE.Mesh(
+        new THREE.CircleGeometry(rad, 64),
+        new THREE.MeshStandardMaterial({ map: tex('front'), roughness: p.material === 'gloss' ? 0.3 : 0.8, side: THREE.DoubleSide }),
+      );
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.y = bodyH / 2 + shoulderH + capH + 0.25;
+      g.add(disc);
+    } else {
+      const theta = Math.min(Math.PI * 2, Math.max(0.6, fw / r));
+      const label = new THREE.Mesh(
+        new THREE.CylinderGeometry(r + 0.8, r + 0.8, fh, 96, 1, true, -theta / 2, theta),
+        new THREE.MeshStandardMaterial({ map: tex('front'), roughness: p.material === 'gloss' ? 0.3 : 0.8, side: THREE.DoubleSide }),
+      );
+      label.position.y = -bodyH * 0.02; g.add(label);
+    }
     g.position.y = 0;
   } else if (p.structure === 'topBottom') {
-    const baseH = H * 0.72, lidH = H * 0.3;
-    const base = box(L, baseH, W, -baseH / 2);
+    // 直接读刀模真实面板：底墙/盖墙/底盒外尺寸/盖盒外尺寸，不用比例猜
+    const baseSheet = p.dieline?.sheets.find((s) => s.id === 'tb-base');
+    const lidSheet = p.dieline?.sheets.find((s) => s.id === 'tb-lid');
+    const baseFront = baseSheet?.rects.find((r) => r.face === 'front');
+    const baseTop = baseSheet?.rects.find((r) => r.label === '底盒·主面');
+    const lidTop = lidSheet?.rects.find((r) => r.face === 'top');
+    const lidFront = lidSheet?.rects.find((r) => r.face === 'front');
+    const baseH = (baseFront?.h || p.size.h * 0.7) * scale;
+    const lidH = (lidFront?.h || p.size.h * 0.3) * scale;
+    const baseL = (baseFront?.w || p.size.l) * scale;
+    const baseW = (baseTop?.h || p.size.w) * scale;
+    const lidL = (lidTop?.w || p.size.l + 2.4) * scale;
+    const lidW = (lidTop?.h || p.size.w + 2.4) * scale;
+    const base = box(baseL, baseH, baseW, -baseH / 2);
     g.add(base);
-    const lid = box(L + 3, lidH, W + 3, baseH / 2 + (p.open ? 42 : lidH / 2));
+    const lid = box(lidL, lidH, lidW, baseH / 2 + (p.open ? 42 : lidH / 2));
     lid.name = 'lid'; g.add(lid);
   } else if (p.structure === 'drawer') {
     const inner = box(L - 5, H * 0.86, W - 5, 0);
@@ -294,7 +357,7 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>((props, ref) => {
     /* 模型归一化到长边 120，但高瘦瓶在固定相机距离下会顶出画面，这里每次重建都重新取景。 */
     e.fit = fitView(e.camera, next, e.ground);
     e.renderer.render(e.scene, e.camera);
-  }, [props.design, props.structure, props.size.l, props.size.w, props.size.h, props.open, props.material]);
+  }, [props.design, props.structure, props.size.l, props.size.w, props.size.h, props.open, props.material, props.dieline]);
 
   // 背景 / 光照 / 自动旋转（无需重建模型）
   useEffect(() => {

@@ -77,12 +77,25 @@ export interface CloudAuthApi {
   /** 更新昵称/头像（直接生效，不需要验证码） */
   updateUserBasicInfo?(p: { nickName?: string; avatarUrl?: string }): Promise<{ error?: Err } | null>;
   signOut(p?: unknown): Promise<AuthEnvelope>;
+  /** 当前登录用户的访问令牌。云函数用它代用户读写 PG（服务端扣费的身份依据）。 */
+  getAccessToken?(): Promise<{ accessToken: string; env: string }>;
   onAuthStateChange(cb: (event: string, session: RawSession) => void): { data?: { subscription?: { unsubscribe?: () => void } } };
 }
 
 export async function authApi(): Promise<CloudAuthApi | null> {
   const a = await ensureApp();
   return a ? (a.auth as CloudAuthApi) : null;
+}
+
+/** 云函数服务端扣费用的用户令牌；拿不到就返回空，由云函数拒绝扣费。 */
+export async function cloudAccessToken(): Promise<string> {
+  const a = await authApi();
+  try {
+    const r = await a?.getAccessToken?.();
+    return r?.accessToken || '';
+  } catch {
+    return '';
+  }
 }
 
 /* ---------------- PostgreSQL（CloudBase RDB / PostgREST 风格） ---------------- */

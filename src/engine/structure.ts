@@ -6,6 +6,18 @@ import { round } from './utils';
 
 const EPS = 0.001;
 
+/** 各结构的物理下限（mm）。低于这个值不是「小包装」，而是无法折叠/无法模切的输入。
+ *  引擎仍会夹到下限以保证不产生非法几何，但会写入 clamped 与 warning，印前必须报错。 */
+export const STRUCTURE_MIN: Record<StructureId, { l: number; w: number; h: number }> = {
+  tuck: { l: 20, w: 15, h: 8 },
+  topBottom: { l: 30, w: 25, h: 18 },
+  drawer: { l: 35, w: 30, h: 20 },
+  mailer: { l: 25, w: 20, h: 15 },
+  pouch: { l: 35, w: 25, h: 20 },
+  labelRect: { l: 20, w: 15, h: 0 },
+  labelRound: { l: 20, w: 15, h: 0 },
+};
+
 export const STRUCTURES: StructureInfo[] = [
   {
     id: 'tuck', name: '常规插舌盒', group: '盒类', difficulty: 1, first: true,
@@ -124,6 +136,61 @@ function subtractIntervals(a: number, b: number, cuts: [number, number][]): [num
   return out;
 }
 
+/** 轴对齐矩形并集的外轮廓（只返回真正外露的边）。
+ *  用于出血线：每个面板向外扩出血后会互相覆盖，逐面板描边会把内部交线也画出来，
+ *  那不是可以交给印厂的出血路径。坐标网格化后取「有料格 ↔ 空格的交界」，再合并共线段。 */
+export function rectUnionOutline(rects: PanelRect[]): Segment[] {
+  const valid = rects.filter((r) => [r.x, r.y, r.w, r.h].every(Number.isFinite) && r.w > EPS && r.h > EPS);
+  if (!valid.length) return [];
+  const uniq = (nums: number[]) => {
+    const s = [...nums].sort((a, b) => a - b);
+    const out: number[] = [];
+    for (const v of s) if (!out.length || Math.abs(v - out[out.length - 1]) > EPS) out.push(v);
+    return out;
+  };
+  const xs = uniq(valid.flatMap((r) => [r.x, r.x + r.w]));
+  const ys = uniq(valid.flatMap((r) => [r.y, r.y + r.h]));
+  if (xs.length < 2 || ys.length < 2) return [];
+  const nx = xs.length - 1, ny = ys.length - 1;
+  const occupied = (i: number, j: number) => {
+    if (i < 0 || j < 0 || i >= nx || j >= ny) return false;
+    const cx = (xs[i] + xs[i + 1]) / 2, cy = (ys[j] + ys[j + 1]) / 2;
+    return valid.some((r) => cx > r.x + EPS && cx < r.x + r.w - EPS && cy > r.y + EPS && cy < r.y + r.h - EPS);
+  };
+  const cells = new Set<string>();
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (occupied(i, j)) cells.add(`${i},${j}`);
+  const raw: Segment[] = [];
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+    if (!cells.has(`${i},${j}`)) continue;
+    if (!cells.has(`${i - 1},${j}`)) raw.push({ x1: xs[i], y1: ys[j], x2: xs[i], y2: ys[j + 1], kind: 'cut' });
+    if (!cells.has(`${i + 1},${j}`)) raw.push({ x1: xs[i + 1], y1: ys[j], x2: xs[i + 1], y2: ys[j + 1], kind: 'cut' });
+    if (!cells.has(`${i},${j - 1}`)) raw.push({ x1: xs[i], y1: ys[j], x2: xs[i + 1], y2: ys[j], kind: 'cut' });
+    if (!cells.has(`${i},${j + 1}`)) raw.push({ x1: xs[i], y1: ys[j + 1], x2: xs[i + 1], y2: ys[j + 1], kind: 'cut' });
+  }
+  // 把同一直线上连续的格边合并成一条线段，避免输出几千条 1mm 小段
+  const groups = new Map<string, [number, number][]>();
+  for (const s of raw) {
+    const vertical = Math.abs(s.x1 - s.x2) < EPS;
+    const at = round(vertical ? s.x1 : s.y1, 3);
+    const a = vertical ? Math.min(s.y1, s.y2) : Math.min(s.x1, s.x2);
+    const b = vertical ? Math.max(s.y1, s.y2) : Math.max(s.x1, s.x2);
+    const key = `${vertical ? 'v' : 'h'}:${at}`;
+    const list = groups.get(key) || [];
+    list.push([a, b]); groups.set(key, list);
+  }
+  const out: Segment[] = [];
+  for (const [key, list] of groups) {
+    const vertical = key.startsWith('v:');
+    const at = Number(key.slice(2));
+    for (const [a, b] of mergeIntervals(list)) {
+      out.push(vertical
+        ? { x1: at, y1: a, x2: at, y2: b, kind: 'bleed' }
+        : { x1: a, y1: at, x2: b, y2: at, kind: 'bleed' });
+    }
+  }
+  return out;
+}
+
 /** 面片并集边界：外露边=裁切线，公共边=压痕线 */
 function boundary(rects: PanelRect[], withCrease: boolean) {
   const edges = rects.flatMap((r, i) => edgesOf(r, i));
@@ -157,16 +224,16 @@ function assemble(
 ): Sheet {
   const { cut, crease } = boundary(raw, circles.length === 0);
   const expanded = raw.map((r) => ({ ...r, x: r.x - bleed, y: r.y - bleed, w: r.w + bleed * 2, h: r.h + bleed * 2 }));
-  const bleedLines = circles.length ? [] : boundary(expanded, false).cut.map((s) => ({ ...s, kind: 'bleed' as const }));
+  const bleedLines = circles.length ? [] : rectUnionOutline(expanded);
   const safeRects = raw.filter((r) => r.artwork && r.face).map((r) => ({
     x: r.x + safe, y: r.y + safe, w: Math.max(0, r.w - safe * 2), h: Math.max(0, r.h - safe * 2),
-  }));
+  })).filter((r) => r.w > EPS && r.h > EPS);
   const safeLines: Segment[] = safeRects.flatMap((r) => [
-    { x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y, kind: 'safe' },
-    { x1: r.x + r.w, y1: r.y, x2: r.x + r.w, y2: r.y + r.h, kind: 'safe' },
-    { x1: r.x + r.w, y1: r.y + r.h, x2: r.x, y2: r.y + r.h, kind: 'safe' },
-    { x1: r.x, y1: r.y + r.h, x2: r.x, y2: r.y, kind: 'safe' },
-  ]);
+    { x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y, kind: 'safe' as const },
+    { x1: r.x + r.w, y1: r.y, x2: r.x + r.w, y2: r.y + r.h, kind: 'safe' as const },
+    { x1: r.x + r.w, y1: r.y + r.h, x2: r.x, y2: r.y + r.h, kind: 'safe' as const },
+    { x1: r.x, y1: r.y + r.h, x2: r.x, y2: r.y, kind: 'safe' as const },
+  ]).filter((s) => Math.abs(s.x1 - s.x2) > EPS || Math.abs(s.y1 - s.y2) > EPS);
   const right = Math.max(...raw.map((r) => r.x + r.w));
   const bottom = Math.max(...raw.map((r) => r.y + r.h));
   const shift = (s: Segment): Segment => ({ ...s, x1: s.x1 + bleed, y1: s.y1 + bleed, x2: s.x2 + bleed, y2: s.y2 + bleed });
@@ -258,8 +325,8 @@ export type StructureExtra = Record<string, number>;
 /** 读取补充参数：缺失或非法时退回引擎默认值，并夹到物理可用的区间内。 */
 const extraNum = (extra: StructureExtra | undefined, key: string, fallback: number, min: number, max: number) => {
   const n = Number(extra?.[key]);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return Math.min(max, Math.max(min, n));
+  const v = Number.isFinite(n) && n > 0 ? n : fallback;
+  return Math.min(max, Math.max(min, v));
 };
 
 /** 圆角矩形轮廓（用短直线段逼近圆弧：现有 Segment 只有直线类型）。
@@ -317,88 +384,157 @@ export function buildDieline(
   safe = 5,
   extra?: StructureExtra,
 ): Dieline {
-  const l = Math.max(20, size.l), w = Math.max(15, size.w), h = Math.max(8, size.h);
+  const min = STRUCTURE_MIN[structure] || STRUCTURE_MIN.tuck;
+  const rawIn = { l: size?.l, w: size?.w, h: size?.h };
   const warnings: string[] = [];
+  /** 非法输入不静默变成合法：夹到下限，同时留下 clamped 标记与可读原因。 */
+  const fit = (v: number, floor: number, label: string) => {
+    if (!Number.isFinite(v)) {
+      warnings.push(`${label} 不是有效数字（${String(v)}），已按结构下限 ${floor}mm 计算；该刀模不能用于生产。`);
+      return floor;
+    }
+    if (v <= 0) {
+      warnings.push(`${label} 为 ${v}mm，已按结构下限 ${floor}mm 计算；该刀模不能用于生产。`);
+      return floor;
+    }
+    if (v < floor) {
+      warnings.push(`${label} ${round(v, 2)}mm 低于「${STRUCTURES.find((s) => s.id === structure)?.name || structure}」下限 ${floor}mm，已夹到下限；该刀模不能用于生产。`);
+      return floor;
+    }
+    return v;
+  };
+  const l = fit(rawIn.l, min.l, '长度');
+  const w = fit(rawIn.w, min.w, '宽度');
+  const h = fit(rawIn.h, Math.max(8, min.h), '高度');
+  const b = Number.isFinite(bleed) && bleed > 0 ? bleed : 3;
+  const sf = Number.isFinite(safe) && safe > 0 ? safe : 5;
+  if (b !== bleed) warnings.push(`出血值 ${String(bleed)} 不合法，已按 ${b}mm 计算。`);
+  if (sf !== safe) warnings.push(`安全区 ${String(safe)} 不合法，已按 ${sf}mm 计算。`);
+  const clamped = l !== rawIn.l || w !== rawIn.w || h !== rawIn.h;
+  /** 补充参数同样不静默：缺失用默认值，非法或越界时说明实际采用了什么。 */
+  const xnum = (key: string, fallback: number, min: number, max: number) => {
+    const raw = extra?.[key];
+    const n = Number(raw);
+    const v = extraNum(extra, key, fallback, min, max);
+    if (raw !== undefined) {
+      if (!Number.isFinite(n) || n <= 0) {
+        warnings.push(`结构参数「${key}」=${String(raw)} 不合法，已按默认值 ${v}mm 计算。`);
+      } else if (v !== n) {
+        warnings.push(`结构参数「${key}」=${round(n, 2)}mm 超出 ${min}–${max}mm，已夹到 ${v}mm。`);
+      }
+    }
+    return v;
+  };
   let sheets: Sheet[] = [];
 
   if (structure === 'tuck') {
     // 粘合位宽度 / 插舌长度：优先用用户确认的值，否则用按宽度推导的默认值
-    const glue = extraNum(extra, 'glue', round(Math.min(16, Math.max(9, w * 0.18)), 2), 5, 30);
-    const tuckLen = extraNum(extra, 'tuckLen', round(Math.min(20, Math.max(11, w * 0.32)), 2), 8, 45);
-    sheets = [assemble('tuck-main', '插舌盒展开图', tuckNet(l, w, h, glue, tuckLen), bleed, safe)];
+    const glue = xnum('glue', round(Math.min(16, Math.max(9, w * 0.18)), 2), 5, 30);
+    const tuckLen = xnum('tuckLen', round(Math.min(20, Math.max(11, w * 0.32)), 2), 8, 45);
+    sheets = [assemble('tuck-main', '插舌盒展开图', tuckNet(l, w, h, glue, tuckLen), b, sf)];
     if (glue < 9 || glue > 20) warnings.push(`粘合位宽度 ${glue}mm 偏离常见 9–20mm 区间，请与印厂确认。`);
     if (tuckLen > 25) warnings.push(`插舌长度 ${tuckLen}mm 偏大，过长的插舌会影响成品挺度。`);
   } else if (structure === 'topBottom') {
-    // 盒盖高度 = 盖盒侧壁高；套合间隙 = 盖盒每边比底盒宽出的配合余量
-    const lidWall = extraNum(extra, 'wall', Math.max(12, h * 0.3), 8, 120);
-    const gap = extraNum(extra, 'gap', 1.2, 0.3, 5);
-    const baseWall = Math.max(10, h - lidWall);
+    // 盖墙 + 底墙必须等于成品总高，否则标注高度和实际展开结构对不上。
+    // 盖墙最小 8mm、底墙至少 10mm：h 小于 18mm 时这个结构本身不成立（已在上方按结构下限夹取）。
+    const lidWall = xnum('wall', Math.max(12, h * 0.3), 8, Math.max(8, h - 10));
+    const gap = xnum('gap', 1.2, 0.3, 5);
+    const baseWall = round(Math.max(10, h - lidWall), 2);
     sheets = [
-      assemble('tb-base', '底盒展开图', trayNet(l, w, baseWall, '底盒'), bleed, safe),
-      assemble('tb-lid', '盖盒展开图', trayNet(l + gap * 2, w + gap * 2, lidWall, '盖盒', 'top'), bleed, safe),
+      assemble('tb-base', '底盒展开图', trayNet(l, w, baseWall, '底盒'), b, sf),
+      assemble('tb-lid', '盖盒展开图', trayNet(l + gap * 2, w + gap * 2, lidWall, '盖盒', 'top'), b, sf),
     ];
-    if (baseWall < 10) warnings.push('盒盖高度接近成品总高，底盒高度不足，请复核结构参数。');
+    if (Math.abs(baseWall + lidWall - h) > 0.2) warnings.push(`盖墙 ${lidWall}mm + 底墙 ${baseWall}mm 与成品总高 ${h}mm 不一致，请复核结构参数。`);
     if (gap < 0.5) warnings.push('套合间隙小于 0.5mm，盖盒可能难以套合。');
   } else if (structure === 'drawer') {
     // 内盒壁厚 = 内盒侧壁高度
-    const wall = extraNum(extra, 'wall', Math.max(14, h * 0.85), 8, 100);
+    const wall = xnum('wall', Math.max(14, h * 0.85), 8, 100);
     const innerWall = Math.min(wall, Math.max(10, h - 5));
     sheets = [
-      assemble('dw-tray', '内盒展开图', trayNet(l - 3, w - 3, innerWall, '内盒'), bleed, safe),
-      assemble('dw-sleeve', '外套展开图', sleeveNet(l, w, h), bleed, safe),
+      assemble('dw-tray', '内盒展开图', trayNet(l - 3, w - 3, innerWall, '内盒'), b, sf),
+      assemble('dw-sleeve', '外套展开图', sleeveNet(l, w, h), b, sf),
     ];
   } else if (structure === 'mailer') {
     // 侧翼长度
-    const flap = extraNum(extra, 'flap', round(Math.min(120, Math.max(15, w * 0.28)), 2), 15, 120);
-    sheets = [assemble('mailer-main', '飞机盒展开图', mailerNet(l, w, h, flap), bleed, safe)];
+    const flap = xnum('flap', round(Math.min(120, Math.max(15, w * 0.28)), 2), 15, 120);
+    sheets = [assemble('mailer-main', '飞机盒展开图', mailerNet(l, w, h, flap), b, sf)];
     if (flap > w * 0.6) warnings.push(`侧翼长度 ${flap}mm 已超过盒宽的 60%，折叠后容易干涉。`);
   } else if (structure === 'pouch') {
-    const gusset = round(Math.min(60, Math.max(20, w * 0.5)), 2);
+    // 底部折角不能比袋宽还大；w < 20mm 时按袋宽收窄，并在印前提示这已不是常规自立袋比例。
+    const gusset = round(Math.min(w, Math.min(60, Math.max(20, w * 0.5))), 2);
+    if (w < 20) warnings.push(`袋宽 ${w}mm 小于常规自立袋下限，底部折角已按袋宽收窄到 ${gusset}mm。`);
     // 顶部封口边
-    const seal = extraNum(extra, 'seal', 12, 5, 40);
+    const seal = xnum('seal', 12, 5, 40);
     sheets = [assemble('pouch', '自立袋展开图', [
       { x: 0, y: 0, w: l, h: seal, label: '顶部封口边' },
       { x: 0, y: seal, w: l, h, label: '正面', face: 'front', artwork: true },
       { x: l, y: seal, w: l, h, label: '背面', face: 'back', artwork: true },
       { x: 0, y: seal + h, w: l, h: gusset, label: '底部折角' },
       { x: l, y: seal + h, w: l, h: gusset, label: '底部折角' },
-    ], bleed, safe)];
+    ], b, sf)];
   } else if (structure === 'labelRect') {
     // 圆角半径：>0 时按圆角生成裁切与出血线，0 为直角
-    const radius = extraNum(extra, 'radius', 0, 0, 30);
+    const radius = xnum('radius', 0, 0, 30);
     sheets = radius > 0.05
-      ? [roundedLabelSheet(l, w, radius, bleed, safe)]
+      ? [roundedLabelSheet(l, w, radius, b, sf)]
       : [assemble('label-rect', '矩形标签', [
         { x: 0, y: 0, w: l, h: w, face: 'front', label: '标签', artwork: true },
-      ], bleed, safe)];
+      ], b, sf)];
   } else {
     const r = Math.min(l, w) / 2;
     const cx = l / 2, cy = w / 2;
     const raw: PanelRect[] = [{ x: 0, y: 0, w: l, h: w, face: 'front', label: '圆形标签', artwork: true }];
-    const sheet = assemble('label-round', '圆形标签', raw, bleed, safe, [
-      { cx, cy, r, kind: 'cut' }, { cx, cy, r: r + bleed, kind: 'bleed' },
+    const sheet = assemble('label-round', '圆形标签', raw, b, sf, [
+      { cx, cy, r, kind: 'cut' }, { cx, cy, r: r + b, kind: 'bleed' },
     ]);
     // 圆标签只有圆形裁切，移除矩形裁切线；保留安全区提示
     sheet.segments = sheet.segments.filter((s) => s.kind !== 'cut' && s.kind !== 'crease' && s.kind !== 'bleed');
-    sheet.safeRects = [{ x: cx - r + safe, y: cy - r + safe, w: (r - safe) * 2, h: (r - safe) * 2 }];
+    const safeR = Math.max(0, r - sf);
+    sheet.safeRects = safeR > EPS
+      ? [{ x: cx - safeR, y: cy - safeR, w: safeR * 2, h: safeR * 2 }]
+      : [];
+    if (!safeR) warnings.push(`圆标签半径 ${round(r, 2)}mm 不足 ${sf}mm 安全区，无法生成安全边界。`);
     sheets = [sheet];
   }
 
   if (l / w > 6 || w / l > 6) warnings.push('长宽比例较极端，建议与印厂确认纸张与模切可行性。');
-  if (h > l * 2) warnings.push('盒高明显大于盒长，折叠纸盒成型难度较高。');
-  if (bleed < 2 || bleed > 5) warnings.push('出血值超出常见 3mm 范围，请确认印厂要求。');
+  if (structure !== 'labelRect' && structure !== 'labelRound' && h > l * 2) warnings.push('盒高明显大于盒长，折叠纸盒成型难度较高。');
+  if (b < 2 || b > 5) warnings.push('出血值超出常见 3mm 范围，请确认印厂要求。');
 
-  return { structure, sheets, bleed, safe, finished: { l, w, h }, warnings };
+  // 面太窄时安全区会被压成 0；这不是合法安全区，必须在印前报错。
+  for (const sheet of sheets) {
+    for (const r of sheet.rects) {
+      if (r.face && r.artwork && (r.w <= sf * 2 + EPS || r.h <= sf * 2 + EPS)) {
+        warnings.push(`「${r.label}」${round(r.w, 2)}×${round(r.h, 2)}mm 不足以留出 ${sf}mm 安全区。`);
+      }
+    }
+  }
+
+  return { structure, sheets, bleed: b, safe: sf, finished: { l, w, h }, warnings, clamped, input: rawIn as { l: number; w: number; h: number } };
 }
 
-/** 每个可印刷面的成品尺寸（mm）—— 排版引擎与 3D 贴图共用 */
+/** 每个可印刷面的成品尺寸（mm）—— 排版引擎与 3D 贴图共用。
+ *  只返回真实存在的面：标签只有一个正面，不存在「背面」；3D 不能凭空贴一个 back。 */
 export function faceSizes(structure: StructureId, size: { l: number; w: number; h: number }) {
-  const l = Math.max(20, size.l), w = Math.max(15, size.w), h = Math.max(8, size.h);
+  const min = STRUCTURE_MIN[structure] || STRUCTURE_MIN.tuck;
+  const l = Math.max(min.l, size.l), w = Math.max(min.w, size.w), h = Math.max(Math.max(8, min.h), size.h);
   if (structure === 'labelRect' || structure === 'labelRound') {
-    return { front: { w: l, h: w }, back: { w: l, h: w } };
+    return { front: { w: l, h: w } };
   }
   if (structure === 'pouch') {
     return { front: { w: l, h }, back: { w: l, h } };
+  }
+  if (structure === 'topBottom') {
+    /* 天地盖不是「一整面 h」：底盒四墙只有 baseWall 高，盖盒顶面是 l+2gap × w+2gap。
+     * 2D 画布必须按真实面板，否则 3D 贴图会把 40mm 的图压到 28mm 的墙上。 */
+    const lidWall = Math.min(Math.max(8, h - 10), Math.max(12, h * 0.3));
+    const baseWall = Math.max(10, h - lidWall);
+    const gap = 1.2;
+    return {
+      front: { w: l, h: baseWall }, back: { w: l, h: baseWall },
+      left: { w: baseWall, h: w }, right: { w: baseWall, h: w },
+      top: { w: l + gap * 2, h: w + gap * 2 },
+    };
   }
   return {
     front: { w: l, h }, back: { w: l, h },

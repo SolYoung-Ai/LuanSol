@@ -34,9 +34,16 @@ export function spreadSvg(design: DesignDoc, dieline: Dieline, sheetIndex = 0, s
   };
   const circles = sheet.circles.map((c) => `<circle cx="${n(c.cx)}" cy="${n(c.cy)}" r="${n(c.r)}" fill="none" stroke="${c.kind === 'cut' ? '#111' : '#2b7fc3'}" stroke-width="0.35" stroke-dasharray="${c.kind === 'cut' ? '' : '1 1'}"/>`).join('');
   const labels = (showDieline ? '' : panels.map((p) => `<text x="${n(p.x + 2)}" y="${n(p.y + 5)}" font-size="3.5" fill="#9a9a9a" font-family="sans-serif">${escapeXml(p.label)}</text>`).join(''));
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n(sheet.width)}mm" height="${n(sheet.height)}mm" viewBox="0 0 ${n(sheet.width)} ${n(sheet.height)}">
+  // 分层输出：印刷 / 裁切 / 压痕 / 出血 / 安全边各自成组，印厂可以单独关层检查。
+  const lineGroups = (['cut', 'crease', 'bleed', 'safe'] as const).map((k) => {
+    const lines = sheet.segments.filter((s) => s.kind === k).map(line).join('');
+    return lines ? `<g id="layer-${k}" data-layer-kind="${k}">${lines}</g>` : '';
+  }).join('');
+  const circleGroups = circles ? `<g id="layer-cut-circles" data-layer-kind="cut">${circles}</g>` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n(sheet.width)}mm" height="${n(sheet.height)}mm" viewBox="0 0 ${n(sheet.width)} ${n(sheet.height)}" data-sheet="${escapeXml(sheet.name)}" data-width-mm="${n(sheet.width)}" data-height-mm="${n(sheet.height)}" data-bleed-mm="${n(dieline.bleed)}" data-safe-mm="${n(dieline.safe)}">
 <rect width="${n(sheet.width)}" height="${n(sheet.height)}" fill="#ffffff"/>
-${bgParts}${artParts}${showDieline ? sheet.segments.map(line).join('') + circles : labels}
+<g id="layer-print" data-layer-kind="print">${bgParts}${artParts}</g>
+${showDieline ? lineGroups + circleGroups : labels}
 </svg>`;
 }
 
@@ -57,8 +64,9 @@ export async function svgToCanvas(svg: string, widthMm: number, heightMm: number
 export const canvasToBlob = (c: HTMLCanvasElement, type = 'image/png', q = 0.94) =>
   new Promise<Blob>((resolve, reject) => c.toBlob((b) => b ? resolve(b) : reject(new Error('图片生成失败')), type, q));
 
-/** 单个文字图层按指定 DPI 单独栅格化（等效转曲），避免依赖印厂字体 */
-async function textLayerPng(l: TextLayer, dpi: number): Promise<string> {
+/** 单个文字图层按指定 DPI 单独栅格化（等效转曲），避免依赖印厂字体。
+ *  color 用于工艺页：同一份文字几何，输出成 100% 黑 mask。 */
+async function textLayerPng(l: TextLayer, dpi: number, color = l.color): Promise<string> {
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.ceil(mmToPx(l.w, dpi)));
   c.height = Math.max(1, Math.ceil(mmToPx(l.h, dpi)));
@@ -67,13 +75,36 @@ async function textLayerPng(l: TextLayer, dpi: number): Promise<string> {
   ctx.scale(scale, scale); // 之后 1 单位 = 1mm
   const fs = ptToMm(l.fontSize);
   ctx.font = `${l.fontWeight} ${fs}px ${l.fontFamily}`;
-  ctx.fillStyle = l.color;
+  ctx.fillStyle = color;
   ctx.textBaseline = 'top';
   ctx.textAlign = l.align === 'center' ? 'center' : l.align === 'right' ? 'right' : 'left';
   try { (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${l.letterSpacing}em`; } catch { /* 老浏览器忽略 */ }
   const tx = l.align === 'center' ? l.w / 2 : l.align === 'right' ? l.w : 0;
   const lines = wrapText(l.text, l.w, fs, l.letterSpacing);
   lines.forEach((line, i) => ctx.fillText(line, tx, i * fs * l.lineHeight));
+  return c.toDataURL('image/png');
+}
+
+/** 图片 → 100% 黑工艺 mask（保留原图 alpha 与 fit 规则），用于烫金/UV 单独出片 */
+async function imageMaskPng(l: Extract<Layer, { type: 'image' }>, dpi: number): Promise<string> {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(mmToPx(l.w, dpi)));
+  c.height = Math.max(1, Math.ceil(mmToPx(l.h, dpi)));
+  const ctx = c.getContext('2d')!;
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('图片无法解码'));
+    img.src = l.src;
+  });
+  const nw = l.naturalW || img.naturalWidth || 1;
+  const nh = l.naturalH || img.naturalHeight || 1;
+  const s = l.fit === 'cover' ? Math.max(c.width / nw, c.height / nh) : Math.min(c.width / nw, c.height / nh);
+  const dw = nw * s, dh = nh * s;
+  ctx.drawImage(img, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, c.width, c.height);
   return c.toDataURL('image/png');
 }
 
@@ -104,8 +135,10 @@ function drawPrim(doc: jsPDF, p: Prim, ox: number, oy: number) {
 
 async function drawLayerPdf(doc: jsPDF, l: Layer, ox: number, oy: number, dpi: number) {
   if (l.hidden) return;
+  if (l.process && l.process !== 'print') return; // 工艺层不进普通 CMYK 页
   if (l.type === 'shape') { for (const p of shapePrims(l)) drawPrim(doc, p, ox + l.x, oy + l.y); return; }
   if (l.type === 'image') {
+    if (!l.src) return;
     const fmt = l.src.startsWith('data:image/png') ? 'PNG' : 'JPEG';
     try { doc.addImage(l.src, fmt, ox + l.x, oy + l.y, l.w, l.h); } catch { /* 忽略不可解码图片 */ }
     return;
@@ -114,78 +147,129 @@ async function drawLayerPdf(doc: jsPDF, l: Layer, ox: number, oy: number, dpi: n
   doc.addImage(png, 'PNG', ox + l.x, oy + l.y, l.w, l.h);
 }
 
-function drawDielinePage(doc: jsPDF, sheet: Sheet, dieline: Dieline) {
+function pageForSheet(doc: jsPDF, sheet: Sheet) {
   doc.addPage([sheet.width, sheet.height], sheet.width >= sheet.height ? 'landscape' : 'portrait');
-  const styleFor = (kind: Segment['kind']) => {
-    if (kind === 'cut') { doc.setDrawColor(20, 20, 20); doc.setLineWidth(0.35); doc.setLineDashPattern([], 0); }
-    else if (kind === 'crease') { doc.setDrawColor(200, 60, 60); doc.setLineWidth(0.25); doc.setLineDashPattern([2, 1.5], 0); }
-    else if (kind === 'bleed') { doc.setDrawColor(60, 130, 190); doc.setLineWidth(0.2); doc.setLineDashPattern([1, 1], 0); }
-    else { doc.setDrawColor(170, 170, 170); doc.setLineWidth(0.18); doc.setLineDashPattern([0.8, 1.2], 0); }
-  };
-  let prev = '';
-  for (const s of sheet.segments) { if (s.kind !== prev) { styleFor(s.kind); prev = s.kind; } doc.line(s.x1, s.y1, s.x2, s.y2); }
-  for (const c of sheet.circles) { styleFor(c.kind === 'cut' ? 'cut' : 'bleed'); doc.circle(c.cx, c.cy, c.r); }
-  doc.setLineDashPattern([], 0);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(3); doc.setTextColor(90, 90, 90);
-  // 仅用 ASCII：jsPDF 标准字体遇中文会切换 UTF-16 编码并使标记不可读
-  doc.text(`LunaSol DIELINE  |  ${sheet.id}  |  ${sheet.width} x ${sheet.height} mm  |  BLEED ${dieline.bleed}mm  |  SOLID=CUT  DASH=CREASE`, 5, sheet.height - 3);
+  pdfFill(doc, '#ffffff');
+  doc.rect(0, 0, sheet.width, sheet.height, 'F');
 }
 
-/** 生成印刷 PDF：每个展开图两页（设计页 + 独立刀模页） */
-export async function buildPdf(design: DesignDoc, dieline: Dieline, dpi = 300): Promise<{ blob: Blob; bytes: Uint8Array }> {
+/** 单类刀模页：CUT 页只有裁切，CREASE 页只有压痕。
+ *  不把两种专色混成一页，印厂可以分别出版。 */
+function drawDielineKindPage(doc: jsPDF, sheet: Sheet, dieline: Dieline, kind: 'cut' | 'crease') {
+  pageForSheet(doc, sheet);
+  if (kind === 'cut') { doc.setDrawColor(20, 20, 20); doc.setLineWidth(0.35); doc.setLineDashPattern([], 0); }
+  else { doc.setDrawColor(200, 60, 60); doc.setLineWidth(0.25); doc.setLineDashPattern([2, 1.5], 0); }
+  for (const s of sheet.segments.filter((x) => x.kind === kind)) doc.line(s.x1, s.y1, s.x2, s.y2);
+  if (kind === 'cut') for (const c of sheet.circles.filter((x) => x.kind === 'cut')) doc.circle(c.cx, c.cy, c.r);
+  doc.setLineDashPattern([], 0);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(3); doc.setTextColor(90, 90, 90);
+  doc.text(`LunaSol ${kind.toUpperCase()}  |  ${sheet.id}  |  ${sheet.width} x ${sheet.height} mm  |  BLEED ${dieline.bleed}mm  |  MM`, 5, sheet.height - 3);
+}
+
+const PROCESS_LABEL: Record<'foil' | 'uv' | 'spot', string> = {
+  foil: 'SPOT FOIL', uv: 'SPOT UV', spot: 'SPOT COLOUR',
+};
+
+/** 特殊工艺页：只保留该工艺的几何，100% 黑 = 工艺区域。
+ *  文字用黑色 mask 栅格化，图片保留原 alpha 后压成黑，矢量图形直接黑色填充。 */
+async function drawProcessPage(
+  doc: jsPDF, sheet: Sheet, design: DesignDoc, process: 'foil' | 'uv' | 'spot', dpi: number,
+) {
+  pageForSheet(doc, sheet);
+  for (const p of sheet.rects.filter((r) => r.face && r.artwork)) {
+    const face = design.faces[p.face!];
+    if (!face) continue;
+    for (const l of face.layers) {
+      if (l.hidden || l.process !== process) continue;
+      const x = p.x + l.x, y = p.y + l.y;
+      if (l.type === 'shape') {
+        for (const prim of shapePrims({ ...l, fill: '#000000', stroke: '#000000' })) drawPrim(doc, prim, x, y);
+      } else if (l.type === 'image' && l.src) {
+        try { doc.addImage(await imageMaskPng(l, dpi), 'PNG', x, y, l.w, l.h); } catch { /* 不能解码的图片留给印前报错 */ }
+      } else if (l.type === 'text') {
+        doc.addImage(await textLayerPng(l, dpi, '#000000'), 'PNG', x, y, l.w, l.h);
+      }
+    }
+  }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(3); doc.setTextColor(90, 90, 90);
+  doc.text(`LunaSol ${PROCESS_LABEL[process]}  |  ${sheet.id}  |  ${sheet.width} x ${sheet.height} mm  |  BLACK 100% = PROCESS AREA`, 5, sheet.height - 3);
+}
+
+/** 生成印刷 PDF：每张展开图 = 印刷页 + CUT 页 + CREASE 页（+ 每个特殊工艺页）。
+ *  全部页面使用真实毫米尺寸，绝不把画布截图塞进 PDF。 */
+export async function buildPdf(
+  design: DesignDoc, dieline: Dieline, dpi = 300,
+  prepress?: { status: 'pass' | 'warning' | 'error'; summary: string },
+): Promise<{ blob: Blob; bytes: Uint8Array }> {
   const { jsPDF } = await import('jspdf');
   const first = dieline.sheets[0];
-  // compress:false 让内容流保持可读，便于做真实的字节级预检（MediaBox / 刀模页 / 文字层）
   const doc = new jsPDF({ unit: 'mm', format: [first.width, first.height], orientation: first.width >= first.height ? 'landscape' : 'portrait', compress: false });
-  doc.setProperties({ title: `${design.name} · LunaSol 印刷稿`, subject: 'Packaging artwork + dieline', creator: 'LunaSol AI Packaging Studio' });
+  doc.setProperties({
+    title: `${design.name} · LunaSol 印刷稿`,
+    subject: `Packaging artwork + separated dieline. Sheets: ${dieline.sheets.map((x) => `${x.name} ${x.width}x${x.height}mm`).join('; ')}. Prepress: ${prepress ? prepress.status : 'not-run'}${prepress ? ' — ' + prepress.summary : ''}`,
+    creator: 'LunaSol AI Packaging Studio',
+  });
   for (let i = 0; i < dieline.sheets.length; i++) {
     const sheet = dieline.sheets[i];
-    if (i > 0) doc.addPage([sheet.width, sheet.height], sheet.width >= sheet.height ? 'landscape' : 'portrait');
-    // 整页底色（覆盖出血区）
-    const bg = (design.faces.front || Object.values(design.faces)[0] as Face | undefined)?.bg || '#ffffff';
-    pdfFill(doc, bg); doc.rect(0, 0, sheet.width, sheet.height, 'F');
-    // 各面的出血底色
+    if (i > 0) pageForSheet(doc, sheet);
+    else { pdfFill(doc, '#ffffff'); doc.rect(0, 0, sheet.width, sheet.height, 'F'); }
+    // 每个可印刷面自己的底色只铺到该面板 + 出血，不铺满整张纸
     for (const p of sheet.rects.filter((r) => r.face && r.artwork)) {
       const f = design.faces[p.face!];
       if (!f) continue;
       pdfFill(doc, f.bg);
       doc.rect(p.x - dieline.bleed, p.y - dieline.bleed, p.w + dieline.bleed * 2, p.h + dieline.bleed * 2, 'F');
     }
-    // 逐图层绘制
+    // 只绘制普通印刷层；烫金/UV/专色另出页
     for (const p of sheet.rects.filter((r) => r.face && r.artwork)) {
       const f = design.faces[p.face!];
       if (!f) continue;
       for (const l of f.layers) await drawLayerPdf(doc, l, p.x, p.y, dpi);
     }
-    drawDielinePage(doc, sheet, dieline);
+    drawDielineKindPage(doc, sheet, dieline, 'cut');
+    drawDielineKindPage(doc, sheet, dieline, 'crease');
+    const processes = new Set<'foil' | 'uv' | 'spot'>();
+    for (const p of sheet.rects.filter((r) => r.face && r.artwork)) {
+      const f = design.faces[p.face!];
+      if (!f) continue;
+      for (const l of f.layers) if (l.process && l.process !== 'print') processes.add(l.process);
+    }
+    for (const process of processes) await drawProcessPage(doc, sheet, design, process, dpi);
   }
   const bytes = new Uint8Array(doc.output('arraybuffer'));
   return { blob: new Blob([bytes], { type: 'application/pdf' }), bytes };
 }
 
-/** 对导出的 PDF 做真实字节级预检：文件头、页面数、MediaBox 毫米尺寸 */
+/** 对导出的 PDF 做真实字节级预检：文件头、页面数、MediaBox 毫米尺寸、分层页标记 */
 export function verifyPdf(bytes: Uint8Array, sheets: Sheet[]) {
-  // 扫描完整字节流：刀模页位于文件尾部，截断会漏检
   const text = new TextDecoder('latin1').decode(bytes);
   const header = text.slice(0, 8);
   const pages = (text.match(/\/Type\s*\/Page\b/g) || []).length;
   const boxes = [...text.matchAll(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/g)].map((m) => ({ w: Number(m[1]), h: Number(m[2]) }));
   const expectedPt = sheets.map((s) => ({ w: s.width * 2.8346, h: s.height * 2.8346 }));
   const sizeOk = boxes.length > 0 && expectedPt.every((e) => boxes.some((b) => Math.abs(b.w - e.w) < 3 && Math.abs(b.h - e.h) < 3));
+  const cutPages = (text.match(/LunaSol CUT/g) || []).length;
+  const creasePages = (text.match(/LunaSol CREASE/g) || []).length;
   const issues: string[] = [];
   if (!header.startsWith('%PDF-')) issues.push('缺少 PDF 文件头');
-  if (pages < sheets.length * 2) issues.push(`页面数不足（应为 ${sheets.length * 2} 页，检测到 ${pages} 页）`);
+  if (pages < sheets.length * 3) issues.push(`页面数不足（应至少 ${sheets.length * 3} 页，检测到 ${pages} 页）`);
   if (!sizeOk) issues.push('页面物理尺寸（毫米）与刀模展开尺寸不一致');
-  if (!text.includes('LunaSol DIELINE')) issues.push('未检测到独立刀模页');
-  return { ok: issues.length === 0, issues, pages, boxes, bytes: bytes.length };
+  if (cutPages < sheets.length) issues.push('未检测到每张展开图独立的 CUT 页');
+  if (creasePages < sheets.length) issues.push('未检测到每张展开图独立的 CREASE 页');
+  if ((text.match(/BLACK 100% = PROCESS AREA/g) || []).length > 0 && !text.includes('SPOT')) issues.push('工艺页缺少 SPOT 标记');
+  return { ok: issues.length === 0, issues, pages, boxes, bytes: bytes.length, cutPages, creasePages };
 }
+
 
 /** DXF R2000 最小可用结构，单位 mm，Y 轴翻转为 CAD 坐标系 */
 export function buildDxf(dieline: Dieline, sheetIndex = 0): string {
   const s = dieline.sheets[sheetIndex];
   const flip = (y: number) => round(s.height - y, 3);
-  const L: string[] = ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1015', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
-    '0', 'SECTION', '2', 'ENTITIES'];
+  const L: string[] = ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1015',
+    '9', '$INSUNITS', '70', '4', '9', '$MEASUREMENT', '70', '1', '9', '$LUNITS', '70', '2',
+    '9', '$EXTMIN', '10', '0', '20', '0', '30', '0',
+    '9', '$EXTMAX', '10', String(round(s.width, 3)), '20', String(round(s.height, 3)), '30', '0',
+    '0', 'ENDSEC', '0', 'SECTION', '2', 'ENTITIES'];
   for (const seg of s.segments.filter((x) => x.kind === 'cut' || x.kind === 'crease')) {
     const layer = seg.kind === 'cut' ? 'CUT' : 'CREASE';
     L.push('0', 'LINE', '8', layer, '10', String(round(seg.x1, 3)), '20', String(flip(seg.y1)), '30', '0',
@@ -259,7 +343,7 @@ export async function buildBundle(design: DesignDoc, dieline: Dieline, dpi = 300
     `展开图：${dieline.sheets.map((s) => `${s.name} ${s.width}×${s.height}mm`).join('；')}`,
     `出血：${dieline.bleed}mm；安全区：${dieline.safe}mm；输出 DPI：${dpi}`,
     '',
-    'PDF：逐图层绘制（矢量图形 + 按图层转曲文字 + 独立刀模页），页面物理尺寸为毫米。',
+    'PDF：每张展开图输出印刷页 + CUT 页 + CREASE 页（有烫金/UV/专色时再各出一页），页面物理尺寸为毫米；文字按图层栅格化嵌入，避免印厂缺字。',
     `PDF 预检：${check.ok ? '通过' : '未通过 — ' + check.issues.join('；')}；页数 ${check.pages}；字节 ${check.bytes}`,
     'SVG：保留可编辑文字与矢量图形的展开稿。',
     'DXF：CUT=裁切线，CREASE=压痕线，单位 mm。',
