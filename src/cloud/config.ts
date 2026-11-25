@@ -24,6 +24,12 @@ export const CLOUD = {
 /** 只有三个值齐全才初始化 SDK；缺配置时保持本地优先，不假装已连上云。 */
 export const cloudConfigured = Boolean(CLOUD.envId && CLOUD.publishableKey && CLOUD.region);
 
+/** 云同步开关（2026-11-26）。
+ *  false = 设计稿与对话只存本机（localStorage），完全不读写云端；
+ *  登录态与 AI 调用不受影响 —— 它们各自走 auth / 云函数，跟这条链路无关。
+ *  代码全部保留，把这里改回 true 即可原样恢复，调用点一行都不用动。 */
+export const CLOUD_SYNC = false;
+
 /** 正式站点（CloudBase 国内站静态托管，已绑定自定义域名 luna.solyoung.top）。该域名已在
  *  CloudBase Web 安全域名白名单内，所以在这里登录与云同步都可用，且没有默认测试域名的
  *  「风险提醒」页。 */

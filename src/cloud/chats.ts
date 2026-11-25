@@ -8,6 +8,7 @@
  * ============================================================ */
 import type { Conversation } from '../types';
 import { db, sdkUsable } from './sdk';
+import { CLOUD_SYNC } from './config';
 import { rowId } from './keys';
 
 export interface ChatCloudMeta {
@@ -60,8 +61,10 @@ function errText(e: unknown): string {
   try { return JSON.stringify(e); } catch { return String(e); }
 }
 
-/** 登录态是否具备云同步能力（配置齐全且已登录） */
+/** 登录态是否具备云同步能力（配置齐全且已登录）。
+ *  云同步关闭时恒为 false：对话只在本机，所有 push/remove 调用点自动跳过。 */
 export function canSyncChats(uid?: string | null): boolean {
+  if (!CLOUD_SYNC) return false;
   return Boolean(uid && sdkUsable());
 }
 

@@ -11,6 +11,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { useApp } from '../store';
 import { tl } from '../langStore';
 import { useAuth } from './auth';
+import { CLOUD_SYNC } from './config';
 import { useSubscription } from './subscription';
 import {
   listProjects, pushMany, pushProject, pullAll, removeProject, removeManyProjects,
@@ -98,6 +99,7 @@ function useCloudSyncState(): CloudSync {
     deletedStore.current = next;
     writeDeleted(next);
     ids.forEach((id) => tombstones.current.add(id));
+    if (!CLOUD_SYNC) return;   // 云同步关闭：删除只在本机生效
     void markDeleted(uid, ids).then((r) => {
       if (!r.ok) setMessage(tl(`删除记录暂时没同步到云端：${r.message}（下次同步会自动补写）`, `Deletions have not reached the cloud yet: ${r.message} (the next sync will write them)`));
     });
@@ -118,6 +120,8 @@ function useCloudSyncState(): CloudSync {
   /** 全量同步：先合并云端，再把本地多出来的项目上传。
    *  纯积分制：登录后云端同步自动开启，「取回云端项目」始终开放。 */
   const syncNow = useCallback(async () => {
+    /* 云同步关闭（2026-11-26）：任何入口都直接退出，不发一个请求 */
+    if (!CLOUD_SYNC) { setState('off'); setMessage(tl('项目只保存在本机浏览器', 'Projects stay in this browser')); return; }
     if (!user) { setState('off'); setMessage(tl('未登录：项目只保存在本机浏览器', 'Not signed in: projects stay in this browser')); return; }
     // 云同步登录后自动开启，不再按身份判定
     if (running.current) return;

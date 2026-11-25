@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { go, useHash } from '../ui';
 import { useLang } from '../i18n';
 import { useAuth } from '../cloud/auth';
+import { CLOUD_SYNC } from '../cloud/config';
 import { useSubscription } from '../cloud/subscription';
 import { useProfile } from '../cloud/profile';
 import { useApp } from '../store';
@@ -58,6 +59,8 @@ function Workbench() {
   const uid = auth.user?.id || '';
 
   const loadCloud = useCallback(async () => {
+    /* 云同步关闭：列表只来自本机缓存，不发请求、也不显示云端错误 */
+    if (!CLOUD_SYNC) { setLoading(false); return; }
     setLoading(true);
     const r = await listStudio();
     if (r.ok) {
@@ -71,7 +74,7 @@ function Workbench() {
 
   useEffect(() => {
     setRows(rowsFromCache(uid));
-    if (uid) void loadCloud();
+    if (uid && CLOUD_SYNC) void loadCloud();
     else setLoading(false);   // 没登录就没有云端列表可等，别一直挂着骨架
   }, [uid, loadCloud]);
 
@@ -89,7 +92,7 @@ function Workbench() {
     setBusy(true);
     const p = createStudioProject(uid);
     cacheOne(p);
-    void pushStudio(uid, p);
+    if (CLOUD_SYNC) void pushStudio(uid, p);
     go(`/studio?id=${encodeURIComponent(p.id)}`);
   };
 

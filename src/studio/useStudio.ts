@@ -7,6 +7,7 @@
    ============================================================ */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../cloud/auth';
+import { CLOUD_SYNC } from '../cloud/config';
 import {
   cacheOne, cachedProject, pullStudioByRow, pushStudio,
 } from './api';
@@ -45,6 +46,19 @@ export function useStudioProject(id: string) {
     if (!auth.ready) return;
     if (!uid) { setLoadState('locked'); return; }
     let alive = true;
+    /* 云同步关闭时只读本机缓存：设计稿不进数据库，换设备就看不见，这是当前阶段的口径 */
+    if (!CLOUD_SYNC) {
+      const local = cachedProject(id, uid);
+      if (local) {
+        live.current = local;
+        setProject(local);
+        setSavedAt(local.updatedAt);
+        setLoadState('ready');
+      } else {
+        setLoadState('missing');
+      }
+      return () => { alive = false; };
+    }
     void (async () => {
       const r = await pullStudioByRow(uid, id);
       if (!alive) return;
@@ -69,7 +83,7 @@ export function useStudioProject(id: string) {
 
   /* ------------------------------ 写云端 ------------------------------ */
   const flush = useCallback(async (p: StudioProject) => {
-    if (!uid) { setSaveState('local'); return; }
+    if (!uid || !CLOUD_SYNC) { setSaveState('local'); return; }
     const r = await pushStudio(uid, p);
     if (!mounted.current) return;
     if (r.ok) {
@@ -110,6 +124,7 @@ export function useStudioProject(id: string) {
     const cur = live.current;
     if (!cur) return false;
     window.clearTimeout(timer.current);
+    if (!CLOUD_SYNC) { setSaveState('local'); setSavedAt(cur.updatedAt); return true; }
     const r = uid ? await pushStudio(uid, cur) : { ok: false as const, message: '未登录' };
     if (r.ok) { setSaveState('saved'); setSavedAt(cur.updatedAt); return true; }
     setSaveState('error');
@@ -121,7 +136,7 @@ export function useStudioProject(id: string) {
   useEffect(() => {
     const onLeave = () => {
       const cur = live.current;
-      if (!cur || !dirty.current || !uid) return;
+      if (!cur || !dirty.current || !uid || !CLOUD_SYNC) return;
       void pushStudio(uid, cur);
     };
     window.addEventListener('beforeunload', onLeave);
