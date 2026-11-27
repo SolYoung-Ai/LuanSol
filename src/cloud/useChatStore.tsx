@@ -21,7 +21,7 @@ import { imageCost, imageShort, resolveTier } from './models';
 import { CHAT_MODELS, FREE_CHAT_MODEL } from './chatModels';
 import { LUNA_PERSONA_PROMPT } from '../engine/persona';
 import { useSubscription } from './subscription';
-import { CLOUD_SYNC } from './config';
+import { CLOUD_SYNC, LOCAL_ONLY } from './config';
 import { canSyncChats, pullAllConversations, pushConversation, removeConversation, payloadHash } from './chats';
 
 const LS_PREFIX = 'lunasol.chats.v2';
@@ -252,7 +252,7 @@ function useChatStoreState(): ChatStore {
 
   /* --------------------------- 登录后云端合并 --------------------------- */
   useEffect(() => {
-    if (!CLOUD_SYNC) {
+    if (!CLOUD_SYNC || LOCAL_ONLY) {
       setSyncState('off');
       setSyncMessage('对话只保存在本机');
       return;

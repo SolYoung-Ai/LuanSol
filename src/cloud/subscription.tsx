@@ -17,7 +17,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { tl } from '../langStore';
 import { db, sdkUsable } from './sdk';
-import { cloudOriginSupported } from './config';
+import { LOCAL_ONLY, cloudOriginSupported } from './config';
 import { registerAIGate, registerAIReporter, type GateResult } from '../ai/gate';
 import { PRICING } from './plans';
 import { useAuth } from './auth';
@@ -308,6 +308,8 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   const metered = cloudOriginSupported();
 
   const load = useCallback(async () => {
+    /* 本地模式：不查余额、不建账本 */
+    if (LOCAL_ONLY) { setSub(null); setLoading(false); return; }
     const u = userRef.current;
     if (!u) { setSub(null); return; }
     if (!sdkUsable()) { setSub(defaultFree(u.id)); return; }
@@ -333,6 +335,8 @@ export function SubscriptionProvider({ children, requestLogin }: { children: Rea
   // 注册闸门与用量上报（只需一次）
   useEffect(() => {
     registerAIGate(async (): Promise<GateResult> => {
+      /* 本地模式：AI 走用户自己的 Key，积分闸门不存在 */
+      if (LOCAL_ONLY) return { ok: true };
       // 非登录能力来源（GitHub Pages 镜像 / 未配置云）无法订阅，放行且不计量
       if (!metered) return { ok: true };
       const u = userRef.current;

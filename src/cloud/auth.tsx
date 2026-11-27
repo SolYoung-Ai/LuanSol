@@ -13,7 +13,7 @@
  * ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { authApi, type Err, type RawSession, type RawUser, type OtpCallback, type ReauthUpdate, type LinkVerifyCallback } from './sdk';
-import { CLOUD_SITE_URL, cloudConfigured, cloudOriginSupported } from './config';
+import { CLOUD_SITE_URL, LOCAL_ONLY, cloudConfigured, cloudOriginSupported } from './config';
 import { humanizeAuthError, isSessionNoise } from './authErrors';
 import { currentLang, tl } from '../langStore';
 import { accountKey, emailTarget } from './keys';
@@ -148,6 +148,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id]);
 
   useEffect(() => {
+    /* 本地模式：不进登录态、不恢复会话、不订阅 auth 事件 —— 一个请求都不发 */
+    if (LOCAL_ONLY) { apply(null); setReady(true); return; }
     let alive = true;
     let unsubscribe: (() => void) | undefined;
     (async () => {

@@ -8,6 +8,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useAuth } from './auth';
 import { db } from './sdk';
+import { LOCAL_ONLY } from './config';
 
 export interface UserProfile {
   id: string;
@@ -45,7 +46,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     const u = auth.user;
     if (!u) { setProfile(null); return; }
     const d = await db();
-    if (!d) return;
+    /* 本地模式：资料只在本机，不读云端 */
+    if (LOCAL_ONLY || !d) return;
     const dbClient = d;
     setLoading(true);
     try {

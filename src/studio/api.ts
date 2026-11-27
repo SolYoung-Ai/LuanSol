@@ -12,6 +12,7 @@
    · 云端 lunasol_projects：换设备 / 清缓存后仍能继续
    读取时以 updatedAt 较新的一方为准。
    ============================================================ */
+import { LOCAL_ONLY } from '../cloud/config';
 import type { CloudResult } from '../cloud/projects';
 import { rowId } from '../cloud/keys';
 import { db } from '../cloud/sdk';
@@ -110,7 +111,7 @@ const isStudioRow = (cloudId: string): boolean => {
 };
 
 export async function listStudio(): Promise<CloudResult<StudioMeta[]>> {
-  const d = await db();
+  const d = LOCAL_ONLY ? null : await db();
   if (!d) return { ok: false, message: '云服务未配置，项目只保存在本机' };
   try {
     const r = await d.from(TABLE).select('id,title,updated_at').order('updated_at', { ascending: false }).limit(100);
@@ -131,7 +132,7 @@ export async function listStudio(): Promise<CloudResult<StudioMeta[]>> {
 }
 
 export async function pullStudio(id: string): Promise<CloudResult<StudioProject>> {
-  const d = await db();
+  const d = LOCAL_ONLY ? null : await db();
   if (!d) return { ok: false, message: '云服务未配置' };
   try {
     const r = await d.from(TABLE).select('*').eq('id', id).limit(1);
@@ -153,7 +154,7 @@ export async function pullStudioByRow(uid: string, localId: string): Promise<Clo
 }
 
 export async function pushStudio(uid: string, p: StudioProject): Promise<CloudResult> {
-  const d = await db();
+  const d = LOCAL_ONLY ? null : await db();
   if (!d) return { ok: false, message: '云服务未配置，已保存到本机' };
   if (!uid) return { ok: false, message: '尚未登录，已保存到本机' };
   if (p.ownerId && p.ownerId !== uid) return { ok: false, message: '这个项目属于另一个账号' };
@@ -174,7 +175,7 @@ export async function pushStudio(uid: string, p: StudioProject): Promise<CloudRe
 }
 
 export async function removeStudio(uid: string, id: string): Promise<CloudResult> {
-  const d = await db();
+  const d = LOCAL_ONLY ? null : await db();
   if (!d) return { ok: false, message: '云服务未配置' };
   try {
     const r = await d.from(TABLE).delete().eq('id', rowId(uid, id));

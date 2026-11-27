@@ -30,6 +30,15 @@ export const cloudConfigured = Boolean(CLOUD.envId && CLOUD.publishableKey && CL
  *  代码全部保留，把这里改回 true 即可原样恢复，调用点一行都不用动。 */
 export const CLOUD_SYNC = false;
 
+/** 本地模式（2026-11-28）：LunaSol 现在是「纯静态工具 + 自带 AI Key」。
+ *  开启后前端不再向后端发任何请求：
+ *    - 不进登录态，不恢复会话，不查余额、不查资料、不拉聊天记录
+ *    - 积分闸门关闭（AI 费用由用户自己的 Key 承担）
+ *    - 工作台、Luna、设置页全部照常可用
+ *  与 SolHub 同一种形态：只有静态托管，零后端。
+ *  改回 false 即恢复完整账号体系（登录 + 积分 + 云同步），无需改任何调用点。 */
+export const LOCAL_ONLY = true;
+
 /** 正式站点（CloudBase 国内站静态托管，已绑定自定义域名 luna.solyoung.top）。该域名已在
  *  CloudBase Web 安全域名白名单内，所以在这里登录与云同步都可用，且没有默认测试域名的
  *  「风险提醒」页。 */
