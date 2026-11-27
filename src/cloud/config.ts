@@ -44,19 +44,11 @@ export const LOCAL_ONLY = true;
  *  「风险提醒」页。 */
 export const CLOUD_SITE_URL = 'https://luna.solyoung.top/';
 
-/** 哪些来源可以走 CloudBase 登录 / 云同步：
- *    - localhost / 127.0.0.1        ：本地开发
- *    - luna.solyoung.top            ：正式站点（已绑定自定义域名 + 加入安全域名白名单）
- *    - *.tcloudbaseapp.com 等        ：CloudBase 默认测试域名（可用，但首屏有「风险提醒」）
- *  GitHub Pages 镜像（solyoung-ai.github.io）不在此列：体验版无法追加安全域名，
- *  登录请求会被浏览器跨域拦截；但它仍可作「设计 + AI + 本机保存」的镜像入口。
- *  绝不把被拦截的来源静默降级成本地假登录。 */
+/** 是否允许走登录 / 云同步。
+ *  2026-11-28 起云服务已停用（sdk.ts 返回 null），这个判定恒为 false，
+ *  留着只是为了不改动各处调用点。原来按域名白名单判断的逻辑已删除 ——
+ *  产物里不再出现任何腾讯云域名。 */
 export function cloudOriginSupported(): boolean {
-  if (typeof window === 'undefined') return false;
-  const h = window.location.hostname;
-  if (h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0') return true;
-  if (h === 'luna.solyoung.top') return true;
-  if (h.endsWith('.tcloudbaseapp.com') || h.endsWith('.webapps.tcloudbase.com') || h.endsWith('.preview.cloudbase.net')) return true;
   return false;
 }
 

@@ -1,9 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { useApp } from '../store';
-import { Button, Card, Modal, Notice, PageHead, SectionLabel, Tag, Toggle } from '../ui';
+import { Button, Card, Field, Modal, Notice, PageHead, SectionLabel, Tag, Toggle } from '../ui';
 import { aiEnabled, aiStatusLabel, aiMode, saveAI, testConnection } from '../engine/llm';
+import { VENDORS, applyVendor, findVendor } from '../cloud/vendors';
 import { aiCapabilitySummary, getAIRunLog, clearAIRunLog } from '../ai/provider';
-import { CLOUD, deepSeekReady } from '../cloud/config';
 import { PRICING } from '../cloud/plans';
 import { STRUCTURES } from '../engine/structure';
 import { downloadBlob, formatDate } from '../engine/utils';
@@ -81,6 +81,7 @@ export function ModelConfig() {
   const mode = aiMode(ai);
   const caps = aiCapabilitySummary();
   const runs = getAIRunLog().slice(0, 8);
+  const curVendor = ai.vendor ? findVendor(ai.vendor) : undefined;
 
   const setMode = (m: AISettings['mode']) => {
     const next = { ...ai, mode: m, lastTest: null };
@@ -99,7 +100,7 @@ export function ModelConfig() {
   };
 
   return <div className="page page-narrow">
-    <PageHead kicker="AI MODELS / 14" title={t('AI 模型', 'AI models')} desc={t('AI 由 LunaSol 平台统一接入并托管密钥，你无需、也不能配置任何模型或 API Key。下方仅展示接入状态与开关。', 'AI is provided and key-managed entirely by LunaSol. You neither need nor can configure any model or API key — this page only shows status and the on/off switch.')} />
+    <PageHead kicker="AI MODELS / 14" title={t('AI 模型', 'AI models')} desc={t('AI 用你自己的 Key：选厂商、粘贴 Key 即可。所有请求从你的浏览器直接发往厂商，LunaSol 不经手也不收费。', 'Bring your own key: pick a vendor and paste it. Requests go straight from your browser to the vendor — LunaSol never sees them or charges for them.')} />
     <div className="model-status">
       <div><span className={`status-dot ${enabled ? ai.lastTest?.ok ? 'on' : 'pending' : 'off'}`} />
         <strong>{enabled
@@ -111,17 +112,56 @@ export function ModelConfig() {
       <Tag tone={enabled ? 'green' : 'plain'}>{aiStatusLabel(ai, lang === 'en')}</Tag>
     </div>
 
-    <Card className="pad-card"><SectionLabel en="PLATFORM MODELS">{t('平台模型（托管）', 'Platform models (hosted)')}</SectionLabel>
-      <p className="ai-caps-intro">{t('LunaSol 在腾讯云开发 CloudBase 部署后台代理，', 'LunaSol runs a backend proxy on CloudBase, and ')}<strong>{t('所有厂商 API Key 只保存在云函数环境变量', 'every vendor API key lives only in cloud-function environment variables')}</strong>{t('，前端不接触任何密钥，也不提供模型选择。对话由平台统一路由（主档 + 故障自动兜底），生图可在 Luna 里切换 Doubao-Seedream 与 GPT Image 2（文字输入 / 输入图两档）；3D 建模预留 Hyper3D-Gen2。', '. The frontend never touches a key and offers no model picker. Chat is routed by the platform (primary model plus automatic failover); image generation offers Doubao-Seedream and GPT Image 2 (text-to-image / image-to-image) inside Luna; 3D modelling is reserved for Hyper3D-Gen2.')}</p>
-      <div className="kv"><span>{t('文本模型', 'Text models')}</span><strong>{t('DeepSeek-V4.1-Flash（主档）· DeepSeek-V4.1-Flash 经济版（故障兜底）· 服务端代理，对话免费不扣积分', 'DeepSeek-V4.1-Flash (primary) · DeepSeek-V4.1-Flash Eco (automatic failover) · server proxy, chat is free and spends no credits')}</strong></div>
-      <div className="kv"><span>{t('生图模型', 'Image models')}</span><strong>{t('Doubao-Seedream 5.0 Flash / Pro · GPT Image 2 文字输入 / 输入图（服务端代理）', 'Doubao-Seedream 5.0 Flash / Pro · GPT Image 2 text-to-image / image-to-image (server proxy)')}</strong></div>
-      <div className="kv"><span>{t('3D 模型', '3D model')}</span><strong>{t(`Hyper3D-Gen2（${PRICING.costs.hyper3d} 积分/次，编辑器中开放）`, `Hyper3D-Gen2 (${PRICING.costs.hyper3d} credits per run, available in the editor)`)}</strong></div>
-      <div className="kv"><span>{t('后台', 'Backend')}</span><strong>{t('CloudBase HTTP 云函数', 'CloudBase HTTP cloud function')} · {CLOUD.region}</strong></div>
-      <div className="kv"><span>{t('当前状态', 'Current status')}</span><strong>{enabled ? t('已启用平台 AI', 'Platform AI enabled') : t('已关闭，使用内置设计引擎', 'Off — using the built-in design engine')}</strong></div>
-      <Toggle label={t('启用平台 AI', 'Enable platform AI')} hint={t('开启后九步向导由平台大模型提供建议；关闭后改用内置确定性设计引擎（不调用大模型）', 'When on, the wizard takes suggestions from platform models; when off it uses the built-in deterministic engine and never calls a model')} checked={enabled} onChange={(v) => setMode(v ? 'proxy' : 'off')} />
-      {!deepSeekReady && enabled && <Notice tone="warn">{t('当前构建未配置平台代理地址，开启后也无法实际调用；请在正式站点使用。', 'This build has no platform proxy URL configured, so nothing can actually be called. Please use the official site.')}</Notice>}
-      <div className="model-actions"><Button disabled={!enabled || !deepSeekReady} onClick={test}>{testing ? t('测试中…', 'Testing…') : t('测试连接', 'Test connection')}</Button></div>
-      <Notice tone="info">{t('代理网关按来源域名与令牌校验，并设有 QPS 限制；生图按 Flash / Pro 档位扣积分。', 'The proxy validates origin and token and applies a QPS limit; image runs deduct credits by Flash / Pro tier.')}</Notice>
+    <Card className="pad-card"><SectionLabel en="YOUR API KEY">{t('用自己的 API Key（不再消耗 LunaSol 资源）', 'Use your own API key (no LunaSol resources consumed)')}</SectionLabel>
+      <p className="ai-caps-intro">{t('选一家厂商、粘上你自己的 Key，所有 AI 调用都直接从你的浏览器发往厂商，LunaSol 不经手、不收费。Key 只保存在这台电脑的浏览器里，不会上传到任何地方。', 'Pick a vendor, paste your own key, and every AI call goes straight from your browser to that vendor. LunaSol never sees it or charges for it. The key is stored only in this browser.')}</p>
+
+      <Field label={t('厂商', 'Vendor')}>
+        <select value={ai.vendor || ''} onChange={(ev) => {
+          const v = findVendor(ev.target.value);
+          if (!v) { const next = { ...ai, vendor: '' }; saveAI(next); update({ ai: next }); return; }
+          const filled = applyVendor(v, { baseUrl: '', textModel: '', imageModel: '' });
+          const next = { ...ai, vendor: v.id, baseUrl: filled.baseUrl, textModel: filled.textModel, imageModel: filled.imageModel, mode: 'browser' as const, lastTest: null };
+          saveAI(next); update({ ai: next });
+        }}>
+          <option value="">{t('请选择…', 'Choose…')}</option>
+          {VENDORS.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+        {!!curVendor && <p className="ai-caps-intro" style={{ marginTop: 6 }}>
+          {curVendor.note}
+          {curVendor.keyUrl ? <> · <a href={curVendor.keyUrl} target="_blank" rel="noreferrer">{t('去申请 Key', 'Get a key')} ↗</a></> : null}
+        </p>}
+      </Field>
+
+      <Field label={t('API Key', 'API key')} hint={curVendor?.hints?.keyPrefix ? t(`一般以 ${curVendor.hints.keyPrefix} 开头`, `Usually starts with ${curVendor.hints.keyPrefix}`) : undefined}>
+        <input type="password" autoComplete="off" spellCheck={false} placeholder="sk-..." value={ai.apiKey}
+          onChange={(ev) => { const next = { ...ai, apiKey: ev.target.value.trim(), mode: 'browser' as const, lastTest: null }; saveAI(next); update({ ai: next }); }} />
+      </Field>
+
+      <Field label={t('接口地址（Base URL）', 'Base URL')} hint={t('以 /v1 或厂商版本段结尾，系统自动拼 /chat/completions', 'Ends with /v1 or the vendor version segment; /chat/completions is appended')}>
+        <input type="text" spellCheck={false} placeholder="https://api.openai.com/v1" value={ai.baseUrl}
+          onChange={(ev) => { const next = { ...ai, baseUrl: ev.target.value.trim(), lastTest: null }; saveAI(next); update({ ai: next }); }} />
+      </Field>
+
+      <Field label={t('对话模型', 'Chat model')}>
+        <input type="text" spellCheck={false} placeholder="gpt-4o-mini" value={ai.textModel}
+          onChange={(ev) => { const next = { ...ai, textModel: ev.target.value.trim(), lastTest: null }; saveAI(next); update({ ai: next }); }} />
+      </Field>
+
+      <Field label={t('生图模型（可留空）', 'Image model (optional)')} hint={curVendor && !curVendor.imageModel ? t('这家厂商本预设不支持生图，可另配一家', 'This preset has no image model; configure another vendor for images') : undefined}>
+        <input type="text" spellCheck={false} placeholder="gpt-image-1" value={ai.imageModel}
+          onChange={(ev) => { const next = { ...ai, imageModel: ev.target.value.trim(), lastTest: null }; saveAI(next); update({ ai: next }); }} />
+      </Field>
+
+      {!!curVendor?.hints?.note && <Notice tone="info">{curVendor.hints.note}</Notice>}
+
+      <div className="model-actions">
+        <Button disabled={!ai.apiKey.trim() || !ai.baseUrl.trim()} onClick={test}>{testing ? t('测试中…', 'Testing…') : t('测试连接', 'Test connection')}</Button>
+        <Button variant="ghost" onClick={() => {
+          const next = { ...ai, apiKey: '', lastTest: null, mode: 'off' as const };
+          saveAI(next); update({ ai: next }); setToast(t('已清除本机保存的 Key', 'Key removed from this browser'));
+        }}>{t('清除 Key', 'Remove key')}</Button>
+      </div>
+      <Notice tone="warn">{t('Key 存在本机浏览器里，同一台电脑换账号/清缓存就没了。请不要在公共电脑上填写。', 'The key lives in this browser — it is lost if you clear site data, and should never be entered on a shared computer.')}</Notice>
     </Card>
 
     <Card className="pad-card"><SectionLabel en="AI IN THE FLOW">{t('AI 已融入哪些环节', 'Where AI is used')}</SectionLabel>
@@ -153,10 +193,10 @@ export function ModelConfig() {
 
     <Modal open={docOpen} title={t('后台接入契约', 'Backend contract')} onClose={() => setDocOpen(false)} wide>
       <div className="doc-body">
-        <h4>{t('一、平台统一接入（用户无需配置）', '1. One platform integration (no setup for users)')}</h4><p>{t('模型由 LunaSol 平台在云端代理中托管，文本能力统一走 ', 'Models are hosted by the LunaSol platform inside a cloud proxy; text runs through a single ')}<strong>DeepSeek</strong>{t('，由后台决定具体模型。', ' route, and the backend picks the concrete model. ')}<strong>{t('前端不暴露、也不允许用户配置任何厂商 API Key 或自定义模型。', 'The frontend exposes no vendor API key and does not allow custom models.')}</strong>{t('图像生成不由 DeepSeek 提供，因此图像能力走站内插画与素材，不伪装成 AI 出图。', ' Image generation is not provided by DeepSeek, so image work uses on-site illustration and assets rather than pretending to be AI output.')}</p>
-        <h4>{t('二、文字接口', '2. Text endpoint')}</h4><p>POST <code>{CLOUD.aiBaseUrl || t('（平台代理地址）', '(platform proxy URL)')}/chat/completions</code>{t('。请求体是标准 OpenAI 兼容格式 ', '. The body is standard OpenAI-compatible ')}<code>messages / temperature / response_format</code>{t('，', ', and ')}<code>model</code>{t('由平台决定。返回 ', ' is decided by the platform. It returns ')}<code>choices[0].message.content</code>{t('，内容为一个 JSON 对象。', ', whose content is a JSON object.')}</p>
+        <h4>{t('一、用自己的 Key（BYOK）', '1. Bring your own key (BYOK)')}</h4><p>{t('模型由你自己提供：在上方选厂商并粘贴 Key，所有 AI 请求从浏览器直接发往该厂商。LunaSol 不托管、不代付、也无法看到你的 Key。', 'Models are yours: pick a vendor above and paste the key. Every AI request goes from your browser straight to that vendor. LunaSol does not host, pay for, or see your key.')}</p>
+        <h4>{t('二、文字接口', '2. Text endpoint')}</h4><p>POST <code>{ai.baseUrl || t('（你填的接口地址）', '(your base URL)')}/chat/completions</code>{t('。请求体是标准 OpenAI 兼容格式 ', '. The body is standard OpenAI-compatible ')}<code>messages / temperature / response_format</code>{t('，', ', and ')}<code>model</code>{t('用你填的模型名。返回 ', ' is the model you set. It returns ')}<code>choices[0].message.content</code>{t('，内容为一个 JSON 对象。', ', whose content is a JSON object.')}</p>
         <h4>{t('三、输出结构与合规校验', '3. Output shape and compliance checks')}</h4><p>{t('所有流程节点统一返回 ', 'Every flow node returns ')}<code>&#123;"suggestions":[&#123;"title","detail","value"&#125;]&#125;</code>{t('，每个节点的 ', '; the ')}<code>value</code>{t(' 结构不同，详见 ', ' shape differs per node — see ')}<code>src/ai/tasks.ts</code>{t('。模型输出会先经过结构校验与合规校验：编造配料 / 功效 / 认证、生成商品条码数字、发明不存在的风格、在「不需要插画」时添加图案，都会被拦截并回退本地建议。', '. Output passes structural and compliance checks first: invented ingredients, claims or certifications, fabricated barcode digits, non-existent styles, or motifs where no illustration is needed are all blocked and fall back to local suggestions.')}</p>
-        <h4>{t('四、替换 / 扩展传输实现', '4. Replacing or extending the transport')}</h4><p>{t('若后续要在代理中新增模型或换厂商，只需在云函数 ', 'To add a model or switch vendors later, only the model whitelist and routing in the ')}<code>lunasol-ai</code>{t(' 中调整模型白名单与路由，前端流程与界面代码不用改；如需替换前端传输实现，可调用一次 ', ' cloud function change — no flow or UI code does. To swap the frontend transport, call ')}<code>registerAITransport(fn)</code>{t('。', ' once.')}</p>
+        <h4>{t('四、换厂商', '4. Switching vendors')}</h4><p>{t('在上方「厂商」里换一家、粘对应 Key 即可，不用改任何代码。要加新厂商，在 ', 'Pick another vendor above and paste its key — no code change. To add a new vendor, edit ')}<code>src/cloud/vendors.ts</code>{t('。', ' once.')}</p>
         <h4>{t('五、错误处理与安全', '5. Error handling and security')}</h4><p>{t('60s 超时（图像 120s）、可配置重试、失败或校验不通过自动回退内置引擎并在调用记录里留痕，不会把模拟结果伪装成 AI 输出。代理令牌是静态站点的共享访问令牌，不是厂商密钥；按用户的积分余额由平台在网关层启用登录态鉴权实现。', '60s timeout (120s for images), configurable retries, and automatic fallback to the built-in engine with a trace in the call log — mock results are never passed off as AI output. The proxy token is a shared access token for a static site, not a vendor key; per-user credit balances are enforced at the gateway with signed-in authentication (see the Credits page).')}</p>
       </div>
     </Modal>

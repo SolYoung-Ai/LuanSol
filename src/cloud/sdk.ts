@@ -1,43 +1,30 @@
 /* ============================================================
- * CloudBase Web SDK 单例（按需加载）
+ * 云服务客户端：已停用（2026-11-28）
  * ------------------------------------------------------------
- * 登录、云同步、PG 查询共用同一个 app 实例。
- * SDK 体积较大（约 220 kB gzip），而大多数访客可能从不登录，
- * 所以这里用动态 import：只有真正需要登录或云同步时才下载。
- * 初始化参数全部来自 .env 里的公开配置（envId / region / publishableKey）。
+ * LunaSol 已退出 CloudBase，改为纯静态站点 + BYOK：
+ *   - 数据库、登录、积分、云同步全部不再使用
+ *   - AI 由用户在设置页填自己的 Key，浏览器直连厂商
+ *
+ * 这个文件保留**空实现**，不是删掉调用点 —— 十几处业务代码
+ * （subscription / projects / chats / profile …）都从这里取
+ * db / authApi / ensureApp，返回 null 就让它们各自走
+ * 「未配置云服务」的分支，不发任何请求。
+ *
+ * 关键：不再 import @cloudbase/js-sdk。构建产物里不会有
+ * 腾讯云 SDK 的任何字节，也不会有任何腾讯云域名。
+ *
+ * 要恢复账号体系：把下面 ensureApp 里的实现换回 git 历史
+ * 中 10ae988 之前的版本，并在 .env 填回 envId / key 即可。
  * ============================================================ */
-import { CLOUD, cloudConfigured, cloudOriginSupported } from './config';
+import { CLOUD } from './config';
 
-type AnyApp = {
-  auth: unknown;
-  rdb?: () => { from(table: string): DbTable };
-};
-
-let app: AnyApp | null = null;
-let loading: Promise<AnyApp | null> | null = null;
-
-/** 只有配置齐全且当前域名在白名单内才加载 SDK，避免无谓的跨域失败与流量 */
+/** 恒为 false：云服务已停用，所有调用点据此走本地分支 */
 export function sdkUsable(): boolean {
-  return cloudConfigured && cloudOriginSupported();
+  return false;
 }
 
-export function ensureApp(): Promise<AnyApp | null> {
-  if (!sdkUsable()) return Promise.resolve(null);
-  if (app) return Promise.resolve(app);
-  if (loading) return loading;
-  loading = import('@cloudbase/js-sdk')
-    .then((mod) => {
-      const cloudbase = (mod as unknown as { default: { init(c: unknown): AnyApp } }).default || (mod as unknown as { init(c: unknown): AnyApp });
-      app = cloudbase.init({
-        env: CLOUD.envId,
-        region: CLOUD.region,
-        accessKey: CLOUD.publishableKey,
-        auth: { detectSessionInUrl: true },
-      });
-      return app;
-    })
-    .catch(() => { loading = null; return null; });
-  return loading;
+export async function ensureApp(): Promise<null> {
+  return null;
 }
 
 /* ---------------- 认证方法的最小类型（SDK 未导出完整 d.ts） ---------------- */
@@ -83,8 +70,7 @@ export interface CloudAuthApi {
 }
 
 export async function authApi(): Promise<CloudAuthApi | null> {
-  const a = await ensureApp();
-  return a ? (a.auth as CloudAuthApi) : null;
+  return null;   // 云服务已停用
 }
 
 /** 云函数服务端扣费用的用户令牌；拿不到就返回空，由云函数拒绝扣费。 */
@@ -120,7 +106,5 @@ export interface Db {
 }
 
 export async function db(): Promise<Db | null> {
-  const a = await ensureApp();
-  if (!a || typeof a.rdb !== 'function') return null;
-  return a.rdb() as Db;
+  return null;   // 云服务已停用
 }

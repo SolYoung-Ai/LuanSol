@@ -57,11 +57,10 @@ export const isDeepSeekProxy = (s: AISettings) =>
  *  但用户之后主动关掉 AI 时（rev 已是新值）必须被尊重。 */
 export const AI_REV = 3;
 
-/** 判断 baseUrl 是否为官方代理（dev 相对路径或生产完整地址），
- *  避免把用户自定义代理误判为需要同步令牌。 */
+/** 判断 baseUrl 是否为官方代理（dev 相对路径）。
+ *  2026-11-28 生产代理已下线，只剩本地 dev 的相对路径需要识别。 */
 function isOfficialProxyUrl(baseUrl: string): boolean {
-  const b = baseUrl.trim().replace(/\/+$/, '');
-  return b === '/lunasol-ai' || b.endsWith('tcloudbase.com/lunasol-ai');
+  return baseUrl.trim().replace(/\/+$/, '') === '/lunasol-ai';
 }
 
 export function migrateAI(s: AISettings): AISettings {

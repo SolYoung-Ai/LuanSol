@@ -248,8 +248,10 @@ export interface AISettings {
   lastTest: { ok: boolean; at: number; message: string } | null;
   /** 配置版本：用于把旧版本「未接入」的默认值升级到已部署的后台代理 */
   rev?: number;
-  /** CloudBase 用户 UID，用于云函数登录态校验 */
+  /** CloudBase 用户 UID，用于云函数登录态校验（BYOK 模式下不再使用） */
   cloudbaseUid?: string;
+  /** 用户选过的厂商预设 id（见 cloud/vendors.ts），仅用于界面记忆 */
+  vendor?: string;
 }
 
 export interface UserSettings {
