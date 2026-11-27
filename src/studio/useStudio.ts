@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../cloud/auth';
 import { CLOUD_SYNC } from '../cloud/config';
+import { localIdentity } from '../cloud/localIdentity';
 import {
   cacheOne, cachedProject, pullStudioByRow, pushStudio,
 } from './api';
@@ -20,7 +21,8 @@ export type LoadState = 'loading' | 'ready' | 'missing' | 'locked';
 
 export function useStudioProject(id: string) {
   const auth = useAuth();
-  const owner = auth.user?.id || '';
+  /* 云同步关闭时不依赖账号：用本机身份分槽，未登录也能正常打开工作台 */
+  const owner = CLOUD_SYNC ? (auth.user?.id || '') : localIdentity();
   const [project, setProject] = useState<StudioProject | null>(() => cachedProject(id, owner));
   const [loadState, setLoadState] = useState<LoadState>(() => (cachedProject(id, owner) ? 'ready' : 'loading'));
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -31,7 +33,7 @@ export function useStudioProject(id: string) {
   const dirty = useRef(false);
   const timer = useRef<number | undefined>(undefined);
   const mounted = useRef(true);
-  const uid = auth.user?.id || '';
+  const uid = CLOUD_SYNC ? (auth.user?.id || '') : localIdentity();
 
   useEffect(() => {
     mounted.current = true;
@@ -43,7 +45,7 @@ export function useStudioProject(id: string) {
     /* 会话还没确认完就先等；确认完了没有账号，直接进「需要登录」，
        否则这个页面会永远停在「正在打开…」——这条路由不强制登录，
        用户从旧链接进来时正好会踩到。 */
-    if (!auth.ready) return;
+    if (CLOUD_SYNC && !auth.ready) return;
     if (!uid) { setLoadState('locked'); return; }
     let alive = true;
     /* 云同步关闭时只读本机缓存：设计稿不进数据库，换设备就看不见，这是当前阶段的口径 */

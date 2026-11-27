@@ -12,6 +12,7 @@ import { go, useHash } from '../ui';
 import { useLang } from '../i18n';
 import { useAuth } from '../cloud/auth';
 import { CLOUD_SYNC } from '../cloud/config';
+import { localIdentity } from '../cloud/localIdentity';
 import { useSubscription } from '../cloud/subscription';
 import { useProfile } from '../cloud/profile';
 import { useApp } from '../store';
@@ -56,7 +57,8 @@ function Workbench() {
   const [cloudErr, setCloudErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState('');
-  const uid = auth.user?.id || '';
+  /* 云同步关闭时用本机身份：工作台不再要求登录 */
+  const uid = CLOUD_SYNC ? (auth.user?.id || '') : localIdentity();
 
   const loadCloud = useCallback(async () => {
     /* 云同步关闭：列表只来自本机缓存，不发请求、也不显示云端错误 */
@@ -87,7 +89,7 @@ function Workbench() {
   };
 
   const startNew = () => {
-    if (!uid) { toLogin(); return; }
+    if (CLOUD_SYNC && !uid) { toLogin(); return; }
     if (busy) return;
     setBusy(true);
     const p = createStudioProject(uid);
@@ -99,6 +101,12 @@ function Workbench() {
   const removeOne = async (id: string) => {
     if (!uid) return;
     setDeleting('');
+    if (!CLOUD_SYNC) {
+      dropCached(id);
+      setRows((prev) => prev.filter((x) => x.id !== id));
+      setToast(t('已从本机删除', 'Deleted from this device'));
+      return;
+    }
     const r = await removeStudio(uid, id);
     dropCached(id);
     setRows((prev) => prev.filter((x) => x.id !== id));
