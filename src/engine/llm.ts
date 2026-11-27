@@ -98,9 +98,15 @@ export function loadAI(): AISettings {
 }
 export function saveAI(s: AISettings) { localStorage.setItem(KEY, JSON.stringify(s)); }
 
-/** 当前接入模式。后台代理模式不需要前端保存模型厂商密钥。 */
-export const aiMode = (s: AISettings): AISettings['mode'] =>
-  s.mode || (s.apiKey.trim() ? 'browser' : 'off');
+/** 当前接入模式。后台代理模式不需要前端保存模型厂商密钥。
+ *  2026-11-27：只要本机填了厂商 Key 就一律走浏览器直连（BYOK），
+ *  不再默认依赖云函数 —— 这是脱离 CloudBase 的关键一步。
+ *  没填 Key 时才回落到 proxy（云函数还在的那段时间继续可用）。 */
+export const aiMode = (s: AISettings): AISettings['mode'] => {
+  if (s.mode === 'off') return 'off';        // 显式关闭优先，用户在设置里关掉就是关掉
+  if (s.apiKey.trim()) return 'browser';     // 本机有厂商 Key → 直连，不经过云函数
+  return s.mode || 'off';
+};
 
 /** 全站唯一的「AI 是否已启用」判定。所有 AI 能力都走这里，
  *  后台代理接好后只需在设置页切到 proxy 并填地址，全站立即生效。 */
